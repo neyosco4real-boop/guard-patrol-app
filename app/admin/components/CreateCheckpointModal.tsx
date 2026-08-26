@@ -4,6 +4,8 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
 
+const toast = { success: (msg: string) => alert(msg), error: (msg: string) => alert(msg) };
+
 interface LocationOption {
   id: string | number;
   name: string;

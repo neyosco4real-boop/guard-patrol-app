@@ -21,6 +21,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import jsQR from "jsqr";
 
+
 // ADMIN PASSCODE CONFIGURATION
 const ADMIN_PASSCODE = "admin123";
 

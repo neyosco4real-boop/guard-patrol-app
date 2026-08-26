@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+const toast = { success: (msg: string) => alert(msg), error: (msg: string) => alert(msg) };
+
 interface Checkpoint {
   id: string;
   title: string;

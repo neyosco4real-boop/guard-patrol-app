@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 import dynamic from "next/dynamic";
 import jsQR from "jsqr";
 
+const toast = { success: (msg: string) => alert(msg), error: (msg: string) => alert(msg) };
+
 const Scanner = dynamic(() => import("@yudiel/react-qr-scanner").then((mod) => mod.Scanner), { ssr: false });
 
 

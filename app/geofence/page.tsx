@@ -6,6 +6,8 @@ import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 
 // Dynamically import map component to avoid SSR issues
+
+const toast = { success: (msg: string) => alert(msg), error: (msg: string) => alert(msg) };
 const PatrolMap = dynamic(() => import("@/components/PatrolMap"), { ssr: false });
 
 interface Checkpoint {
