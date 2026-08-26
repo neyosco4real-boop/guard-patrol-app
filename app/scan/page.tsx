@@ -101,7 +101,7 @@ export default function GuardScanPage() {
       const isIncident = patrolStatus === 'INCIDENT';
       const payload = {
         checkpoint_id: scannedCode,
-        guard_name: guardName,
+        guard_id: '2615876d-0614-48d9-9efc-d70000000000',
         status: isIncident ? 'INCIDENT' : 'VERIFIED',
         notes: isIncident ? incidentNotes : 'Normal Patrol Scan',
         incident_description: isIncident ? incidentNotes : null,
