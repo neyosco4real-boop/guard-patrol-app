@@ -25,7 +25,6 @@ export default function GuardScanPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const animFrameId = useRef<number | null>(null);
 
-  // Dedicated scanner function that persists regardless of status state
   const scanFrame = () => {
     if (videoRef.current && canvasRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
       const canvas = canvasRef.current;
@@ -107,9 +106,10 @@ export default function GuardScanPage() {
         notes: isIncident ? incidentNotes : 'Normal Patrol Scan',
         incident_description: isIncident ? incidentNotes : null,
         media_url: isIncident ? mediaUrl : null,
-        created_at: new Date().toISOString()
+        scanned_at: new Date().toISOString()
       };
 
+      // TARGET TABLE FIXED HERE TO patrol_logs
       const { error } = await supabase.from('patrol_logs').insert([payload]);
       if (error) throw error;
 
@@ -120,7 +120,6 @@ export default function GuardScanPage() {
       setMediaUrl(null);
       setPatrolStatus('NORMAL');
       
-      // Resume scanning loop after submission
       if (cameraActive) {
         animFrameId.current = requestAnimationFrame(scanFrame);
       }
@@ -148,7 +147,6 @@ export default function GuardScanPage() {
         />
       </div>
 
-      {/* Camera Container */}
       <div className="relative bg-slate-900 rounded-xl overflow-hidden border border-slate-800 aspect-square flex flex-col items-center justify-center">
         <video ref={videoRef} playsInline className={`absolute inset-0 w-full h-full object-cover ${cameraActive ? 'block' : 'hidden'}`} />
         <canvas ref={canvasRef} className="hidden" />
@@ -180,7 +178,6 @@ export default function GuardScanPage() {
         )}
       </div>
 
-      {/* Patrol Status Selector */}
       <div>
         <label className="text-xs text-slate-400 block mb-2">Patrol Status</label>
         <div className="grid grid-cols-2 gap-2">
@@ -210,7 +207,6 @@ export default function GuardScanPage() {
         </div>
       </div>
 
-      {/* Incident Panel */}
       {patrolStatus === 'INCIDENT' && (
         <div className="bg-red-950/20 border border-red-900/40 rounded-xl p-3 space-y-3">
           <div>
