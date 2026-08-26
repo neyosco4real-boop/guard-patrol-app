@@ -29,7 +29,7 @@ export default function AdminDashboard() {
   const fetchLogs = async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from("scan_logs")
+      .from("patrol_logs")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50);

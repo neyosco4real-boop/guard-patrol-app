@@ -110,7 +110,7 @@ export default function GuardScanPage() {
         created_at: new Date().toISOString()
       };
 
-      const { error } = await supabase.from('logs').insert([payload]);
+      const { error } = await supabase.from('patrol_logs').insert([payload]);
       if (error) throw error;
 
       alert(isIncident ? '🚨 Incident Logged & Dispatched to Live Feed!' : '✓ Patrol Verified!');
