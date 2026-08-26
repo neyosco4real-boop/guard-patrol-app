@@ -16,6 +16,20 @@ interface CreateCheckpointModalProps {
   onSuccess?: (newCheckpoint: any) => void;
 }
 
+
+  const handleDeleteLocation = async (locId: string, locName: string, e: any) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (!confirm(`Are you sure you want to delete "${locName}" and all associated checkpoints?`)) return;
+    try {
+      const { error } = await supabase.from('locations').delete().eq('id', locId);
+      if (error) throw error;
+      toast.success("Site deleted successfully!");
+      window.location.reload();
+    } catch (err: any) {
+      toast.error("Failed to delete site: " + err.message);
+    }
+  };
+
 export default function CreateCheckpointModal({
   isOpen,
   locations,
