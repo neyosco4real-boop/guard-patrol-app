@@ -1,0 +1,16 @@
+{
+  "name": "Guard Patrol",
+  "short_name": "GuardPatrol",
+  "start_url": "/scan",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
