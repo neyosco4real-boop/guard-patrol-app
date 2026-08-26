@@ -11,6 +11,7 @@ const supabase = createClient(
 
 export default function GuardScanPage() {
   const [guardName, setGuardName] = useState('Guard Alpha');
+  const [cameraActive, setCameraActive] = useState(false);
   const [scannedCode, setScannedCode] = useState<string | null>(null);
   const [checkpointName, setCheckpointName] = useState<string | null>(null);
   const [patrolStatus, setPatrolStatus] = useState<'NORMAL' | 'INCIDENT'>('NORMAL');
@@ -22,48 +23,48 @@ export default function GuardScanPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const animFrameId = useRef<number | null>(null);
+
+  // Dedicated scanner function that persists regardless of status state
+  const scanFrame = () => {
+    if (videoRef.current && canvasRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        if (code && code.data) {
+          handleCodeDetected(code.data);
+          return;
+        }
+      }
+    }
+    animFrameId.current = requestAnimationFrame(scanFrame);
+  };
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setCameraActive(true);
+        if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
+        animFrameId.current = requestAnimationFrame(scanFrame);
+      }
+    } catch (err: any) {
+      alert('Camera access denied or unavailable: ' + err.message);
+    }
+  };
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
-    let animId: number;
-
-    const startCamera = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-          animId = requestAnimationFrame(scanFrame);
-        }
-      } catch (err) {
-        console.error('Camera access error:', err);
-      }
-    };
-
-    const scanFrame = () => {
-      if (videoRef.current && canvasRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-        if (ctx) {
-          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code && code.data) {
-            handleCodeDetected(code.data);
-            return;
-          }
-        }
-      }
-      animId = requestAnimationFrame(scanFrame);
-    };
-
-    startCamera();
-
     return () => {
-      if (stream) stream.getTracks().forEach(t => t.stop());
-      if (animId) cancelAnimationFrame(animId);
+      if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
     };
   }, []);
 
@@ -118,6 +119,11 @@ export default function GuardScanPage() {
       setIncidentNotes('');
       setMediaUrl(null);
       setPatrolStatus('NORMAL');
+      
+      // Resume scanning loop after submission
+      if (cameraActive) {
+        animFrameId.current = requestAnimationFrame(scanFrame);
+      }
     } catch (err: any) {
       alert('Error saving scan log: ' + err.message);
     } finally {
@@ -129,7 +135,7 @@ export default function GuardScanPage() {
     <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-4">
       <div className="text-center pb-2 border-b border-slate-800">
         <h1 className="text-lg font-bold">Guard Patrol Scanner</h1>
-        <p className="text-xs text-slate-400">Point camera at checkpoint QR code</p>
+        <p className="text-xs text-slate-400">Request permission & scan checkpoint QR codes</p>
       </div>
 
       <div>
@@ -142,20 +148,39 @@ export default function GuardScanPage() {
         />
       </div>
 
-      <div className="relative bg-slate-900 rounded-xl overflow-hidden border border-slate-800 aspect-square flex items-center justify-center">
-        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" />
+      {/* Camera Container */}
+      <div className="relative bg-slate-900 rounded-xl overflow-hidden border border-slate-800 aspect-square flex flex-col items-center justify-center">
+        <video ref={videoRef} playsInline className={`absolute inset-0 w-full h-full object-cover ${cameraActive ? 'block' : 'hidden'}`} />
         <canvas ref={canvasRef} className="hidden" />
+
+        {!cameraActive && (
+          <button
+            onClick={startCamera}
+            className="z-10 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 font-semibold text-xs rounded-lg transition-all shadow-lg"
+          >
+            📷 Tap to Grant Camera Access
+          </button>
+        )}
         
         {scannedCode && (
-          <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-4 text-center z-10 space-y-2">
+          <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-4 text-center z-20 space-y-2">
             <span className="text-emerald-400 text-xs font-bold uppercase tracking-wider">✓ Checkpoint Detected</span>
             <h3 className="text-lg font-bold">{checkpointName}</h3>
             <p className="text-xs text-slate-400 break-all">{scannedCode}</p>
-            <button onClick={() => setScannedCode(null)} className="mt-2 text-xs text-slate-400 underline">Rescan Code</button>
+            <button 
+              onClick={() => {
+                setScannedCode(null);
+                if (cameraActive) animFrameId.current = requestAnimationFrame(scanFrame);
+              }} 
+              className="mt-2 text-xs text-slate-400 underline"
+            >
+              Rescan Code
+            </button>
           </div>
         )}
       </div>
 
+      {/* Patrol Status Selector */}
       <div>
         <label className="text-xs text-slate-400 block mb-2">Patrol Status</label>
         <div className="grid grid-cols-2 gap-2">
@@ -185,10 +210,11 @@ export default function GuardScanPage() {
         </div>
       </div>
 
+      {/* Incident Panel */}
       {patrolStatus === 'INCIDENT' && (
         <div className="bg-red-950/20 border border-red-900/40 rounded-xl p-3 space-y-3">
           <div>
-            <label className="text-xs text-red-300 block mb-1 font-semibold font-mono">Incident Log Notes</label>
+            <label className="text-xs text-red-300 block mb-1 font-semibold">Incident Log Notes</label>
             <textarea
               rows={3}
               value={incidentNotes}
@@ -199,7 +225,7 @@ export default function GuardScanPage() {
           </div>
 
           <div>
-            <label className="text-xs text-red-300 block mb-1 font-semibold font-mono">Incident Evidence</label>
+            <label className="text-xs text-red-300 block mb-1 font-semibold">Incident Evidence Photo</label>
             <input 
               type="file" 
               accept="image/*" 
