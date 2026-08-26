@@ -78,8 +78,8 @@ function calculateDistanceMeters(
   const handleDeleteLocation = async (locId: string) => {
     if (!confirm("Are you sure you want to delete this site and its checkpoints?")) return;
     const { error } = await supabase.from('locations').delete().eq('id', locId);
-    if (error) { toast.error("Error deleting site: " + error.message); }
-    else { toast.success("Site deleted successfully!"); window.location.reload(); }
+    if (error) { alert("Error deleting site: " + error.message); }
+    else { alert("Site deleted successfully!"); window.location.reload(); }
   };
 
 export default function AdminDashboard() {
@@ -169,13 +169,13 @@ export default function AdminDashboard() {
 
           if (newRecord.status === "incident") {
             playAlertSound("incident");
-            toast.error(`⚠️ INCIDENT REPORTED at ${newRecord.checkpoint_name}`, {
+            alert(`⚠️ INCIDENT REPORTED at ${newRecord.checkpoint_name}`, {
               description: newRecord.notes || "Guard logged an active alert.",
               duration: 8000,
             });
           } else {
             playAlertSound("verified");
-            toast.success(`Check-in: ${newRecord.checkpoint_name}`, {
+            alert(`Check-in: ${newRecord.checkpoint_name}`, {
               description: `Scanned by ${newRecord.guard_name}`,
             });
           }
@@ -209,9 +209,9 @@ export default function AdminDashboard() {
     if (passwordInput === ADMIN_PASSCODE) {
       sessionStorage.setItem("admin_authenticated", "true");
       setIsAuthenticated(true);
-      toast.success("Authenticated successfully!");
+      alert("Authenticated successfully!");
     } else {
-      toast.error("Incorrect Password! Access Denied.");
+      alert("Incorrect Password! Access Denied.");
       setPasswordInput("");
     }
   };
@@ -298,7 +298,7 @@ export default function AdminDashboard() {
 
   const handleExportReport = (format: string) => {
     if (!selectedReportLocation) {
-      return toast.error("Please select a location to download.");
+      return alert("Please select a location to download.");
     }
 
     const feedsToExport = patrolFeeds.filter(
@@ -308,7 +308,7 @@ export default function AdminDashboard() {
     );
 
     if (feedsToExport.length === 0) {
-      return toast.error(`No new active logs found for "${selectedReportLocation}".`);
+      return alert(`No new active logs found for "${selectedReportLocation}".`);
     }
 
     const locationSlug = selectedReportLocation.toLowerCase().replace(/\s+/g, "-");
@@ -355,17 +355,17 @@ export default function AdminDashboard() {
       .update({ is_archived: false })
       .eq("id", id);
 
-    if (error) return toast.error("Failed to unarchive log: " + error.message);
+    if (error) return alert("Failed to unarchive log: " + error.message);
 
     setPatrolFeeds((prev) =>
       prev.map((f) => (f.id === id ? { ...f, is_archived: false } : f))
     );
-    toast.success("Log restored to active stream.");
+    alert("Log restored to active stream.");
   };
 
   const handleFetchCurrentLocation = () => {
     if (!navigator.geolocation) {
-      return toast.error("Geolocation is not supported by your browser.");
+      return alert("Geolocation is not supported by your browser.");
     }
 
     setIsLocating(true);
@@ -374,11 +374,11 @@ export default function AdminDashboard() {
         setLatitude(position.coords.latitude.toFixed(6));
         setLongitude(position.coords.longitude.toFixed(6));
         setIsLocating(false);
-        toast.success("Live coordinates captured!");
+        alert("Live coordinates captured!");
       },
       (error) => {
         setIsLocating(false);
-        toast.error(`Geolocation error: ${error.message}`);
+        alert(`Geolocation error: ${error.message}`);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -386,16 +386,16 @@ export default function AdminDashboard() {
 
   const handleCreateLocation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newLocationName) return toast.error("Please enter a location name.");
+    if (!newLocationName) return alert("Please enter a location name.");
 
     const { data, error } = await supabase
       .from("locations")
       .insert([{ name: newLocationName }])
       .select();
 
-    if (error) return toast.error("Failed to add location: " + error.message);
+    if (error) return alert("Failed to add location: " + error.message);
 
-    toast.success("Location added!");
+    alert("Location added!");
     setNewLocationName("");
     setNewLocationAddress("");
     setIsAddLocationOpen(false);
@@ -408,7 +408,7 @@ export default function AdminDashboard() {
 
   const handleCreateCheckpoint = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedLocationId || !checkpointName) return toast.error("Location and Checkpoint Name are required.");
+    if (!selectedLocationId || !checkpointName) return alert("Location and Checkpoint Name are required.");
 
     const { data, error } = await supabase
       .from("checkpoints")
@@ -423,9 +423,9 @@ export default function AdminDashboard() {
       ])
       .select();
 
-    if (error) return toast.error("Failed to create checkpoint: " + error.message);
+    if (error) return alert("Failed to create checkpoint: " + error.message);
 
-    toast.success("Checkpoint created successfully with Geofencing!");
+    alert("Checkpoint created successfully with Geofencing!");
     setCheckpointName("");
     setLatitude("");
     setLongitude("");
@@ -448,9 +448,9 @@ export default function AdminDashboard() {
       })
       .eq("id", editingCheckpoint.id);
 
-    if (error) return toast.error("Failed to update checkpoint: " + error.message);
+    if (error) return alert("Failed to update checkpoint: " + error.message);
 
-    toast.success("Checkpoint updated!");
+    alert("Checkpoint updated!");
     setIsEditCheckpointOpen(false);
     setEditingCheckpoint(null);
     fetchInitialData();
@@ -459,8 +459,8 @@ export default function AdminDashboard() {
   const handleDeleteCheckpoint = async (id: string) => {
     if (!confirm("Are you sure you want to delete this checkpoint?")) return;
     const { error } = await supabase.from("checkpoints").delete().eq("id", id);
-    if (error) return toast.error("Failed to delete checkpoint: " + error.message);
-    toast.success("Checkpoint deleted.");
+    if (error) return alert("Failed to delete checkpoint: " + error.message);
+    alert("Checkpoint deleted.");
     setCheckpoints((prev) => prev.filter((cp) => cp.id !== id));
   };
 
@@ -483,9 +483,9 @@ export default function AdminDashboard() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      toast.success(`Downloaded ${fileName}`);
+      alert(`Downloaded ${fileName}`);
     } catch {
-      toast.error("Failed to download QR code.");
+      alert("Failed to download QR code.");
     }
   };
 
@@ -500,7 +500,7 @@ export default function AdminDashboard() {
         scanAnimationRef.current = requestAnimationFrame(tickQrScan);
       }
     } catch {
-      toast.error("Camera access failed or unavailable.");
+      alert("Camera access failed or unavailable.");
       setIsQrCameraActive(false);
     }
   };
@@ -535,7 +535,7 @@ export default function AdminDashboard() {
           setScannedCheckpoint(targetCp);
           setQrImagePreview(canvas.toDataURL("image/png"));
           stopQrCamera();
-          toast.success(`Optical QR Match: ${targetCp.checkpoint_name}`);
+          alert(`Optical QR Match: ${targetCp.checkpoint_name}`);
           return;
         }
       }
@@ -555,7 +555,7 @@ export default function AdminDashboard() {
     const selectedCp = checkpoints.length > 0 ? checkpoints[Math.floor(Math.random() * checkpoints.length)] : null;
     setScannedCheckpoint(selectedCp);
     setQrImagePreview(`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${selectedCp?.id || "demo"}`);
-    toast.success(`Detected Checkpoint: ${selectedCp?.checkpoint_name || "Perimeter Fence"}`);
+    alert(`Detected Checkpoint: ${selectedCp?.checkpoint_name || "Perimeter Fence"}`);
   };
 
   const startIncidentCamera = async () => {
@@ -564,7 +564,7 @@ export default function AdminDashboard() {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       if (incidentVideoRef.current) incidentVideoRef.current.srcObject = stream;
     } catch {
-      toast.error("Incident Camera unavailable.");
+      alert("Incident Camera unavailable.");
       setIsIncidentCameraActive(false);
     }
   };
@@ -577,7 +577,7 @@ export default function AdminDashboard() {
     canvas.getContext("2d")?.drawImage(incidentVideoRef.current, 0, 0);
     setIncidentPhoto(canvas.toDataURL("image/png"));
     stopIncidentCamera();
-    toast.success("Incident photo captured.");
+    alert("Incident photo captured.");
   };
 
   const stopIncidentCamera = () => {
@@ -594,7 +594,7 @@ export default function AdminDashboard() {
     const reader = new FileReader();
     reader.onloadend = () => {
       setIncidentPhoto(reader.result as string);
-      toast.success("File attached successfully.");
+      alert("File attached successfully.");
     };
     reader.readAsDataURL(file);
   };
@@ -603,11 +603,11 @@ export default function AdminDashboard() {
     e.preventDefault();
 
     if (!scannedCheckpoint) {
-      return toast.error("Please scan or capture a valid checkpoint first!");
+      return alert("Please scan or capture a valid checkpoint first!");
     }
 
     if (!navigator.geolocation) {
-      return toast.error("Location services are required to verify scan proximity.");
+      return alert("Location services are required to verify scan proximity.");
     }
 
     toast.loading("Verifying location proximity...", { id: "geo-check" });
@@ -629,7 +629,7 @@ export default function AdminDashboard() {
 
           if (distance > allowedRadius) {
             toast.dismiss("geo-check");
-            return toast.error("❌ Out of Range Scan Rejected!", {
+            return alert("❌ Out of Range Scan Rejected!", {
               description: `You are ${Math.round(
                 distance
               )}m away. You must be within ${allowedRadius}m of the checkpoint to scan.`,
@@ -659,7 +659,7 @@ export default function AdminDashboard() {
         };
 
         const { error } = await supabase.from("patrol_feeds").insert([newScanLog]);
-        if (error) return toast.error("Failed to submit patrol scan: " + error.message);
+        if (error) return alert("Failed to submit patrol scan: " + error.message);
 
         stopQrCamera();
         stopIncidentCamera();
@@ -669,11 +669,11 @@ export default function AdminDashboard() {
         setQrImagePreview(null);
         setScannedCheckpoint(null);
         setPatrolStatus("verified");
-        toast.success("Patrol log verified & submitted successfully.");
+        alert("Patrol log verified & submitted successfully.");
       },
       (err) => {
         toast.dismiss("geo-check");
-        toast.error(`GPS Location required: ${err.message}. Please enable location permissions.`);
+        alert(`GPS Location required: ${err.message}. Please enable location permissions.`);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -691,9 +691,9 @@ export default function AdminDashboard() {
       })
       .eq("id", selectedIncident.id);
 
-    if (error) return toast.error("Failed to update incident: " + error.message);
+    if (error) return alert("Failed to update incident: " + error.message);
 
-    toast.success(`Incident status changed to ${status}`);
+    alert(`Incident status changed to ${status}`);
   };
 
   // PASSWORD AUTHENTICATION SCREEN

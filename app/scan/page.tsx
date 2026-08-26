@@ -16,10 +16,10 @@ const Scanner = dynamic(() => import("@yudiel/react-qr-scanner").then((mod) => m
     try {
       const { error } = await supabase.from('locations').delete().eq('id', locId);
       if (error) throw error;
-      toast.success("Site deleted successfully!");
+      alert("Site deleted successfully!");
       window.location.reload();
     } catch (err: any) {
-      toast.error("Failed to delete site: " + err.message);
+      alert("Failed to delete site: " + err.message);
     }
   };
 
