@@ -844,7 +844,6 @@ export default function AdminDashboard() {
               onClick={() => setIsAddLocationOpen(true)}
               className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow"
             >
-              + Add site</button><button onClick={() => { const id = prompt("Enter Location ID to delete or select site:"); if(id) handleDeleteLocation(id); }} 
             </button>
           </div>
 
