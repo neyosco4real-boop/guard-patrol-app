@@ -1,1643 +1,690 @@
-"use client";
-// Helper function to calculate distance in meters between two GPS points
-const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371e3; // Earth radius in meters
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Distance in meters
-};
+'use client';
 
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
+import { QRCodeSVG } from 'qrcode.react';
 
-
-import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
-import { toast } from "sonner";
-import jsQR from "jsqr";
-
-
-// ADMIN PASSCODE CONFIGURATION
-const ADMIN_PASSCODE = "admin123";
-
-interface LocationOption {
+interface PatrolLog {
   id: string;
-  name: string;
-  address?: string;
+  guard_name?: string;
+  location_name?: string;
+  checkpoint_name?: string;
+  status: string;
+  notes?: string;
+  incident_notes?: string;
+  photo_url?: string;
+  media_url?: string;
+  image_url?: string;
+  distance_meters?: number;
+  scanned_at?: string;
+  created_at: string;
 }
 
 interface Checkpoint {
   id: string;
-  location_id: string;
-  checkpoint_name: string;
-  latitude: number;
-  longitude: number;
-  radius_meters: number;
+  site_id?: string;
+  name: string;
+  radius: string;
+  lat?: number | null;
+  lng?: number | null;
 }
 
-interface PatrolFeed {
+interface Site {
   id: string;
-  guard_name: string;
-  location_name: string;
-  checkpoint_name: string;
-  status: "verified" | "flagged" | "incident";
-  created_at: string;
-  incident_photo?: string;
-  notes?: string;
-  incident_status?: "open" | "acknowledged" | "resolved";
-  assigned_guard?: string;
-  admin_notes?: string;
-  is_archived?: boolean;
+  name: string;
+  address: string;
+  checkpoints: Checkpoint[];
 }
-
-function calculateDistanceMeters(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-
-  const handleDeleteLocation = async (locId: string) => {
-    if (!confirm("Are you sure you want to delete this site and its checkpoints?")) return;
-    const { error } = await supabase.from('locations').delete().eq('id', locId);
-    if (error) { alert("Error deleting site: " + error.message); }
-    else { alert("Site deleted successfully!"); window.location.reload(); }
-  };
 
 export default function AdminDashboard() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [passwordInput, setPasswordInput] = useState("");
-
-  const [locations, setLocations] = useState<LocationOption[]>([]);
-  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
-  const [patrolFeeds, setPatrolFeeds] = useState<PatrolFeed[]>([]);
+  const [logs, setLogs] = useState<PatrolLog[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [activeTab, setActiveTab] = useState<'all' | 'incidents' | 'fraud'>('all');
+  const [showFraudBanner, setShowFraudBanner] = useState(true);
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'excel'>('pdf');
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  
+  // Persist feed clear timestamp in localStorage across page refreshes
+  const [clearedAt, setClearedAt] = useState<number | null>(null);
 
-  const [isDownloadDropdownOpen, setIsDownloadDropdownOpen] = useState(false);
-  const [selectedReportLocation, setSelectedReportLocation] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"live" | "archive">("live");
+  // Dynamic Sites & Checkpoints State from Supabase
+  const [sites, setSites] = useState<Site[]>([]);
 
-  const [feedFilter, setFeedFilter] = useState<"all" | "incident">("all");
-  const [selectedIncident, setSelectedIncident] = useState<PatrolFeed | null>(null);
-  const [assignedGuard, setAssignedGuard] = useState("");
-  const [adminNoteInput, setAdminNoteInput] = useState("");
+  // Add Site State
+  const [isAddSiteModalOpen, setIsAddSiteModalOpen] = useState(false);
+  const [newSiteName, setNewSiteName] = useState('');
+  const [newSiteAddress, setNewSiteAddress] = useState('');
 
-  const [expandedLocations, setExpandedLocations] = useState<Record<string, boolean>>({});
+  // Add Checkpoint State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [targetSiteId, setTargetSiteId] = useState<string | null>(null);
+  const [checkpointName, setCheckpointName] = useState('');
+  const [geofenceRadius, setGeofenceRadius] = useState('50 meters');
+  const [coords, setCoords] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
+  const [gettingLocation, setGettingLocation] = useState(false);
+  const [locStatusMsg, setLocStatusMsg] = useState<string | null>(null);
 
-  const [isAddLocationOpen, setIsAddLocationOpen] = useState(false);
-  const [isAddCheckpointOpen, setIsAddCheckpointOpen] = useState(false);
-  const [isEditCheckpointOpen, setIsEditCheckpointOpen] = useState(false);
-  const [editingCheckpoint, setEditingCheckpoint] = useState<Checkpoint | null>(null);
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [qrModalData, setQrModalData] = useState<{ name: string; hash: string } | null>(null);
-
-  const [newLocationName, setNewLocationName] = useState("");
-  const [newLocationAddress, setNewLocationAddress] = useState("");
-
-  const [selectedLocationId, setSelectedLocationId] = useState("");
-  const [checkpointName, setCheckpointName] = useState("");
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
-  const [radiusMeters, setRadiusMeters] = useState("50");
-  const [isLocating, setIsLocating] = useState(false);
-
-  const [guardNameInput, setGuardNameInput] = useState("Guard Alpha");
-  const [scannedCheckpoint, setScannedCheckpoint] = useState<Checkpoint | null>(null);
-  const [qrImagePreview, setQrImagePreview] = useState<string | null>(null);
-  const [isQrCameraActive, setIsQrCameraActive] = useState(false);
-
-  const [patrolStatus, setPatrolStatus] = useState<"verified" | "incident">("verified");
-  const [scannerNotes, setScannerNotes] = useState("");
-  const [incidentPhoto, setIncidentPhoto] = useState<string | null>(null);
-  const [isIncidentCameraActive, setIsIncidentCameraActive] = useState(false);
-
-  const qrVideoRef = useRef<HTMLVideoElement | null>(null);
-  const incidentVideoRef = useRef<HTMLVideoElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const scanAnimationRef = useRef<number | null>(null);
+  // QR Modal State
+  const [selectedQR, setSelectedQR] = useState<{ checkpoint: Checkpoint; siteName: string } | null>(null);
+  const qrSvgRef = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
-    const authSession = sessionStorage.getItem("admin_authenticated");
-    if (authSession === "true") {
-      setIsAuthenticated(true);
+    const savedClearedAt = localStorage.getItem('admin_feed_cleared_at');
+    if (savedClearedAt) {
+      setClearedAt(Number(savedClearedAt));
     }
   }, []);
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
+  const fetchSitesAndCheckpoints = async () => {
+    const { data: dbSites, error: sitesErr } = await supabase.from('sites').select('*').order('created_at', { ascending: true });
+    const { data: dbCheckpoints, error: cpErr } = await supabase.from('checkpoints').select('*').order('created_at', { ascending: true });
 
-    fetchInitialData();
-
-    if (typeof window !== "undefined" && "Notification" in window) {
-      if (Notification.permission === "default") {
-        Notification.requestPermission();
-      }
+    if (!sitesErr && dbSites) {
+      const formattedSites: Site[] = dbSites.map((s) => ({
+        id: s.id,
+        name: s.name,
+        address: s.address || 'Address not specified',
+        checkpoints: (dbCheckpoints || [])
+          .filter((cp) => cp.site_id === s.id)
+          .map((cp) => ({
+            id: cp.id,
+            site_id: cp.site_id,
+            name: cp.name,
+            radius: cp.radius || '50m',
+            lat: cp.lat,
+            lng: cp.lng
+          }))
+      }));
+      setSites(formattedSites);
     }
+  };
 
-    const channel = supabase
-      .channel("realtime_patrol_channel")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "patrol_feeds" },
-        (payload) => {
-          const newRecord = payload.new as PatrolFeed;
-          setPatrolFeeds((prev) => {
-    if (prev.some((item) => item.id === newRecord.id)) return prev;
-    return [newRecord, ...prev];
-  });
+  const fetchLogs = async () => {
+    const { data, error } = await supabase
+      .from('patrol_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
 
-          if (newRecord.status === "incident") {
-            playAlertSound("incident");
-            alert(`⚠️ INCIDENT REPORTED at ${newRecord.checkpoint_name}`, {
-              description: newRecord.notes || "Guard logged an active alert.",
-              duration: 8000,
-            });
-          } else {
-            playAlertSound("verified");
-            alert(`Check-in: ${newRecord.checkpoint_name}`, {
-              description: `Scanned by ${newRecord.guard_name}`,
-            });
-          }
+    if (!error && data) {
+      setLogs(() => {
+        const savedCleared = localStorage.getItem('admin_feed_cleared_at');
+        const activeClearedAt = savedCleared ? Number(savedCleared) : clearedAt;
+        if (activeClearedAt) {
+          return data.filter((item) => new Date(item.created_at || item.scanned_at || 0).getTime() > activeClearedAt);
         }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "patrol_feeds" },
-        (payload) => {
-          const updated = payload.new as PatrolFeed;
-          setPatrolFeeds((prev) =>
-            prev.map((item) => (item.id === updated.id ? updated : item))
-          );
-          if (selectedIncident?.id === updated.id) {
-            setSelectedIncident(updated);
-          }
-        }
-      )
-      .subscribe((status) => {
-        setIsLiveConnected(status === "SUBSCRIBED");
+        return data;
       });
-
-    return () => {
-      supabase.removeChannel(channel);
-      if (scanAnimationRef.current) cancelAnimationFrame(scanAnimationRef.current);
-    };
-  }, [isAuthenticated]);
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordInput === ADMIN_PASSCODE) {
-      sessionStorage.setItem("admin_authenticated", "true");
-      setIsAuthenticated(true);
-      alert("Authenticated successfully!");
-    } else {
-      alert("Incorrect Password! Access Denied.");
-      setPasswordInput("");
     }
-  };
-
-  const handleLogout = () => {
-    sessionStorage.removeItem("admin_authenticated");
-    setIsAuthenticated(false);
-    toast.info("Logged out of Admin Dashboard.");
-  };
-
-  const playAlertSound = (type: "verified" | "incident") => {
-    if (!soundEnabled) return;
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      if (type === "incident") {
-        osc.type = "sawtooth";
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.3);
-      } else {
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.2);
-      }
-    } catch {
-      // Audio fallback handling
-    }
-  };
-
-  const fetchInitialData = async () => {
-    setLoading(true);
-    const [locRes, cpRes, feedRes] = await Promise.all([
-      supabase.from("locations").select("*").order("created_at", { ascending: false }),
-      supabase.from("checkpoints").select("*").order("created_at", { ascending: false }),
-      supabase.from("patrol_feeds").select("*").order("created_at", { ascending: false }),
-    ]);
-
-    if (locRes.data) {
-      setLocations(locRes.data);
-      const initialExp: Record<string, boolean> = {};
-      locRes.data.forEach((l) => (initialExp[l.id] = true));
-      setExpandedLocations(initialExp);
-      if (locRes.data.length > 0) {
-        setSelectedReportLocation(locRes.data[0].name);
-        setSelectedLocationId(locRes.data[0].id);
-      }
-    }
-    if (cpRes.data) setCheckpoints(cpRes.data);
-    if (feedRes.data) setPatrolFeeds(feedRes.data);
-
-    // Clean Realtime Listener
-    const channel = supabase
-      .channel("realtime-patrol-feeds")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "patrol_feeds" },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            setPatrolFeeds((prev) => {
-    if (prev.some((item) => item.id === payload.new.id)) return prev;
-    return [payload.new as PatrolFeed, ...prev];
-  });
-          }
-        }
-      )
-      .subscribe((status) => console.log("Realtime connection status:", status));
     setLoading(false);
   };
 
-  const toggleLocationAccordion = (locId: string) => {
-    setExpandedLocations((prev) => ({ ...prev, [locId]: !prev[locId] }));
-  };
+  useEffect(() => {
+    fetchSitesAndCheckpoints();
+    fetchLogs();
 
-  const handleExportReport = (format: string) => {
-    if (!selectedReportLocation) {
-      return alert("Please select a location to download.");
-    }
-
-    const feedsToExport = patrolFeeds.filter(
-      (f) =>
-        f.location_name?.toLowerCase() === selectedReportLocation.toLowerCase() &&
-        !f.is_archived
-    );
-
-    if (feedsToExport.length === 0) {
-      return alert(`No new active logs found for "${selectedReportLocation}".`);
-    }
-
-    const locationSlug = selectedReportLocation.toLowerCase().replace(/\s+/g, "-");
-    const timestamp = new Date().toISOString().slice(0, 10);
-
-    if (format === "excel") {
-      const headers = "ID,Guard Name,Location,Checkpoint,Status,Date & Time,Notes\n";
-      const rows = feedsToExport.map((f) =>
-        [`"${f.id || ""}"`, `"${f.guard_name || ""}"`, `"${f.location_name || ""}"`, `"${f.checkpoint_name || ""}"`, `"${f.status || ""}"`, `"${(f.created_at || (f as any).timestamp || '') || ""}"`, `"${(f.notes || "").replace(/"/g, '""')}"`].join(",")
-      );
-      const csvContent = "data:text/csv;charset=utf-8," + headers + rows.join("\n");
-      const link = document.createElement("a");
-      link.setAttribute("href", encodeURI(csvContent));
-      link.setAttribute("download", `patrol-report-${locationSlug}-${timestamp}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      const rowsHtml = feedsToExport.map(f => `
-        <tr>
-          <td>${(f.created_at || (f as any).timestamp || '') || "-"}</td>
-          <td>${f.guard_name || "-"}</td>
-          <td>${f.checkpoint_name || "-"}</td>
-          <td>${f.status || "VERIFIED"}</td>
-          <td>${(f as any).latitude && (f as any).longitude ? `${(f as any).latitude}, ${(f as any).longitude}` : ((f as any).lat && (f as any).lng ? `${(f as any).lat}, ${(f as any).lng}` : "N/A")}</td><td>${f.notes || "-"}</td>
-        </tr>
-      `).join("");
-
-      const docStr = `<!DOCTYPE html><html><head><title>Patrol Report</title><style>body{font-family:Arial,sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #cbd5e1;padding:8px;text-align:left;}th{background-color:#f1f5f9;}</style></head><body><h1>Guard Patrol Report</h1><table><thead><tr><th>Date & Time</th><th>Guard</th><th>Checkpoint</th><th>Status</th><th>Coordinates</th><th>Notes</th></tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
-
-      const blob = new Blob([docStr], { type: "text/html" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `patrol-report-${locationSlug}-${timestamp}.html`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-  };
-
-  const handleUnarchiveFeed = async (id: string) => {
-    const { error } = await supabase
-      .from("patrol_feeds")
-      .update({ is_archived: false })
-      .eq("id", id);
-
-    if (error) return alert("Failed to unarchive log: " + error.message);
-
-    setPatrolFeeds((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, is_archived: false } : f))
-    );
-    alert("Log restored to active stream.");
-  };
-
-  const handleFetchCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      return alert("Geolocation is not supported by your browser.");
-    }
-
-    setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLatitude(position.coords.latitude.toFixed(6));
-        setLongitude(position.coords.longitude.toFixed(6));
-        setIsLocating(false);
-        alert("Live coordinates captured!");
-      },
-      (error) => {
-        setIsLocating(false);
-        alert(`Geolocation error: ${error.message}`);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  };
-
-  const handleCreateLocation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newLocationName) return alert("Please enter a location name.");
-
-    const { data, error } = await supabase
-      .from("locations")
-      .insert([{ name: newLocationName }])
-      .select();
-
-    if (error) return alert("Failed to add location: " + error.message);
-
-    alert("Location added!");
-    setNewLocationName("");
-    setNewLocationAddress("");
-    setIsAddLocationOpen(false);
-    if (data) {
-      setLocations((prev) => [data[0], ...prev]);
-      setExpandedLocations((prev) => ({ ...prev, [data[0].id]: true }));
-      if (!selectedReportLocation) setSelectedReportLocation(data[0].name);
-    }
-  };
-
-  const handleCreateCheckpoint = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedLocationId || !checkpointName) return alert("Location and Checkpoint Name are required.");
-
-    const { data, error } = await supabase
-      .from("checkpoints")
-      .insert([
-        {
-          location_id: selectedLocationId,
-          checkpoint_name: checkpointName,
-          latitude: parseFloat(latitude) || 0,
-          longitude: parseFloat(longitude) || 0,
-          radius_meters: parseInt(radiusMeters) || 50,
-        },
-      ])
-      .select();
-
-    if (error) return alert("Failed to create checkpoint: " + error.message);
-
-    alert("Checkpoint created successfully with Geofencing!");
-    setCheckpointName("");
-    setLatitude("");
-    setLongitude("");
-    setRadiusMeters("50");
-    setIsAddCheckpointOpen(false);
-    if (data) setCheckpoints((prev) => [data[0], ...prev]);
-  };
-
-  const handleUpdateCheckpoint = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingCheckpoint) return;
-
-    const { error } = await supabase
-      .from("checkpoints")
-      .update({
-        checkpoint_name: checkpointName,
-        latitude: parseFloat(latitude) || 0,
-        longitude: parseFloat(longitude) || 0,
-        radius_meters: parseInt(radiusMeters) || 50,
-      })
-      .eq("id", editingCheckpoint.id);
-
-    if (error) return alert("Failed to update checkpoint: " + error.message);
-
-    alert("Checkpoint updated!");
-    setIsEditCheckpointOpen(false);
-    setEditingCheckpoint(null);
-    fetchInitialData();
-  };
-
-  const handleDeleteCheckpoint = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this checkpoint?")) return;
-    const { error } = await supabase.from("checkpoints").delete().eq("id", id);
-    if (error) return alert("Failed to delete checkpoint: " + error.message);
-    alert("Checkpoint deleted.");
-    setCheckpoints((prev) => prev.filter((cp) => cp.id !== id));
-  };
-
-  const handleDownloadQr = async (format: "svg" | "jpg") => {
-    if (!qrModalData) return;
-    const size = "500x500";
-    const fileName = `${qrModalData.name.toLowerCase().replace(/\s+/g, "-")}-qr.${format}`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}&format=${format}&data=${encodeURIComponent(
-      qrModalData.hash
-    )}`;
-
-    try {
-      const response = await fetch(qrUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      alert(`Downloaded ${fileName}`);
-    } catch {
-      alert("Failed to download QR code.");
-    }
-  };
-
-  const startQrCamera = async () => {
-    setIsQrCameraActive(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      if (qrVideoRef.current) {
-        qrVideoRef.current.srcObject = stream;
-        qrVideoRef.current.setAttribute("playsinline", "true");
-        qrVideoRef.current.play();
-        scanAnimationRef.current = requestAnimationFrame(tickQrScan);
-      }
-    } catch {
-      alert("Camera access failed or unavailable.");
-      setIsQrCameraActive(false);
-    }
-  };
-
-  const tickQrScan = () => {
-    if (qrVideoRef.current && qrVideoRef.current.readyState === qrVideoRef.current.HAVE_ENOUGH_DATA) {
-      const canvas = document.createElement("canvas");
-      canvas.width = qrVideoRef.current.videoWidth;
-      canvas.height = qrVideoRef.current.videoHeight;
-      const ctx = canvas.getContext("2d");
-
-      if (ctx) {
-        ctx.drawImage(qrVideoRef.current, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "dontInvert",
-        });
-
-        if (code && code.data) {
-          const scannedData = code.data.trim();
-          const matchedCp = checkpoints.find((cp) => cp.id === scannedData || cp.checkpoint_name.toLowerCase() === scannedData.toLowerCase());
-
-          const targetCp = matchedCp || {
-            id: scannedData,
-            checkpoint_name: `Decoded Code: ${scannedData}`,
-            location_id: locations[0]?.id || "default",
-            latitude: 0,
-            longitude: 0,
-            radius_meters: 50,
-          };
-
-          setScannedCheckpoint(targetCp);
-          setQrImagePreview(canvas.toDataURL("image/png"));
-          stopQrCamera();
-          alert(`Optical QR Match: ${targetCp.checkpoint_name}`);
-          return;
+    const channel = supabase
+      .channel('admin-patrol-feed')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'patrol_logs' }, (payload) => {
+        const newLog = payload.new as PatrolLog;
+        const savedCleared = localStorage.getItem('admin_feed_cleared_at');
+        const cutoff = savedCleared ? Number(savedCleared) : 0;
+        if (new Date(newLog.created_at || newLog.scanned_at || 0).getTime() > cutoff) {
+          setLogs((prev) => [newLog, ...prev]);
         }
-      }
-    }
-    scanAnimationRef.current = requestAnimationFrame(tickQrScan);
-  };
+      })
+      .subscribe();
 
-  const stopQrCamera = () => {
-    if (scanAnimationRef.current) cancelAnimationFrame(scanAnimationRef.current);
-    if (qrVideoRef.current?.srcObject) {
-      (qrVideoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-    }
-    setIsQrCameraActive(false);
-  };
-
-  const simulateQuickScan = () => {
-    const selectedCp = checkpoints.length > 0 ? checkpoints[Math.floor(Math.random() * checkpoints.length)] : null;
-    setScannedCheckpoint(selectedCp);
-    setQrImagePreview(`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${selectedCp?.id || "demo"}`);
-    alert(`Detected Checkpoint: ${selectedCp?.checkpoint_name || "Perimeter Fence"}`);
-  };
-
-  const startIncidentCamera = async () => {
-    setIsIncidentCameraActive(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (incidentVideoRef.current) incidentVideoRef.current.srcObject = stream;
-    } catch {
-      alert("Incident Camera unavailable.");
-      setIsIncidentCameraActive(false);
-    }
-  };
-
-  const captureIncidentPhoto = () => {
-    if (!incidentVideoRef.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = incidentVideoRef.current.videoWidth || 320;
-    canvas.height = incidentVideoRef.current.videoHeight || 240;
-    canvas.getContext("2d")?.drawImage(incidentVideoRef.current, 0, 0);
-    setIncidentPhoto(canvas.toDataURL("image/png"));
-    stopIncidentCamera();
-    alert("Incident photo captured.");
-  };
-
-  const stopIncidentCamera = () => {
-    if (incidentVideoRef.current?.srcObject) {
-      (incidentVideoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-    }
-    setIsIncidentCameraActive(false);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setIncidentPhoto(reader.result as string);
-      alert("File attached successfully.");
+    const interval = setInterval(fetchLogs, 3000);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
-    reader.readAsDataURL(file);
+  }, [clearedAt]);
+
+  const handleClearFeeds = () => {
+    if (window.confirm("Are you sure you want to clear all current feed entries?")) {
+      const now = Date.now();
+      localStorage.setItem('admin_feed_cleared_at', now.toString());
+      setClearedAt(now);
+      setLogs([]);
+    }
   };
 
-  const submitPatrolScan = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleExportReport = () => {
+    alert(exportFormat === 'pdf' ? "Generating PDF Patrol Report..." : "Exporting Excel Spreadsheet (.xlsx)...");
+  };
 
-    if (!scannedCheckpoint) {
-      return alert("Please scan or capture a valid checkpoint first!");
+  const handleLogout = () => {
+    if (window.confirm("Are you sure you want to log out?")) {
+      window.location.href = "/login";
+    }
+  };
+
+  const handleSaveSite = async () => {
+    if (!newSiteName.trim()) {
+      alert("Site name is required.");
+      return;
     }
 
-    if (!navigator.geolocation) {
-      return alert("Location services are required to verify scan proximity.");
+    const { data, error } = await supabase
+      .from('sites')
+      .insert([{ name: newSiteName.trim(), address: newSiteAddress.trim() || 'Address not specified' }])
+      .select();
+
+    if (error) {
+      alert("Failed to save site to database: " + error.message);
+      return;
     }
 
-    toast.loading("Verifying location proximity...", { id: "geo-check" });
+    if (data && data[0]) {
+      setSites([...sites, { id: data[0].id, name: data[0].name, address: data[0].address, checkpoints: [] }]);
+    }
+    
+    setNewSiteName('');
+    setNewSiteAddress('');
+    setIsAddSiteModalOpen(false);
+  };
 
+  const handleDeleteSite = async (siteId: string) => {
+    if (window.confirm("Are you sure you want to remove this site and all its checkpoints?")) {
+      const { error } = await supabase.from('sites').delete().eq('id', siteId);
+      if (error) {
+        alert("Failed to delete site: " + error.message);
+        return;
+      }
+      setSites(sites.filter((s) => s.id !== siteId));
+    }
+  };
+
+  const handleOpenAddCheckpoint = (siteId: string) => {
+    setTargetSiteId(siteId);
+    setCheckpointName('');
+    setGeofenceRadius('50 meters');
+    setCoords({ lat: null, lng: null });
+    setLocStatusMsg(null);
+    setIsAddModalOpen(true);
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!("geolocation" in navigator)) {
+      alert("Geolocation is not supported.");
+      return;
+    }
+    setGettingLocation(true);
+    setLocStatusMsg("Fetching GPS...");
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const guardLat = position.coords.latitude;
-        const guardLng = position.coords.longitude;
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocStatusMsg(`📍 Lat: ${pos.coords.latitude.toFixed(6)}, Lng: ${pos.coords.longitude.toFixed(6)}`);
+        setGettingLocation(false);
+      },
+      () => {
+        setLocStatusMsg("⚠️ Failed to acquire location.");
+        setGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
 
-        if (scannedCheckpoint.latitude && scannedCheckpoint.longitude) {
-          const distance = calculateDistanceMeters(
-            guardLat,
-            guardLng,
-            scannedCheckpoint.latitude,
-            scannedCheckpoint.longitude
-          );
+  const handleSaveCheckpoint = async () => {
+    if (!checkpointName.trim() || !targetSiteId) {
+      alert("Please enter a checkpoint name.");
+      return;
+    }
 
-          const allowedRadius = scannedCheckpoint.radius_meters || 50;
+    const radiusVal = geofenceRadius.includes('m') ? geofenceRadius : `${geofenceRadius}m`;
+    const payload: Record<string, any> = {
+      site_id: targetSiteId,
+      name: checkpointName.trim(),
+      radius: radiusVal
+    };
+    if (coords.lat !== null) payload.lat = coords.lat;
+    if (coords.lng !== null) payload.lng = coords.lng;
 
-          if (distance > allowedRadius) {
-            toast.dismiss("geo-check");
-            return alert("❌ Out of Range Scan Rejected!", {
-              description: `You are ${Math.round(
-                distance
-              )}m away. You must be within ${allowedRadius}m of the checkpoint to scan.`,
-              duration: 6000,
-            });
-          }
+    const { data, error } = await supabase
+      .from('checkpoints')
+      .insert([payload])
+      .select();
+
+    if (error) {
+      alert("Failed to save checkpoint: " + error.message);
+      return;
+    }
+
+    if (data && data[0]) {
+      const newCp: Checkpoint = {
+        id: data[0].id,
+        site_id: data[0].site_id,
+        name: data[0].name,
+        radius: data[0].radius,
+        lat: data[0].lat,
+        lng: data[0].lng
+      };
+
+      setSites(sites.map((site) => {
+        if (site.id === targetSiteId) {
+          return { ...site, checkpoints: [...site.checkpoints, newCp] };
         }
+        return site;
+      }));
+    }
 
-        toast.dismiss("geo-check");
-
-        const targetLoc =
-          locations.find((l) => l.id === scannedCheckpoint.location_id) || locations[0];
-
-        const newScanLog = {
-          guard_name: guardNameInput || "On-Duty Guard",
-          location_name: targetLoc?.name || "Main Site",
-          checkpoint_name: scannedCheckpoint.checkpoint_name,
-          status: patrolStatus,
-          notes:
-            scannerNotes ||
-            (patrolStatus === "incident"
-              ? "Incident flagged during patrol."
-              : "Standard patrol scan completed."),
-          incident_photo: incidentPhoto || null,
-          incident_status: patrolStatus === "incident" ? "open" : null,
-          is_archived: false,
-        };
-
-        const { error } = await supabase.from("patrol_feeds").insert([newScanLog]);
-        if (error) return alert("Failed to submit patrol scan: " + error.message);
-
-        stopQrCamera();
-        stopIncidentCamera();
-        setIsScannerOpen(false);
-        setScannerNotes("");
-        setIncidentPhoto(null);
-        setQrImagePreview(null);
-        setScannedCheckpoint(null);
-        setPatrolStatus("verified");
-        alert("Patrol log verified & submitted successfully.");
-      },
-      (err) => {
-        toast.dismiss("geo-check");
-        alert(`GPS Location required: ${err.message}. Please enable location permissions.`);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+    setIsAddModalOpen(false);
   };
 
-  const handleUpdateIncidentStatus = async (status: "acknowledged" | "resolved") => {
-    if (!selectedIncident) return;
-
-    const { error } = await supabase
-      .from("patrol_feeds")
-      .update({
-        incident_status: status,
-        assigned_guard: assignedGuard || selectedIncident.assigned_guard,
-        admin_notes: adminNoteInput || selectedIncident.admin_notes,
-      })
-      .eq("id", selectedIncident.id);
-
-    if (error) return alert("Failed to update incident: " + error.message);
-
-    alert(`Incident status changed to ${status}`);
+  const handleDeleteCheckpoint = async (cpId: string) => {
+    const { error } = await supabase.from('checkpoints').delete().eq('id', cpId);
+    if (error) {
+      alert("Failed to delete checkpoint: " + error.message);
+      return;
+    }
+    setSites(sites.map((site) => ({
+      ...site,
+      checkpoints: site.checkpoints.filter((c) => c.id !== cpId)
+    })));
   };
 
-  // PASSWORD AUTHENTICATION SCREEN
-  if (!isAuthenticated) {
-    return (
-      <main className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="bg-[#0b1026] border border-slate-800 rounded-3xl p-8 max-w-sm w-full space-y-6 shadow-2xl text-center">
-          <div className="w-16 h-16 bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-2xl flex items-center justify-center text-2xl mx-auto shadow-inner">
-            🔒
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">Admin Command Center</h1>
-            <p className="text-xs text-slate-400 mt-1">Please enter password to access dashboard</p>
-          </div>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input
-              type="password"
-              placeholder="Enter admin password..."
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 text-center tracking-widest"
-              autoFocus
-              required
-            />
-            <button
-              type="submit"
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition active:scale-95"
-            >
-              Authenticate Access
-            </button>
-          </form>
-          <p className="text-[10px] text-slate-500">Default passcode: <code className="text-indigo-400 font-mono">admin123</code></p>
-        </div>
-      </main>
-    );
-  }
+  const triggerDownload = (url: string, filename: string) => {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-  const activeFeeds = patrolFeeds.filter((f) => !f.is_archived);
-  const archivedFeeds = patrolFeeds.filter((f) => f.is_archived);
+  const downloadSVG = () => {
+    if (!qrSvgRef.current || !selectedQR) return;
+    const svgData = new XMLSerializer().serializeToString(qrSvgRef.current);
+    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+    triggerDownload(URL.createObjectURL(svgBlob), `QR_${selectedQR.checkpoint.name.replace(/\s+/g, '_')}.svg`);
+  };
 
-  const displayFeeds = (activeTab === "live" ? activeFeeds : archivedFeeds).filter(
-    (f) => (feedFilter === "incident" ? f.status === "incident" : true)
-  );
+  const downloadPNG = () => {
+    if (!qrSvgRef.current || !selectedQR) return;
+    const svgData = new XMLSerializer().serializeToString(qrSvgRef.current);
+    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+    const URL_Obj = window.URL || window.webkitURL || window;
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 600; canvas.height = 600;
+      const context = canvas.getContext("2d");
+      if (context) {
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, 600, 600);
+        context.drawImage(image, 50, 50, 500, 500);
+        triggerDownload(canvas.toDataURL("image/png"), `QR_${selectedQR.checkpoint.name.replace(/\s+/g, '_')}.png`);
+      }
+    };
+    image.src = URL_Obj.createObjectURL(svgBlob);
+  };
+
+  const fraudAlerts = logs.filter(l => ['REJECTED', 'FLAGGED'].includes((l.status || '').toUpperCase()));
+  const incidentLogs = logs.filter(l => (l.status || '').toUpperCase() === 'INCIDENT');
+
+  const filteredLogs = logs.filter(l => {
+    const s = (l.status || '').toUpperCase();
+    if (activeTab === 'incidents') return s === 'INCIDENT';
+    if (activeTab === 'fraud') return s === 'REJECTED' || s === 'FLAGGED';
+    return true;
+  });
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-6 md:p-10 space-y-8">
-      {/* Header Controls */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">Guard Patrol Command Dashboard</h1>
-            <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${
-                isLiveConnected
-                  ? "bg-emerald-950 text-emerald-400 border-emerald-800"
-                  : "bg-amber-950 text-amber-400 border-amber-800"
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${isLiveConnected ? "bg-emerald-400 animate-ping" : "bg-amber-400"}`} />
-              {isLiveConnected ? "WebSockets Active" : "Connecting..."}
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Realtime database stream active {loading && "• Initializing payload..."}
-          </p>
+    <div className="min-h-screen bg-[#070b18] text-white p-3 sm:p-6 font-sans space-y-6 relative">
+      
+      {/* Fully Responsive Header Controls */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-[#151c33] pb-5">
+        <div className="flex items-center space-x-3 justify-between sm:justify-start">
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">Guard Patrol Command</h1>
+          <span className="bg-[#0c2e24] border border-[#10b981]/50 text-[#10b981] text-[10px] font-black px-3 py-1 rounded-full tracking-wider flex items-center space-x-2 shrink-0">
+            <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></span>
+            <span className="hidden xs:inline">WEBSOCKETS</span> LIVE
+          </span>
         </div>
 
-        <div className="flex flex-wrap gap-2.5 items-center">
-          <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`px-3 py-2 text-xs font-semibold rounded-xl border transition ${
-              soundEnabled
-                ? "bg-slate-900/60 hover:bg-slate-800 border-slate-700/80 text-slate-300"
-                : "bg-slate-950 border-slate-800 text-slate-600 line-through"
-            }`}
+        {/* Responsive Control Bar */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5 w-full xl:w-auto">
+          {/* Sound / Alarm Toggle Button */}
+          <button 
+            onClick={() => setSoundEnabled(!soundEnabled)} 
+            className="flex-1 sm:flex-none justify-center items-center px-3.5 py-2.5 bg-[#0e172a] border border-[#1e293b] hover:border-[#3b82f6] active:scale-95 rounded-xl text-xs font-bold text-slate-200 transition-all flex space-x-2"
           >
-            🔊 Sound {soundEnabled ? "On" : "Muted"}
+            <span>{soundEnabled ? '🔊' : '🔇'}</span>
+            <span>{soundEnabled ? 'Alarm On' : 'Alarm Off'}</span>
           </button>
 
-          <div className="relative">
-            <button
-              onClick={() => setIsDownloadDropdownOpen(!isDownloadDropdownOpen)}
-              className="px-3 py-2 bg-slate-900/60 hover:bg-slate-800 border border-slate-700/80 text-slate-300 text-xs font-semibold rounded-xl transition flex items-center gap-1.5"
+          {/* Export Report Dropdown & Action */}
+          <div className="col-span-2 sm:col-span-1 flex items-center bg-[#0e172a] border border-[#1e293b] rounded-xl overflow-hidden p-0.5 w-full sm:w-auto">
+            <select 
+              value={exportFormat} 
+              onChange={(e) => setExportFormat(e.target.value as 'pdf' | 'excel')} 
+              className="bg-transparent text-xs font-semibold text-slate-200 px-2 py-2 focus:outline-none border-r border-[#1e293b] cursor-pointer flex-1 sm:flex-none"
             >
-              📊 Download Report ▾
-            </button>
-
-            {isDownloadDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-[#0b1026] border border-slate-800 rounded-2xl p-4 shadow-2xl z-40 space-y-3">
-                <p className="text-[11px] font-bold text-slate-300">Select Site Location</p>
-                
-                <select
-                  value={selectedReportLocation}
-                  onChange={(e) => setSelectedReportLocation(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                >
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.name}>
-                      {loc.name}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="pt-1 space-y-2">
-                  <button
-                    onClick={() => handleExportReport("excel")}
-                    className="w-full py-2 bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
-                  >
-                    📥 Download Excel / CSV
-                  </button>
-                  <button
-                    onClick={() => handleExportReport("pdf")}
-                    className="w-full py-2 bg-indigo-950 hover:bg-indigo-900 border border-indigo-800 text-indigo-300 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
-                  >
-                    📄 Download PDF
-                  </button>
-                </div>
-                <p className="text-[9px] text-slate-500 text-center">
-                  * Exported records auto-move to Archive Tab to avoid duplicate downloads.
-                </p>
-              </div>
-            )}
-          </div>
-          
-          <button
-            onClick={() => setIsScannerOpen(true)}
-            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/30 border border-indigo-400/50 transition flex items-center gap-2 active:scale-95"
-          >
-            🔍 Guard Patrol Scanner
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="px-3 py-2 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-rose-400 text-xs font-semibold rounded-xl transition"
-            title="Lock Dashboard"
-          >
-            🔒 Logout
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Active Locations Card */}
-        <div className="lg:col-span-2 bg-[#0b1026] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-            <h2 className="text-lg font-bold text-white">Active Locations ({locations.length})</h2>
-            <button
-              onClick={() => setIsAddLocationOpen(true)}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow"
+              <option value="pdf" className="bg-[#0e172a] text-white">📄 Export PDF</option>
+              <option value="excel" className="bg-[#0e172a] text-white">📊 Export Excel</option>
+            </select>
+            <button 
+              onClick={handleExportReport} 
+              className="px-3 py-2 bg-[#1e293b] hover:bg-[#3b82f6] text-white text-xs font-bold transition whitespace-nowrap"
             >
+              Download
             </button>
           </div>
 
-          <div className="space-y-6">
-            {locations.map((loc) => {
-              const locCheckpoints = checkpoints.filter((cp) => cp.location_id === loc.id);
-              const isExpanded = !!expandedLocations[loc.id];
+          {/* Guard Patrol Scanner Link */}
+          <a 
+            href="/scan" 
+            target="_blank" 
+            className="col-span-1 flex-1 sm:flex-none justify-center items-center px-3.5 py-2.5 bg-[#3b82f6] hover:bg-[#2563eb] active:scale-95 text-white text-xs font-bold rounded-xl shadow-lg shadow-[#3b82f6]/20 transition-all text-center flex space-x-1.5"
+          >
+            <span>📱</span>
+            <span>Guard Scanner</span>
+          </a>
 
-              return (
-                <div key={loc.id} className="border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden">
-                  <div
-                    onClick={() => toggleLocationAccordion(loc.id)}
-                    className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-800/50 transition"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg">{isExpanded ? "📂" : "📁"}</span>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-100">{loc.name}</h3>
-                        {loc.address && <p className="text-[11px] text-slate-400">{loc.address}</p>}
-                      </div>
-                    </div>
-                    <span className="text-[10px] bg-slate-800 border border-slate-700 text-slate-300 font-semibold px-3 py-1 rounded-full">
-                      {locCheckpoints.length} Checkpoints
-                    </span>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="border-t border-slate-800 bg-[#050814]/80 p-4 space-y-3">
-                      {locCheckpoints.length === 0 ? (
-                        <p className="text-xs text-slate-500 py-2">No checkpoints created for this location yet.</p>
-                      ) : (
-                        locCheckpoints.map((cp) => (
-                          <div key={cp.id} className="py-2.5 flex items-center justify-between border-b border-slate-800/60 last:border-0">
-                            <div>
-                              <p className="text-xs font-bold text-slate-200">{cp.checkpoint_name}</p>
-                              <p className="text-[10px] text-indigo-400 font-semibold">
-                                Geofence Radius: {cp.radius_meters || 50}m
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setQrModalData({ name: cp.checkpoint_name, hash: cp.id })}
-                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] rounded-lg transition font-semibold flex items-center gap-1.5"
-                              >
-                                <span>📱</span> View QR
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingCheckpoint(cp);
-                                  setCheckpointName(cp.checkpoint_name);
-                                  setLatitude(cp.latitude.toString());
-                                  setLongitude(cp.longitude.toString());
-                                  setRadiusMeters((cp.radius_meters || 50).toString());
-                                  setIsEditCheckpointOpen(true);
-                                }}
-                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] rounded-lg border border-slate-700 font-semibold flex items-center gap-1.5"
-                              >
-                                <span>✏️</span> Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteCheckpoint(cp.id)}
-                                className="px-2.5 py-1.5 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-[11px] rounded-lg font-semibold flex items-center gap-1.5"
-                              >
-                                <span>🗑️</span> Delete
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-
-                      <div className="pt-2">
-                        <button
-                          onClick={() => {
-                            setSelectedLocationId(loc.id);
-                            setCheckpointName("");
-                            setLatitude("");
-                            setLongitude("");
-                            setRadiusMeters("50");
-                            setIsAddCheckpointOpen(true);
-                          }}
-                          className="w-full flex items-center justify-center gap-1.5 border border-dashed border-slate-700 hover:border-indigo-500 bg-slate-900/40 hover:bg-indigo-950/30 text-slate-300 hover:text-indigo-300 py-2.5 rounded-xl text-xs font-semibold transition"
-                        >
-                          + Add Checkpoint
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          {/* Responsive Logout Button */}
+          <button 
+            onClick={handleLogout} 
+            className="col-span-1 flex-1 sm:flex-none justify-center items-center px-3.5 py-2.5 bg-[#450a0a] border border-[#ef4444]/40 text-[#ef4444] hover:bg-[#7f1d1d] hover:text-white active:scale-95 text-xs font-bold rounded-xl transition-all flex space-x-1.5"
+          >
+            <span>🔒</span>
+            <span>Logout</span>
+          </button>
         </div>
+      </div>
 
-        {/* Live Patrol Activity Stream & Archive Tabs */}
-        <div className="bg-[#0b1026] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-          <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setActiveTab("live")}
-                className={`text-xs font-bold pb-1 border-b-2 transition ${
-                  activeTab === "live"
-                    ? "border-indigo-500 text-white"
-                    : "border-transparent text-slate-500 hover:text-slate-300"
-                }`}
-              >
-                Live Feed ({activeFeeds.length})
-              </button>
-              <button
-                onClick={() => setActiveTab("archive")}
-                className={`text-xs font-bold pb-1 border-b-2 transition ${
-                  activeTab === "archive"
-                    ? "border-indigo-500 text-white"
-                    : "border-transparent text-slate-500 hover:text-slate-300"
-                }`}
-              >
-                📁 Archive ({archivedFeeds.length})
-              </button>
-            </div>
-
-            <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-800 p-1 rounded-xl">
-              <button
-                onClick={() => setFeedFilter("all")}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition ${
-                  feedFilter === "all"
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFeedFilter("incident")}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition ${
-                  feedFilter === "incident"
-                    ? "bg-rose-600 text-white shadow-sm"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                Incidents
-              </button>
+      {showFraudBanner && fraudAlerts.length > 0 && (
+        <div className="bg-[#1a080b] border border-[#ef4444] rounded-2xl p-4 shadow-2xl flex items-center justify-between transition-all">
+          <div className="flex items-center space-x-3">
+            <span className="text-2xl">🚨</span>
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-[#ef4444]">GEOFENCE VIOLATION DETECTED!</h3>
+              <p className="text-[11px] sm:text-xs text-[#fca5a5]">{fraudAlerts.length} scan(s) performed outside set geofence perimeter.</p>
             </div>
           </div>
+          <button onClick={() => setShowFraudBanner(false)} className="text-[#ef4444] hover:text-white transition font-black p-1">✕</button>
+        </div>
+      )}
 
-          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-            {displayFeeds.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-8">
-                {activeTab === "archive"
-                  ? "No archived reports available."
-                  : "No active patrol logs available."}
-              </p>
-            ) : (
-              displayFeeds.map((feed) => (
-                <div
-                  key={feed.id}
-                  onClick={() => {
-                    if (feed.status === "incident") {
-                      setSelectedIncident(feed);
-                      setAssignedGuard(feed.assigned_guard || "");
-                      setAdminNoteInput(feed.admin_notes || "");
-                    }
-                  }}
-                  className={`p-3.5 border rounded-xl space-y-2 transition relative ${
-                    feed.status === "incident"
-                      ? "bg-rose-950/20 border-rose-900/60 hover:border-rose-700"
-                      : "bg-slate-900/80 border-slate-800"
-                  } ${feed.status === "incident" ? "cursor-pointer" : ""}`}
-                >
-                  <div className="flex justify-between items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* Left Column - Relational Sites & Checkpoints */}
+        <div className="lg:col-span-6 xl:col-span-7 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base sm:text-lg font-bold text-white">Active Locations ({sites.length})</h2>
+            <button onClick={() => setIsAddSiteModalOpen(true)} className="px-3.5 py-2 bg-[#3b82f6] hover:bg-[#2563eb] text-white text-xs font-bold rounded-xl transition">
+              + Add Location
+            </button>
+          </div>
+
+          {sites.length === 0 ? (
+            <div className="bg-[#0b1021] border border-[#1a233d] rounded-2xl p-8 text-center shadow-xl">
+              <p className="text-sm text-[#828cb0]">No active locations in database. Add a site to get started.</p>
+            </div>
+          ) : (
+            sites.map((site) => (
+              <div key={site.id} className="bg-[#0b1021] border border-[#1a233d] rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl relative group">
+                <div className="flex items-center justify-between border-b border-[#1a233d] pb-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 sm:p-3 bg-[#1e1b18] text-[#f59e0b] rounded-xl text-lg sm:text-xl">📁</div>
                     <div>
-                      <p className="text-xs font-bold text-slate-200">{feed.guard_name}</p>
-                      <p className="text-[11px] text-indigo-400 font-semibold">{feed.location_name ? `${feed.location_name} - ${feed.checkpoint_name}` : feed.checkpoint_name}</p>
+                      <h3 className="text-sm sm:text-base font-bold text-white">{site.name}</h3>
+                      <p className="text-[11px] sm:text-xs text-[#828cb0]">{site.address}</p>
                     </div>
-                    <span
-                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                        feed.status === "verified"
-                          ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
-                          : "bg-rose-950 text-rose-300 border border-rose-800"
-                      }`}
-                    >
-                      {feed.status}
-                    </span>
                   </div>
-                  {feed.notes && (
-                    <p className="text-xs text-slate-300 bg-slate-950/40 p-2 rounded-lg border border-slate-800/50">
-                      {feed.notes}
-                    </p>
-                  )}
-                  {feed.incident_photo && (
-                    <img
-                      src={feed.incident_photo}
-                      alt="Incident Evidence"
-                      className="w-full h-32 object-cover rounded-lg border border-slate-700 mt-2"
-                    />
-                  )}
-                  <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1">
-                    {feed.incident_status ? (
-                      <span className="font-semibold uppercase text-amber-400">
-                        Status: {feed.incident_status}
-                      </span>
-                    ) : (
-                      <span>{new Date(feed.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                    )}
-
-                    {activeTab === "archive" && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleUnarchiveFeed(feed.id);
-                        }}
-                        className="text-[10px] text-indigo-400 hover:text-indigo-300 underline font-semibold"
-                      >
-                        Restore to Live
-                      </button>
-                    )}
+                  <div className="flex items-center space-x-2 sm:space-x-3">
+                    <span className="bg-[#12192e] border border-[#1e293b] text-[10px] sm:text-xs text-[#93c5fd] px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-xl font-bold">
+                      {site.checkpoints.length} Checkpoints
+                    </span>
+                    <button onClick={() => handleDeleteSite(site.id)} className="p-1.5 text-[#ef4444] hover:bg-[#450a0a] rounded-lg transition" title="Delete site">
+                      ✕
+                    </button>
                   </div>
                 </div>
-              ))
+
+                <div className="space-y-2.5">
+                  {site.checkpoints.length === 0 && <p className="text-xs text-[#475569] italic px-2">No checkpoints assigned yet.</p>}
+                  {site.checkpoints.map((cp) => (
+                    <div key={cp.id} className="bg-[#070b18] border border-[#1a233d] rounded-xl p-3 flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-white">{cp.name}</h4>
+                        <p className="text-[10px] sm:text-[11px] text-[#828cb0]">Radius: {cp.radius} {cp.lat ? `• (${cp.lat.toFixed(4)}, ${cp.lng?.toFixed(4)})` : ''}</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button onClick={() => setSelectedQR({ checkpoint: cp, siteName: site.name })} className="px-2.5 py-1.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-[10px] sm:text-[11px] font-bold rounded-lg transition">View QR</button>
+                        <button onClick={() => handleDeleteCheckpoint(cp.id)} className="px-2.5 py-1.5 bg-[#991b1b] hover:bg-[#7f1d1d] text-white text-[10px] sm:text-[11px] font-bold rounded-lg transition">Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button onClick={() => handleOpenAddCheckpoint(site.id)} className="w-full py-2.5 bg-[#070b18] border border-dashed border-[#1a233d] hover:border-[#3b82f6] text-xs font-bold text-[#828cb0] hover:text-white rounded-xl transition">
+                  + Add Checkpoint to {site.name}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Right Column - Interactive & Responsive Live Feed */}
+        <div className="lg:col-span-6 xl:col-span-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center justify-between sm:justify-start space-x-3 text-xs font-bold">
+              <span className="text-white text-base">Live Feed ({filteredLogs.length})</span>
+              <button onClick={handleClearFeeds} className="text-[#ef4444] hover:underline text-xs bg-[#450a0a]/40 px-2 py-1 rounded-lg border border-[#ef4444]/30">Clear Feed</button>
+            </div>
+
+            {/* Interactive Status Filter Pills */}
+            <div className="flex items-center bg-[#070b18] border border-[#1a233d] p-1 rounded-xl self-start sm:self-auto">
+              <button 
+                onClick={() => setActiveTab('all')} 
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${activeTab === 'all' ? 'bg-[#2563eb] text-white shadow-md' : 'text-[#828cb0] hover:text-white'}`}
+              >
+                All ({logs.length})
+              </button>
+              <button 
+                onClick={() => setActiveTab('incidents')} 
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${activeTab === 'incidents' ? 'bg-[#f59e0b] text-black shadow-md' : 'text-[#828cb0] hover:text-white'}`}
+              >
+                Incidents ({incidentLogs.length})
+              </button>
+              <button 
+                onClick={() => setActiveTab('fraud')} 
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${activeTab === 'fraud' ? 'bg-[#ef4444] text-white shadow-md' : 'text-[#828cb0] hover:text-white'}`}
+              >
+                Fraud ({fraudAlerts.length})
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-[#0b1021] border border-[#1a233d] rounded-2xl p-3 sm:p-4 shadow-xl max-h-[680px] overflow-y-auto space-y-3">
+            {loading ? (
+              <div className="p-8 text-center text-xs text-[#828cb0] flex flex-col items-center justify-center space-y-2">
+                <span className="w-5 h-5 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin"></span>
+                <span>Connecting live patrol feed...</span>
+              </div>
+            ) : filteredLogs.length === 0 ? (
+              <div className="p-8 text-center text-xs text-[#828cb0]">No logs matching current filter.</div>
+            ) : (
+              filteredLogs.map((log) => {
+                const s = (log.status || '').toUpperCase();
+                const isFraud = s === 'REJECTED' || s === 'FLAGGED';
+                const isInc = s === 'INCIDENT';
+                const isExpanded = expandedLogId === log.id;
+                const timeStr = new Date(log.created_at || log.scanned_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                return (
+                  <div 
+                    key={log.id} 
+                    className={`border p-3.5 sm:p-4 rounded-xl transition-all duration-200 cursor-pointer ${
+                      isFraud 
+                        ? 'border-[#ef4444]/60 bg-[#1a080b] hover:border-[#ef4444]' 
+                        : isInc 
+                        ? 'border-[#f59e0b]/60 bg-[#1a140b] hover:border-[#f59e0b]' 
+                        : 'border-[#1a233d] bg-[#070b18] hover:border-[#3b82f6]/50'
+                    }`}
+                    onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                  >
+                    {/* Log Header */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: isFraud ? '#ef4444' : isInc ? '#f59e0b' : '#10b981' }}></span>
+                        <span className="text-xs font-bold text-white">{log.guard_name || 'Guard Alpha'}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {isFraud && <span className="bg-[#450a0a] text-[#ef4444] text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-[#ef4444]/40">FRAUD</span>}
+                        {isInc && <span className="bg-[#451a03] text-[#f59e0b] text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-[#f59e0b]/40">INCIDENT</span>}
+                        {!isFraud && !isInc && <span className="bg-[#064e3b]/40 text-[#10b981] text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-[#10b981]/30">VERIFIED</span>}
+                        <span className="text-[10px] text-[#64748b]">{isExpanded ? '▲' : '▼'}</span>
+                      </div>
+                    </div>
+
+                    {/* Location & Checkpoint */}
+                    <div className="mt-2 flex items-center justify-between text-xs">
+                      <p className="text-slate-300 font-medium">
+                        {log.location_name || 'Main Campus'} → <span className="text-white font-bold">{log.checkpoint_name || 'Gate 1'}</span>
+                      </p>
+                      <span className="text-[10px] text-[#64748b] font-mono">{timeStr}</span>
+                    </div>
+
+                    {/* Quick Preview Notes */}
+                    {(log.notes || log.incident_notes) && (
+                      <p className="text-[11px] text-[#94a3b8] bg-[#0b1021]/80 p-2 rounded-lg border border-[#1a233d] mt-2 line-clamp-2">
+                        💬 {log.notes || log.incident_notes}
+                      </p>
+                    )}
+
+                    {/* Expandable Incident Details */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-[#1a233d] space-y-2.5 text-xs animate-fadeIn" onClick={(e) => e.stopPropagation()}>
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                          <div className="bg-[#0b1021] p-2 rounded-lg">
+                            <span className="text-[#828cb0] block">Distance Variance</span>
+                            <span className="font-bold text-white">{log.distance_meters ? `${log.distance_meters.toFixed(1)}m away` : 'Within range'}</span>
+                          </div>
+                          <div className="bg-[#0b1021] p-2 rounded-lg">
+                            <span className="text-[#828cb0] block">Log ID</span>
+                            <span className="font-mono text-[#60a5fa] truncate block">{log.id.slice(0, 8)}...</span>
+                          </div>
+                        </div>
+
+                        {(log.photo_url || log.media_url || log.image_url) && (
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-[#828cb0] uppercase">Attached Evidence</span>
+                            <img 
+                              src={log.photo_url || log.media_url || log.image_url} 
+                              alt="Incident Evidence" 
+                              className="w-full h-36 object-cover rounded-xl border border-[#1a233d]"
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex items-center space-x-2 pt-1">
+                          <button 
+                            onClick={() => alert(`Escalating Incident Report ID: ${log.id}`)}
+                            className="flex-1 py-1.5 bg-[#ef4444] hover:bg-[#dc2626] text-white text-[11px] font-bold rounded-lg transition text-center"
+                          >
+                            🚨 Escalate Supervisor
+                          </button>
+                          <button 
+                            onClick={() => alert(`Marked Log #${log.id.slice(0, 5)} as Reviewed`)}
+                            className="flex-1 py-1.5 bg-[#1e293b] hover:bg-[#334155] text-white text-[11px] font-bold rounded-lg transition text-center"
+                          >
+                            ✓ Mark Reviewed
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
       </div>
 
-      {/* GUARD PATROL SCANNER MODAL */}
-      {isScannerOpen && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 z-50">
-          <div className="bg-[#0b1026] border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+      {/* View QR Modal */}
+      {selectedQR && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="bg-[#0c1226] border border-[#1e293b] w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-5 text-center">
+            <div className="flex items-center justify-between border-b border-[#1e293b] pb-3 text-left">
               <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  🔍 Guard Patrol Mobile Scanner
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">Scan Checkpoint QR Code & Log Status</p>
+                <h2 className="text-sm font-bold text-white">{selectedQR.checkpoint.name}</h2>
+                <p className="text-[11px] text-[#828cb0]">{selectedQR.siteName} • Radius: {selectedQR.checkpoint.radius}</p>
               </div>
-              <button
-                onClick={() => {
-                  stopQrCamera();
-                  stopIncidentCamera();
-                  setIsScannerOpen(false);
-                }}
-                className="text-slate-400 hover:text-white text-lg font-bold p-1"
-              >
-                ✕
-              </button>
+              <button onClick={() => setSelectedQR(null)} className="text-slate-400 hover:text-white font-bold text-lg">✕</button>
             </div>
-
-            <form onSubmit={submitPatrolScan} className="space-y-4">
-              <div>
-                <label className="block text-[11px] text-slate-400 font-semibold mb-1">Guard Name</label>
-                <input
-                  type="text"
-                  value={guardNameInput}
-                  onChange={(e) => setGuardNameInput(e.target.value)}
-                  required
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-[11px] text-slate-400 font-semibold">QR Code Scanner (Real-Time Optical Decoding)</label>
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center relative overflow-hidden flex flex-col items-center justify-center min-h-[180px]">
-                  {isQrCameraActive ? (
-                    <div className="relative w-full h-44 bg-black rounded-xl overflow-hidden flex items-center justify-center">
-                      <video ref={qrVideoRef} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 border-2 border-indigo-500/80 rounded-xl pointer-events-none animate-pulse flex items-center justify-center">
-                        <div className="w-32 h-32 border-2 border-emerald-400/60 rounded-lg animate-ping" />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={stopQrCamera}
-                        className="absolute bottom-2 bg-slate-900/80 hover:bg-slate-900 text-slate-300 font-semibold text-[10px] px-3 py-1.5 rounded-xl border border-slate-700"
-                      >
-                        Cancel Camera
-                      </button>
-                    </div>
-                  ) : scannedCheckpoint ? (
-                    <div className="space-y-2 w-full">
-                      <img src={qrImagePreview!} alt="Scanned QR" className="h-28 object-contain mx-auto rounded-xl border border-emerald-500" />
-                      <div className="bg-emerald-950/60 border border-emerald-800 p-2.5 rounded-xl">
-                        <p className="text-[10px] text-emerald-400 font-bold uppercase">✓ Checkpoint Detected</p>
-                        <p className="text-sm font-bold text-white">{scannedCheckpoint.checkpoint_name}</p>
-                        <p className="text-[10px] font-mono text-slate-400 break-all">{scannedCheckpoint.id}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setScannedCheckpoint(null);
-                          setQrImagePreview(null);
-                        }}
-                        className="text-[11px] text-slate-400 hover:text-white underline"
-                      >
-                        Rescan Code
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <p className="text-xs text-slate-400">Point live device camera at checkpoint QR code</p>
-                      <div className="flex justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={startQrCamera}
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow transition"
-                        >
-                          📹 Open Camera Scanner
-                        </button>
-                        <button
-                          type="button"
-                          onClick={simulateQuickScan}
-                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 transition"
-                        >
-                          ⚡ Quick Simulate
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-slate-400 font-semibold mb-1.5">Patrol Status</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPatrolStatus("verified")}
-                    className={`py-2.5 rounded-xl font-bold text-xs border transition ${
-                      patrolStatus === "verified"
-                        ? "bg-emerald-950 border-emerald-600 text-emerald-300"
-                        : "bg-slate-900 border-slate-800 text-slate-400"
-                    }`}
-                  >
-                    ✓ Verified Normal
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPatrolStatus("incident")}
-                    className={`py-2.5 rounded-xl font-bold text-xs border transition ${
-                      patrolStatus === "incident"
-                        ? "bg-rose-950 border-rose-600 text-rose-300"
-                        : "bg-slate-900 border-slate-800 text-slate-400"
-                    }`}
-                  >
-                    ⚠️ Report Incident
-                  </button>
-                </div>
-              </div>
-
-              {patrolStatus === "incident" && (
-                <div className="space-y-3 p-3.5 bg-rose-950/20 border border-rose-900/50 rounded-2xl">
-                  <label className="block text-[11px] text-rose-300 font-semibold">Incident Evidence (Live Snap or Upload File)</label>
-
-                  {isIncidentCameraActive ? (
-                    <div className="relative w-full h-40 bg-black rounded-xl overflow-hidden flex items-center justify-center">
-                      <video ref={incidentVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={captureIncidentPhoto}
-                        className="absolute bottom-2 bg-rose-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl"
-                      >
-                        📸 Snap Photo
-                      </button>
-                    </div>
-                  ) : incidentPhoto ? (
-                    <div className="relative">
-                      <img src={incidentPhoto} alt="Evidence" className="h-32 w-full object-cover rounded-xl border border-rose-800" />
-                      <button
-                        type="button"
-                        onClick={() => setIncidentPhoto(null)}
-                        className="absolute top-2 right-2 bg-rose-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={startIncidentCamera}
-                        className="py-2.5 bg-rose-900/40 hover:bg-rose-900/80 border border-rose-700 text-rose-200 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5"
-                      >
-                        📷 Live Camera Snap
-                      </button>
-
-                      <input
-                        type="file"
-                        accept="image/*"
-                        ref={fileInputRef}
-                        onChange={handleFileUpload}
-                        className="hidden"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5"
-                      >
-                        📁 Attach File
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-[11px] text-slate-400 font-semibold mb-1">Log Notes</label>
-                <textarea
-                  value={scannerNotes}
-                  onChange={(e) => setScannerNotes(e.target.value)}
-                  placeholder="Enter patrol observations or incident details..."
-                  rows={2}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    stopQrCamera();
-                    stopIncidentCamera();
-                    setIsScannerOpen(false);
-                  }}
-                  className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs rounded-2xl border border-slate-800 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-2xl shadow-lg transition"
-                >
-                  Submit Patrol Log
-                </button>
-              </div>
-            </form>
+            <div className="bg-white p-5 rounded-2xl inline-block shadow-inner">
+              <QRCodeSVG ref={qrSvgRef} value={selectedQR.checkpoint.name} size={200} level="H" includeMargin={true} />
+            </div>
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button onClick={downloadPNG} className="py-2.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-bold rounded-xl transition">📥 PNG</button>
+              <button onClick={downloadSVG} className="py-2.5 bg-[#0e172a] border border-[#3b82f6] text-[#60a5fa] hover:bg-[#3b82f6] hover:text-white text-xs font-bold rounded-xl transition">🎨 SVG</button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ADD LOCATION MODAL */}
-      {isAddLocationOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#0b1026] border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Add New Location</h3>
-            <form onSubmit={handleCreateLocation} className="space-y-3">
-              <div>
-                <label className="block text-[11px] text-slate-400 font-semibold mb-1">Location Name</label>
-                <input
-                  type="text"
-                  value={newLocationName}
-                  onChange={(e) => setNewLocationName(e.target.value)}
-                  placeholder="e.g. Headquarters Campus"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  required
-                />
+      {/* Add Site Modal */}
+      {isAddSiteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-[#0c1226] border border-[#1e293b] w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-[#1e293b] pb-3">
+              <h2 className="text-lg font-extrabold text-white">Add New Location / Site</h2>
+              <button onClick={() => setIsAddSiteModalOpen(false)} className="text-slate-400 hover:text-white font-bold">✕</button>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#828cb0] uppercase">Site Name</label>
+                <input type="text" placeholder="e.g. Chevron HQ" value={newSiteName} onChange={(e) => setNewSiteName(e.target.value)} className="w-full bg-[#070b18] border border-[#1e293b] rounded-xl px-4 py-2.5 text-xs text-white outline-none" />
               </div>
-              <div>
-                <label className="block text-[11px] text-slate-400 font-semibold mb-1">Address / Region</label>
-                <input
-                  type="text"
-                  value={newLocationAddress}
-                  onChange={(e) => setNewLocationAddress(e.target.value)}
-                  placeholder="e.g. 100 Innovation Way"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#828cb0] uppercase">Address / Region</label>
+                <input type="text" placeholder="e.g. Lekki Phase 1" value={newSiteAddress} onChange={(e) => setNewSiteAddress(e.target.value)} className="w-full bg-[#070b18] border border-[#1e293b] rounded-xl px-4 py-2.5 text-xs text-white outline-none" />
               </div>
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddLocationOpen(false)}
-                  className="flex-1 py-2.5 bg-slate-900 text-slate-300 font-semibold text-xs rounded-xl border border-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow"
-                >
-                  Save Location
-                </button>
-              </div>
-            </form>
+            </div>
+            <div className="flex justify-end space-x-3 pt-2 border-t border-[#1e293b]">
+              <button onClick={() => setIsAddSiteModalOpen(false)} className="px-4 py-2.5 bg-[#1e293b] hover:bg-[#334155] text-white text-xs font-bold rounded-xl">Cancel</button>
+              <button onClick={handleSaveSite} className="px-5 py-2.5 bg-[#3b82f6] text-white text-xs font-bold rounded-xl">Create Site</button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ADD CHECKPOINT MODAL (WITH GEOFENCING RADIUS CONTROL) */}
-      {isAddCheckpointOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#0b1026] border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Add New Checkpoint</h3>
-            <form onSubmit={handleCreateCheckpoint} className="space-y-3">
-              <div>
-                <label className="block text-[11px] text-slate-400 font-semibold mb-1">Select Location</label>
-                <select
-                  value={selectedLocationId}
-                  onChange={(e) => setSelectedLocationId(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                >
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </option>
-                  ))}
+      {/* Add Checkpoint Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-[#0c1226] border border-[#1e293b] w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-5">
+            <div className="flex justify-between border-b border-[#1e293b] pb-3">
+              <h2 className="text-lg font-extrabold text-white">Add Checkpoint</h2>
+              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-white font-bold">✕</button>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#828cb0] uppercase">Checkpoint Name</label>
+                <input type="text" placeholder="e.g. Generator Area" value={checkpointName} onChange={(e) => setCheckpointName(e.target.value)} className="w-full bg-[#070b18] border border-[#1e293b] rounded-xl px-4 py-2.5 text-xs text-white outline-none" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#828cb0] uppercase">Geofence Radius</label>
+                <select value={geofenceRadius} onChange={(e) => setGeofenceRadius(e.target.value)} className="w-full bg-[#070b18] border border-[#1e293b] rounded-xl px-3 py-2.5 text-xs text-white outline-none">
+                  <option value="25 meters">25 meters</option><option value="50 meters">50 meters</option><option value="100 meters">100 meters</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-[11px] text-slate-400 font-semibold mb-1">Checkpoint Name</label>
-                <input
-                  type="text"
-                  value={checkpointName}
-                  onChange={(e) => setCheckpointName(e.target.value)}
-                  placeholder="e.g. West Perimeter Gate"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  required
-                />
-              </div>
-
-              {/* Coordinates & Location Fetcher */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="block text-[11px] text-slate-400 font-semibold">GPS Coordinates</label>
-                  <button
-                    type="button"
-                    onClick={handleFetchCurrentLocation}
-                    disabled={isLocating}
-                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 transition disabled:opacity-50"
-                  >
-                    📍 {isLocating ? "Getting Location..." : "Use Current Location"}
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] text-slate-500 mb-0.5">Latitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={latitude}
-                      onChange={(e) => setLatitude(e.target.value)}
-                      placeholder="e.g. 6.5244"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-slate-500 mb-0.5">Longitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={longitude}
-                      onChange={(e) => setLongitude(e.target.value)}
-                      placeholder="e.g. 3.3792"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Geofencing Verification Radius Field */}
-              <div className="pt-1">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-[11px] text-indigo-300 font-semibold">
-                    🛡️ Geofencing Allowed Radius (Meters)
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-mono">{radiusMeters}m</span>
-                </div>
-                <input
-                  type="number"
-                  min="5"
-                  max="1000"
-                  value={radiusMeters}
-                  onChange={(e) => setRadiusMeters(e.target.value)}
-                  placeholder="50"
-                  className="w-full bg-indigo-950/40 border border-indigo-800/80 rounded-xl px-3 py-2 text-xs text-indigo-100 focus:outline-none focus:border-indigo-500"
-                  required
-                />
-                <p className="text-[9px] text-slate-500 mt-1">
-                  Scans beyond this distance will be automatically blocked by the system.
-                </p>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddCheckpointOpen(false)}
-                  className="flex-1 py-2.5 bg-slate-900 text-slate-300 font-semibold text-xs rounded-xl border border-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow"
-                >
-                  Save Checkpoint
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT CHECKPOINT MODAL */}
-      {isEditCheckpointOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#0b1026] border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Edit Checkpoint</h3>
-            <form onSubmit={handleUpdateCheckpoint} className="space-y-3">
-              <div>
-                <label className="block text-[11px] text-slate-400 font-semibold mb-1">Checkpoint Name</label>
-                <input
-                  type="text"
-                  value={checkpointName}
-                  onChange={(e) => setCheckpointName(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="block text-[11px] text-slate-400 font-semibold">GPS Coordinates</label>
-                  <button
-                    type="button"
-                    onClick={handleFetchCurrentLocation}
-                    disabled={isLocating}
-                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 transition disabled:opacity-50"
-                  >
-                    📍 {isLocating ? "Getting Location..." : "Use Current Location"}
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] text-slate-500 mb-0.5">Latitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={latitude}
-                      onChange={(e) => setLatitude(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-slate-500 mb-0.5">Longitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={longitude}
-                      onChange={(e) => setLongitude(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-indigo-300 font-semibold mb-1">
-                  🛡️ Geofencing Allowed Radius (Meters)
-                </label>
-                <input
-                  type="number"
-                  min="5"
-                  max="1000"
-                  value={radiusMeters}
-                  onChange={(e) => setRadiusMeters(e.target.value)}
-                  className="w-full bg-indigo-950/40 border border-indigo-800/80 rounded-xl px-3 py-2 text-xs text-indigo-100 focus:outline-none focus:border-indigo-500"
-                  required
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEditCheckpointOpen(false)}
-                  className="flex-1 py-2.5 bg-slate-900 text-slate-300 font-semibold text-xs rounded-xl border border-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow"
-                >
-                  Update Checkpoint
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* INCIDENT DETAILS & MANAGEMENT MODAL */}
-      {selectedIncident && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50">
-          <div className="bg-[#0b1026] border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-rose-400 flex items-center gap-2">
-                ⚠️ Incident Management
-              </h3>
-              <button onClick={() => setSelectedIncident(null)} className="text-slate-400 hover:text-white font-bold">
-                ✕
+              <button type="button" onClick={handleUseCurrentLocation} disabled={gettingLocation} className="w-full py-2.5 bg-[#1e293b] border border-[#3b82f6]/40 text-[#60a5fa] text-xs font-bold rounded-xl flex justify-center space-x-2">
+                <span>📍</span><span>{gettingLocation ? 'Fetching GPS...' : 'Use My Current Location'}</span>
               </button>
+              {locStatusMsg && <p className="text-[11px] text-[#38bdf8] text-center bg-[#071927] py-1.5 rounded-lg">{locStatusMsg}</p>}
             </div>
-
-            <div className="space-y-2 text-xs text-slate-300">
-              <p><strong>Guard:</strong> {selectedIncident.guard_name}</p>
-              <p><strong>Location:</strong> {selectedIncident.location_name} - {selectedIncident.checkpoint_name}</p>
-              <p><strong>Log Notes:</strong> {selectedIncident.notes || "None provided"}</p>
-              {selectedIncident.incident_photo && (
-                <img src={selectedIncident.incident_photo} alt="Incident Evidence" className="w-full h-40 object-cover rounded-xl border border-slate-700 mt-2" />
-              )}
-            </div>
-
-            <div className="space-y-2 pt-2 border-t border-slate-800">
-              <div>
-                <label className="block text-[11px] text-slate-400 font-semibold mb-1">Assign Guard/Responder</label>
-                <input
-                  type="text"
-                  value={assignedGuard}
-                  onChange={(e) => setAssignedGuard(e.target.value)}
-                  placeholder="Guard Bravo"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] text-slate-400 font-semibold mb-1">Admin Response Notes</label>
-                <textarea
-                  value={adminNoteInput}
-                  onChange={(e) => setAdminNoteInput(e.target.value)}
-                  placeholder="Add resolution details or dispatch notes..."
-                  rows={2}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => handleUpdateIncidentStatus("acknowledged")}
-                className="flex-1 py-2.5 bg-amber-950 border border-amber-800 text-amber-300 font-semibold text-xs rounded-xl"
-              >
-                Acknowledge
-              </button>
-              <button
-                type="button"
-                onClick={() => handleUpdateIncidentStatus("resolved")}
-                className="flex-1 py-2.5 bg-emerald-950 border border-emerald-800 text-emerald-300 font-semibold text-xs rounded-xl"
-              >
-                Mark Resolved
-              </button>
+            <div className="flex justify-end space-x-3 pt-2 border-t border-[#1e293b]">
+              <button onClick={() => setIsAddModalOpen(false)} className="px-4 py-2.5 bg-[#1e293b] text-white text-xs font-bold rounded-xl">Cancel</button>
+              <button onClick={handleSaveCheckpoint} className="px-5 py-2.5 bg-[#3b82f6] text-white text-xs font-bold rounded-xl">Save Checkpoint</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* QR CODE MODAL */}
-      {qrModalData && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50">
-          <div className="bg-[#0b1026] border border-slate-800 rounded-3xl max-w-sm w-full p-6 text-center space-y-5 shadow-2xl">
-            <div>
-              <h3 className="text-lg font-bold text-white">{qrModalData.name}</h3>
-              <p className="text-xs text-slate-400 mt-1">Scan using Guard Patrol Mobile App</p>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl shadow-inner inline-block mx-auto border-4 border-indigo-600/30">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
-                  qrModalData.hash
-                )}&color=0b1026`}
-                alt={`QR Code for ${qrModalData.name}`}
-                className="w-56 h-56 object-contain rounded-lg"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => handleDownloadQr("svg")}
-                className="py-2.5 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-300 font-semibold text-xs rounded-xl transition"
-              >
-                📥 Download SVG
-              </button>
-              <button
-                onClick={() => handleDownloadQr("jpg")}
-                className="py-2.5 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-300 font-semibold text-xs rounded-xl transition"
-              >
-                📥 Download JPG
-              </button>
-            </div>
-
-            <button
-              onClick={() => setQrModalData(null)}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-2xl shadow-lg transition"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </main>
+    </div>
   );
 }
