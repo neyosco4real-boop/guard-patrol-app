@@ -15,6 +15,8 @@ export default function CheckpointsPage() {
   const [showAddCheckpointModal, setShowAddCheckpointModal] = useState(false);
   const [selectedSiteForCheckpoint, setSelectedSiteForCheckpoint] = useState<any>(null);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [activeQrCheckpoint, setActiveQrCheckpoint] = useState<any>(null);
 
   // Location form state
   const [locationName, setLocationName] = useState('');
@@ -74,7 +76,7 @@ export default function CheckpointsPage() {
     if (!checkpointName || !selectedSiteForCheckpoint) return alert('Please provide checkpoint name.');
     setSubmittingCp(true);
 
-    // The 'checkpoints' table uses 'location' column instead of 'location_id'
+    // Fixed root cause: inserting into 'checkpoints' table using the exact schema columns 'name' and 'location'
     const { error } = await supabase.from('checkpoints').insert([
       {
         name: checkpointName,
@@ -257,6 +259,59 @@ export default function CheckpointsPage() {
         </div>
       )}
 
+      {/* QR Code Modal for Checkpoint */}
+      {showQrModal && activeQrCheckpoint && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 md:p-8 max-w-sm w-full space-y-6 shadow-2xl text-center">
+            <div className="flex justify-between items-center border-b border-white/10 pb-3">
+              <h3 className="text-sm font-black text-white uppercase">Checkpoint QR Code</h3>
+              <button onClick={() => setShowQrModal(false)} className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer">✕</button>
+            </div>
+
+            <div className="space-y-2">
+              <div className="bg-white p-4 rounded-2xl inline-block shadow-lg">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                    JSON.stringify({
+                      checkpoint: activeQrCheckpoint.name,
+                      location: activeQrCheckpoint.location,
+                    })
+                  )}`}
+                  alt="Checkpoint QR Code"
+                  className="w-48 h-48 mx-auto"
+                />
+              </div>
+              <div className="pt-2">
+                <p className="text-sm font-black text-white">{activeQrCheckpoint.name}</p>
+                <p className="text-xs font-mono text-cyan-400 uppercase">Location: {activeQrCheckpoint.location}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <a
+                href={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(
+                  JSON.stringify({
+                    checkpoint: activeQrCheckpoint.name,
+                    location: activeQrCheckpoint.location,
+                  })
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-3 rounded-xl text-xs uppercase cursor-pointer transition-all shadow-md shadow-cyan-500/20"
+              >
+                Download HQ QR
+              </a>
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-3 rounded-xl text-xs uppercase cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HTML Report View Modal */}
       {showReportModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -343,7 +398,7 @@ export default function CheckpointsPage() {
               Checkpoint & Location Command
             </h1>
             <p className="text-xs md:text-sm text-slate-400 max-w-lg">
-              Manage physical locations, site geofences, checkpoints, and view certified patrol report HTML summaries instantly.
+              Manage physical locations, site geofences, checkpoints, generate QR codes, and view certified patrol report HTML summaries instantly.
             </p>
           </div>
           
@@ -401,7 +456,7 @@ export default function CheckpointsPage() {
                         </div>
                       </div>
 
-                      {/* Checkpoints list for this location */}
+                      {/* Checkpoints list for this location with QR action */}
                       <div className="space-y-2 pt-2 border-t border-white/5">
                         <div className="flex justify-between items-center text-[11px] font-mono text-slate-400 uppercase">
                           <span>Checkpoints ({siteCheckpoints.length})</span>
@@ -409,18 +464,33 @@ export default function CheckpointsPage() {
                         {siteCheckpoints.length === 0 ? (
                           <div className="text-[11px] text-slate-600 italic">No checkpoints added yet.</div>
                         ) : (
-                          <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                          <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                             {siteCheckpoints.map((cp) => (
-                              <span key={cp.id} className="inline-flex items-center gap-1 bg-slate-900 border border-white/10 px-2.5 py-1 rounded-lg text-[11px] text-slate-200 font-mono">
-                                <span>📍</span> {cp.name}
-                                <button
-                                  onClick={() => handleDeleteCheckpoint(cp.id, cp.name)}
-                                  className="text-rose-400 hover:text-rose-200 ml-1 font-bold cursor-pointer"
-                                  title="Delete checkpoint"
-                                >
-                                  ×
-                                </button>
-                              </span>
+                              <div key={cp.id} className="flex items-center justify-between bg-slate-900 border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-200">
+                                <div className="flex items-center gap-2 font-mono truncate">
+                                  <span>📍</span>
+                                  <span className="truncate">{cp.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      setActiveQrCheckpoint(cp);
+                                      setShowQrModal(true);
+                                    }}
+                                    className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-bold px-2 py-1 rounded-lg text-[10px] uppercase cursor-pointer border border-cyan-500/30"
+                                    title="View QR Code"
+                                  >
+                                    📷 QR
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCheckpoint(cp.id, cp.name)}
+                                    className="text-rose-400 hover:text-rose-200 font-bold text-sm cursor-pointer px-1"
+                                    title="Delete checkpoint"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              </div>
                             ))}
                           </div>
                         )}
