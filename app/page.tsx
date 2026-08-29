@@ -24,7 +24,6 @@ export default function GuardPWA() {
     }
   }, []);
 
-  // Handle successful QR scan from camera stream
   const handleScanSuccess = (decodedText: string) => {
     setScanning(false);
     try {
@@ -54,10 +53,11 @@ export default function GuardPWA() {
       const { error } = await supabase.from('patrol_logs').insert([
         {
           checkpoint_id: checkpointId || null,
-          guard_id: null,
+          guard_name: guardName.trim(),
+          checkpoint_name: checkpointName.trim(),
           scanned_at: new Date().toISOString(),
           scanned_location: `Lat: ${gps.lat}, Lng: ${gps.lng}`,
-          notes: `${guardName}: ${notes} (Checkpoint: ${checkpointName})`,
+          notes: notes.trim(),
         },
       ]);
 
@@ -79,7 +79,6 @@ export default function GuardPWA() {
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center font-sans">
       <div className="w-full max-w-md space-y-6">
         
-        {/* Header */}
         <div className="bg-slate-900 border border-white/10 p-6 rounded-3xl shadow-xl text-center space-y-2">
           <h1 className="text-xl font-black text-white uppercase tracking-wider">Guard Patrol PWA</h1>
           <p className="text-xs text-slate-400">Standalone Terminal & Geofence Sync</p>
@@ -88,29 +87,20 @@ export default function GuardPWA() {
           </div>
         </div>
 
-        {/* QR Scanner / Camera Viewfinder */}
         {scanning ? (
           <div className="bg-slate-900 border border-white/10 p-4 rounded-3xl shadow-xl space-y-3">
-            <QRScanner onScanSuccess={handleScanSuccess} />
-            <button
-              type="button"
-              onClick={() => setScanning(false)}
-              className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black py-3 rounded-xl text-xs uppercase tracking-wider"
-            >
-              Cancel Scan
-            </button>
+            <QRScanner onScanSuccess={handleScanSuccess} onClose={() => setScanning(false)} />
           </div>
         ) : (
           <button
             type="button"
             onClick={() => setScanning(true)}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-wider shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-wider shadow-lg shadow-blue-600/25 transition-all cursor-pointer"
           >
             📷 Open QR Scanner Viewfinder
           </button>
         )}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="bg-slate-900 border border-white/10 p-6 rounded-3xl shadow-xl space-y-5">
           
           <div className="space-y-2">
@@ -162,7 +152,7 @@ export default function GuardPWA() {
 
           {success && (
             <div className="p-3 bg-emerald-500/20 border border-emerald-400 text-emerald-300 rounded-xl text-xs font-bold text-center">
-              ✓ Log Submitted with GPS & Checkpoint Name!
+              ✓ Log Submitted Successfully!
             </div>
           )}
 
