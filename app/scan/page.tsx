@@ -50,6 +50,8 @@ export default function GuardScanPage() {
           guard_id: null,
           scanned_at: new Date().toISOString(),
           scanned_location: `Lat: ${gps.lat}, Lng: ${gps.lng}`,
+                    latitude: gps.lat,
+                    longitude: gps.lng,
           notes: `${guardName}: ${notes} (Checkpoint: ${finalName})`,
         },
       ]);
