@@ -16,6 +16,9 @@ export default function CheckpointsPage() {
   const [longitude, setLongitude] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // View HTML Modal state
+  const [showReportModal, setShowReportModal] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -110,87 +113,83 @@ export default function CheckpointsPage() {
     document.body.removeChild(link);
   };
 
-  const handlePrintPDF = () => {
-    window.print();
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10 font-sans">
-      {/* Hidden print styles and print layout container */}
-      <style jsx global>{`
-        @media print {
-          body {
-            background: white !important;
-            color: black !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-          .print-only {
-            display: block !important;
-          }
-        }
-        .print-only {
-          display: none;
-        }
-      `}</style>
+      
+      {/* HTML Report View Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white text-slate-900 rounded-3xl p-6 md:p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto space-y-6 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-300 pb-4">
+              <div>
+                <h1 className="text-xl font-black uppercase tracking-tight">Tom Salem Security Operations</h1>
+                <p className="text-xs font-bold text-slate-600">Official Certified Patrol & Incident Telemetry Report</p>
+              </div>
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-2 rounded-xl text-xs uppercase cursor-pointer"
+              >
+                ✕ Close Report
+              </button>
+            </div>
 
-      {/* Printable PDF Report Document (Visible only during print) */}
-      <div className="print-only p-8 bg-white text-slate-900 font-sans space-y-6">
-        <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-end">
-          <div>
-            <h1 className="text-2xl font-black uppercase tracking-tight">Tom Salem Security Operations</h1>
-            <p className="text-sm font-bold text-slate-600">Official Certified Patrol & Incident Telemetry Report</p>
+            <div className="flex justify-between text-xs font-mono text-slate-600">
+              <p>Generated: {new Date().toLocaleString()}</p>
+              <p>Scope: {selectedLocationId === 'all' ? 'All Locations (Global Report)' : locations.find(l => l.id === selectedLocationId)?.name || 'Selected Site'}</p>
+            </div>
+
+            <div className="space-y-4">
+              <h2 className="text-sm font-black uppercase border-b border-slate-300 pb-1">Telemetry Summary ({filteredLogs.length} Records)</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-400 bg-slate-100 font-bold">
+                      <th className="p-2 border border-slate-300">Date & Time</th>
+                      <th className="p-2 border border-slate-300">Guard</th>
+                      <th className="p-2 border border-slate-300">Location</th>
+                      <th className="p-2 border border-slate-300">Checkpoint</th>
+                      <th className="p-2 border border-slate-300">GPS Coordinates</th>
+                      <th className="p-2 border border-slate-300">Status</th>
+                      <th className="p-2 border border-slate-300">Notes / Evidence</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLogs.map((log) => (
+                      <tr key={log.id} className="border-b border-slate-200">
+                        <td className="p-2 border border-slate-300">{new Date(log.scanned_at).toLocaleString()}</td>
+                        <td className="p-2 border border-slate-300 font-bold">{log.guard_name}</td>
+                        <td className="p-2 border border-slate-300">{log.location_name || log.location || 'N/A'}</td>
+                        <td className="p-2 border border-slate-300">{log.checkpoint_name}</td>
+                        <td className="p-2 border border-slate-300 font-mono text-[10px]">
+                          {log.latitude ? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}` : 'N/A'}
+                        </td>
+                        <td className="p-2 border border-slate-300 text-emerald-700 font-bold">Verified</td>
+                        <td className="p-2 border border-slate-300">
+                          <div>{log.notes || 'Normal patrol scan.'}</div>
+                          {log.photo_url && <a href={log.photo_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 underline font-bold mt-1 block">[View Photo Evidence]</a>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="pt-6 flex justify-between text-xs font-mono border-t border-slate-300 items-center">
+              <div>Authorized By: Tom Salem Security Command</div>
+              <button
+                onClick={() => window.print()}
+                className="bg-slate-900 text-white font-bold px-5 py-2.5 rounded-xl text-xs uppercase cursor-pointer"
+              >
+                🖨️ Print / Save as PDF
+              </button>
+            </div>
           </div>
-          <div className="text-right text-xs font-mono">
-            <p>Generated: {new Date().toLocaleString()}</p>
-            <p>Scope: {selectedLocationId === 'all' ? 'All Locations (Global Report)' : locations.find(l => l.id === selectedLocationId)?.name || 'Selected Site'}</p>
-          </div>
         </div>
-
-        <div className="space-y-4">
-          <h2 className="text-base font-black uppercase border-b border-slate-300 pb-1">Telemetry Summary ({filteredLogs.length} Records)</h2>
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-400 bg-slate-100 font-bold">
-                <th className="p-2 border border-slate-300">Date & Time</th>
-                <th className="p-2 border border-slate-300">Guard</th>
-                <th className="p-2 border border-slate-300">Location</th>
-                <th className="p-2 border border-slate-300">Checkpoint</th>
-                <th className="p-2 border border-slate-300">GPS Coordinates</th>
-                <th className="p-2 border border-slate-300">Status</th>
-                <th className="p-2 border border-slate-300">Notes / Evidence</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLogs.map((log) => (
-                <tr key={log.id} className="border-b border-slate-200">
-                  <td className="p-2 border border-slate-300">{new Date(log.scanned_at).toLocaleString()}</td>
-                  <td className="p-2 border border-slate-300 font-bold">{log.guard_name}</td>
-                  <td className="p-2 border border-slate-300">{log.location_name || log.location || 'N/A'}</td>
-                  <td className="p-2 border border-slate-300">{log.checkpoint_name}</td>
-                  <td className="p-2 border border-slate-300 font-mono text-[10px]">
-                    {log.latitude ? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}` : 'N/A'}
-                  </td>
-                  <td className="p-2 border border-slate-300 text-emerald-700 font-bold">Verified</td>
-                  <td className="p-2 border border-slate-300">
-                    <div>{log.notes || 'Normal patrol scan.'}</div>
-                    {log.photo_url && <div className="text-[10px] text-blue-600 mt-1">[Photo Attached]</div>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="pt-12 flex justify-between text-xs font-mono border-t border-slate-300">
-          <div>Authorized By: Tom Salem Security Command</div>
-          <div>Page 1 of 1 — Certified Security Audit Trail</div>
-        </div>
-      </div>
+      )}
 
       {/* Main UI */}
-      <div className="max-w-7xl mx-auto space-y-8 no-print">
+      <div className="max-w-7xl mx-auto space-y-8">
         
         {/* Header Banner */}
         <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/20 p-8 rounded-3xl shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -203,7 +202,7 @@ export default function CheckpointsPage() {
               Checkpoint & Location Command
             </h1>
             <p className="text-xs md:text-sm text-slate-400 max-w-lg">
-              Manage physical locations, site geofences, and download certified patrol and incident report exports instantly.
+              Manage physical locations, site geofences, and view certified patrol and incident report HTML summaries instantly.
             </p>
           </div>
           
@@ -303,7 +302,7 @@ export default function CheckpointsPage() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h2 className="text-base font-black uppercase text-white tracking-wider">Patrol Reports & Incident Exports</h2>
-              <p className="text-xs text-slate-400">Select a specific location site to filter and download certified reports.</p>
+              <p className="text-xs text-slate-400">Select a specific location site to filter and view certified reports.</p>
             </div>
             
             <select
@@ -328,10 +327,10 @@ export default function CheckpointsPage() {
               📊 Download Excel (CSV) for Selected Location
             </button>
             <button
-              onClick={handlePrintPDF}
+              onClick={() => setShowReportModal(true)}
               className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black p-5 rounded-2xl text-xs uppercase shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-3 cursor-pointer transition-all"
             >
-              🖨️ Print / Download PDF for Selected Location
+              👁️ View HTML Report for Selected Location
             </button>
           </div>
         </div>
