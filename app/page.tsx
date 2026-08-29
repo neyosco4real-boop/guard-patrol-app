@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import QRScanner from '@/app/components/QRScanner';
 
 export default function GuardPWA() {
   const [guardName, setGuardName] = useState('');
-  const [rawInput, setRawInput] = useState('');
   const [checkpointName, setCheckpointName] = useState('');
   const [checkpointId, setCheckpointId] = useState('');
   const [notes, setNotes] = useState('Normal Patrol Scan');
   const [gps, setGps] = useState({ lat: 6.4451, lng: 3.4143 });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -23,25 +24,18 @@ export default function GuardPWA() {
     }
   }, []);
 
-  // Robust parser for QR payload and clean UUID extraction
-  const handleQRDataChange = (value: string) => {
-    setRawInput(value);
+  // Handle successful QR scan from camera stream
+  const handleScanSuccess = (decodedText: string) => {
+    setScanning(false);
     try {
-      const parsed = JSON.parse(value);
-      if (parsed.checkpoint_name) {
-        setCheckpointName(parsed.checkpoint_name);
-      } else {
-        setCheckpointName(value);
-      }
-
-      const rawId = parsed.checkpoint_id || parsed.id || value;
+      const parsed = JSON.parse(decodedText);
+      setCheckpointName(parsed.checkpoint_name || decodedText);
+      const rawId = parsed.checkpoint_id || parsed.id || decodedText;
       const uuidMatch = String(rawId).match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
       setCheckpointId(uuidMatch ? uuidMatch[0] : '');
-      return;
     } catch (e) {
-      // Not JSON, check if it contains a UUID anywhere or treat as plain name
-      setCheckpointName(value);
-      const uuidMatch = value.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+      setCheckpointName(decodedText);
+      const uuidMatch = decodedText.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
       setCheckpointId(uuidMatch ? uuidMatch[0] : '');
     }
   };
@@ -70,7 +64,6 @@ export default function GuardPWA() {
       if (error) throw error;
 
       setSuccess(true);
-      setRawInput('');
       setCheckpointName('');
       setCheckpointId('');
       setNotes('Normal Patrol Scan');
@@ -95,17 +88,27 @@ export default function GuardPWA() {
           </div>
         </div>
 
-        {/* QR Scanner Trigger */}
-        <button
-          type="button"
-          onClick={() => {
-            const simulated = prompt("Simulate QR Scan (Paste JSON or Checkpoint Name):");
-            if (simulated) handleQRDataChange(simulated);
-          }}
-          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-wider shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
-        >
-          📷 Open QR Scanner Viewfinder
-        </button>
+        {/* QR Scanner / Camera Viewfinder */}
+        {scanning ? (
+          <div className="bg-slate-900 border border-white/10 p-4 rounded-3xl shadow-xl space-y-3">
+            <QRScanner onScanSuccess={handleScanSuccess} />
+            <button
+              type="button"
+              onClick={() => setScanning(false)}
+              className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black py-3 rounded-xl text-xs uppercase tracking-wider"
+            >
+              Cancel Scan
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setScanning(true)}
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-wider shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
+          >
+            📷 Open QR Scanner Viewfinder
+          </button>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="bg-slate-900 border border-white/10 p-6 rounded-3xl shadow-xl space-y-5">
@@ -126,10 +129,10 @@ export default function GuardPWA() {
             <label className="text-[10px] font-mono uppercase text-cyan-400 tracking-wider">Scanned Checkpoint Name</label>
             <input
               type="text"
-              placeholder="Scan QR or paste payload..."
+              placeholder="Scan QR code..."
               value={checkpointName}
-              onChange={(e) => handleQRDataChange(e.target.value)}
-              className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500 truncate"
+              readOnly
+              className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-cyan-300 focus:outline-none"
               required
             />
             {checkpointName && (
