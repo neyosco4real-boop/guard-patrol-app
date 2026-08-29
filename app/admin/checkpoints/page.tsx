@@ -19,8 +19,6 @@ export default function CheckpointsPage() {
   // Location form state
   const [locationName, setLocationName] = useState('');
   const [locationAddress, setLocationAddress] = useState('');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
   const [submittingLoc, setSubmittingLoc] = useState(false);
 
   // Checkpoint form state
@@ -48,29 +46,11 @@ export default function CheckpointsPage() {
     setLoading(false);
   };
 
-  const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser.');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLatitude(position.coords.latitude.toString());
-        setLongitude(position.coords.longitude.toString());
-        alert('GPS Coordinates captured successfully!');
-      },
-      (error) => {
-        alert('Error capturing GPS location: ' + error.message);
-      }
-    );
-  };
-
   const handleCreateLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!locationName) return alert('Please enter a location name.');
     setSubmittingLoc(true);
 
-    // Save only columns that exist in Supabase 'locations' table (name, address)
     const { error } = await supabase.from('locations').insert([
       {
         name: locationName,
@@ -83,8 +63,6 @@ export default function CheckpointsPage() {
     } else {
       setLocationName('');
       setLocationAddress('');
-      setLatitude('');
-      setLongitude('');
       setShowAddLocationModal(false);
       fetchData();
     }
@@ -96,11 +74,11 @@ export default function CheckpointsPage() {
     if (!checkpointName || !selectedSiteForCheckpoint) return alert('Please provide checkpoint name.');
     setSubmittingCp(true);
 
+    // Save only columns that exist in the Supabase 'checkpoints' table (name, location_id)
     const { error } = await supabase.from('checkpoints').insert([
       {
         name: checkpointName,
         location_id: selectedSiteForCheckpoint.id,
-        location: selectedSiteForCheckpoint.name,
       },
     ]);
 
@@ -141,6 +119,7 @@ export default function CheckpointsPage() {
     const loc = locations.find((l) => l.id === selectedLocationId);
     if (!loc) return true;
     return (
+      log.location_id === loc.id ||
       log.location_name?.toLowerCase() === loc.name.toLowerCase() ||
       log.location?.toLowerCase() === loc.name.toLowerCase()
     );
@@ -209,37 +188,6 @@ export default function CheckpointsPage() {
                   onChange={(e) => setLocationAddress(e.target.value)}
                   className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
                 />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] uppercase font-mono text-slate-400">GPS Coordinates (Geofence Reference)</label>
-                  <button
-                    type="button"
-                    onClick={handleUseCurrentLocation}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg text-[10px] uppercase transition-all cursor-pointer shadow"
-                  >
-                    📍 Use My Current Location
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="Latitude"
-                    value={latitude}
-                    onChange={(e) => setLatitude(e.target.value)}
-                    className="bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
-                  />
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="Longitude"
-                    value={longitude}
-                    onChange={(e) => setLongitude(e.target.value)}
-                    className="bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
-                  />
-                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
