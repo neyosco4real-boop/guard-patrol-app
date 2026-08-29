@@ -5,19 +5,27 @@ import { supabase } from '@/lib/supabase';
 
 export default function CheckpointsPage() {
   const [locations, setLocations] = useState<any[]>([]);
+  const [checkpoints, setCheckpoints] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
 
-  // Form state for creating a new location
+  // Modals state
+  const [showAddLocationModal, setShowAddLocationModal] = useState(false);
+  const [showAddCheckpointModal, setShowAddCheckpointModal] = useState(false);
+  const [selectedSiteForCheckpoint, setSelectedSiteForCheckpoint] = useState<any>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  // Location form state
   const [locationName, setLocationName] = useState('');
   const [locationAddress, setLocationAddress] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [submittingLoc, setSubmittingLoc] = useState(false);
 
-  // View HTML Modal state
-  const [showReportModal, setShowReportModal] = useState(false);
+  // Checkpoint form state
+  const [checkpointName, setCheckpointName] = useState('');
+  const [submittingCp, setSubmittingCp] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -28,6 +36,9 @@ export default function CheckpointsPage() {
     const { data: locs } = await supabase.from('locations').select('*').order('name');
     if (locs) setLocations(locs);
 
+    const { data: cps } = await supabase.from('checkpoints').select('*').order('name');
+    if (cps) setCheckpoints(cps);
+
     const { data: patrolLogs } = await supabase
       .from('patrol_logs')
       .select('*')
@@ -37,10 +48,27 @@ export default function CheckpointsPage() {
     setLoading(false);
   };
 
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(position.coords.latitude.toString());
+        setLongitude(position.coords.longitude.toString());
+        alert('GPS Coordinates captured successfully!');
+      },
+      (error) => {
+        alert('Error capturing GPS location: ' + error.message);
+      }
+    );
+  };
+
   const handleCreateLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!locationName) return alert('Please enter a location name.');
-    setSubmitting(true);
+    setSubmittingLoc(true);
 
     const { error } = await supabase.from('locations').insert([
       {
@@ -58,16 +86,51 @@ export default function CheckpointsPage() {
       setLocationAddress('');
       setLatitude('');
       setLongitude('');
+      setShowAddLocationModal(false);
       fetchData();
     }
-    setSubmitting(false);
+    setSubmittingLoc(false);
+  };
+
+  const handleCreateCheckpoint = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!checkpointName || !selectedSiteForCheckpoint) return alert('Please provide checkpoint name.');
+    setSubmittingCp(true);
+
+    const { error } = await supabase.from('checkpoints').insert([
+      {
+        name: checkpointName,
+        location_id: selectedSiteForCheckpoint.id,
+        location: selectedSiteForCheckpoint.name,
+      },
+    ]);
+
+    if (error) {
+      alert('Error creating checkpoint: ' + error.message);
+    } else {
+      setCheckpointName('');
+      setShowAddCheckpointModal(false);
+      setSelectedSiteForCheckpoint(null);
+      fetchData();
+    }
+    setSubmittingCp(false);
   };
 
   const handleDeleteLocation = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete site "${name}"?`)) return;
+    if (!confirm(`Are you sure you want to delete site "${name}" and all its checkpoints?`)) return;
     const { error } = await supabase.from('locations').delete().eq('id', id);
     if (error) {
       alert('Error deleting location: ' + error.message);
+    } else {
+      fetchData();
+    }
+  };
+
+  const handleDeleteCheckpoint = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete checkpoint "${name}"?`)) return;
+    const { error } = await supabase.from('checkpoints').delete().eq('id', id);
+    if (error) {
+      alert('Error deleting checkpoint: ' + error.message);
     } else {
       fetchData();
     }
@@ -116,6 +179,137 @@ export default function CheckpointsPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10 font-sans">
       
+      {/* Add Location Modal */}
+      {showAddLocationModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 md:p-8 max-w-lg w-full space-y-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center border-b border-white/10 pb-4">
+              <h3 className="text-lg font-black text-white uppercase">+ Create Location Site</h3>
+              <button onClick={() => setShowAddLocationModal(false)} className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer">✕</button>
+            </div>
+
+            <form onSubmit={handleCreateLocation} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-mono text-slate-400">Location Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Tom Salem Head Office"
+                  value={locationName}
+                  onChange={(e) => setLocationName(e.target.value)}
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-mono text-slate-400">Address / Description</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Ikoyi, Lagos."
+                  value={locationAddress}
+                  onChange={(e) => setLocationAddress(e.target.value)}
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] uppercase font-mono text-slate-400">GPS Coordinates (Geofence)</label>
+                  <button
+                    type="button"
+                    onClick={handleUseCurrentLocation}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg text-[10px] uppercase transition-all cursor-pointer shadow"
+                  >
+                    📍 Use My Current Location
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Latitude"
+                    value={latitude}
+                    onChange={(e) => setLatitude(e.target.value)}
+                    className="bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Longitude"
+                    value={longitude}
+                    onChange={(e) => setLongitude(e.target.value)}
+                    className="bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowAddLocationModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-5 py-2.5 rounded-xl text-xs uppercase cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingLoc}
+                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs uppercase transition-all shadow-lg shadow-cyan-500/20 cursor-pointer disabled:opacity-50"
+                >
+                  {submittingLoc ? 'Saving...' : 'Save Location'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Checkpoint Modal */}
+      {showAddCheckpointModal && selectedSiteForCheckpoint && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 md:p-8 max-w-md w-full space-y-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center border-b border-white/10 pb-4">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-cyan-400">Site: {selectedSiteForCheckpoint.name}</span>
+                <h3 className="text-lg font-black text-white uppercase">+ Add Checkpoint</h3>
+              </div>
+              <button onClick={() => setShowAddCheckpointModal(false)} className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer">✕</button>
+            </div>
+
+            <form onSubmit={handleCreateCheckpoint} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-mono text-slate-400">Checkpoint Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Back Gate, Server Room"
+                  value={checkpointName}
+                  onChange={(e) => setCheckpointName(e.target.value)}
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCheckpointModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-5 py-2.5 rounded-xl text-xs uppercase cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingCp}
+                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs uppercase transition-all shadow-lg shadow-cyan-500/20 cursor-pointer disabled:opacity-50"
+                >
+                  {submittingCp ? 'Saving...' : 'Save Checkpoint'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* HTML Report View Modal */}
       {showReportModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -202,14 +396,20 @@ export default function CheckpointsPage() {
               Checkpoint & Location Command
             </h1>
             <p className="text-xs md:text-sm text-slate-400 max-w-lg">
-              Manage physical locations, site geofences, and view certified patrol and incident report HTML summaries instantly.
+              Manage physical locations, site geofences, checkpoints, and view certified patrol report HTML summaries instantly.
             </p>
           </div>
           
           <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => setShowAddLocationModal(true)}
+              className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-5 py-3 rounded-2xl text-xs uppercase shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
+            >
+              + Create Location
+            </button>
             <a
               href="/admin/qr-codes"
-              className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-5 py-3 rounded-2xl text-xs uppercase shadow-lg shadow-cyan-500/20 transition-all"
+              className="bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold px-5 py-3 rounded-2xl text-xs uppercase border border-cyan-500/30 transition-all"
             >
               📷 QR Generator
             </a>
@@ -222,48 +422,16 @@ export default function CheckpointsPage() {
           </div>
         </div>
 
-        {/* Create Location Section */}
-        <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
-          <h2 className="text-base font-black uppercase text-white tracking-wider">+ Create New Location Site</h2>
-          <form onSubmit={handleCreateLocation} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <input
-              type="text"
-              placeholder="Location Name (e.g. Tom Salem Head Office)"
-              value={locationName}
-              onChange={(e) => setLocationName(e.target.value)}
-              className="bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
-              required
-            />
-            <input
-              type="text"
-              placeholder="Address / Description"
-              value={locationAddress}
-              onChange={(e) => setLocationAddress(e.target.value)}
-              className="bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
-            />
-            <input
-              type="number"
-              step="any"
-              placeholder="Latitude (optional)"
-              value={latitude}
-              onChange={(e) => setLatitude(e.target.value)}
-              className="bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
-            />
-            <button
-              type="submit"
-              disabled={submitting}
-              className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-6 py-3 rounded-xl text-xs uppercase transition-all shadow-lg shadow-cyan-500/20 cursor-pointer disabled:opacity-50"
-            >
-              {submitting ? 'Creating...' : '+ Create Location'}
-            </button>
-          </form>
-        </div>
-
         {/* Registered Location Sites */}
         <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-base font-black uppercase text-white tracking-wider">Registered Location Sites ({locations.length})</h2>
-            <span className="text-xs text-slate-400 font-mono">Manage or remove location sites & associated checkpoints.</span>
+            <button
+              onClick={() => setShowAddLocationModal(true)}
+              className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-bold px-4 py-2 rounded-xl text-xs uppercase cursor-pointer transition-all"
+            >
+              + Add Location Site
+            </button>
           </div>
 
           {loading ? (
@@ -272,27 +440,69 @@ export default function CheckpointsPage() {
             <div className="text-center py-10 text-xs text-slate-500 font-mono">No location sites registered yet.</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {locations.map((loc) => (
-                <div key={loc.id} className="bg-slate-950 border border-white/10 rounded-2xl p-6 space-y-4 flex flex-col justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-cyan-400 font-black text-sm">
-                      <span>🏢</span> {loc.name}
+              {locations.map((loc) => {
+                const siteCheckpoints = checkpoints.filter((cp) => cp.location_id === loc.id || cp.location?.toLowerCase() === loc.name.toLowerCase());
+                return (
+                  <div key={loc.id} className="bg-slate-950 border border-white/10 rounded-2xl p-6 space-y-4 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-cyan-400 font-black text-sm">
+                            <span>🏢</span> {loc.name}
+                          </div>
+                          <p className="text-xs text-slate-400">{loc.address || 'No address specified.'}</p>
+                          <div className="text-[11px] font-mono text-emerald-400">
+                            {loc.latitude && loc.longitude ? `GPS: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : 'No GPS coordinates'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Checkpoints list for this location */}
+                      <div className="space-y-2 pt-2 border-t border-white/5">
+                        <div className="flex justify-between items-center text-[11px] font-mono text-slate-400 uppercase">
+                          <span>Checkpoints ({siteCheckpoints.length})</span>
+                        </div>
+                        {siteCheckpoints.length === 0 ? (
+                          <div className="text-[11px] text-slate-600 italic">No checkpoints added yet.</div>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                            {siteCheckpoints.map((cp) => (
+                              <span key={cp.id} className="inline-flex items-center gap-1 bg-slate-900 border border-white/10 px-2.5 py-1 rounded-lg text-[11px] text-slate-200 font-mono">
+                                <span>📍</span> {cp.name}
+                                <button
+                                  onClick={() => handleDeleteCheckpoint(cp.id, cp.name)}
+                                  className="text-rose-400 hover:text-rose-200 ml-1 font-bold cursor-pointer"
+                                  title="Delete checkpoint"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-400">{loc.address || 'No address specified.'}</p>
-                    <div className="text-[11px] font-mono text-emerald-400 pt-1">
-                      {loc.latitude && loc.longitude ? `GPS: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : 'No GPS coordinates'}
+
+                    <div className="flex justify-between items-center pt-3 border-t border-white/5">
+                      <button
+                        onClick={() => {
+                          setSelectedSiteForCheckpoint(loc);
+                          setShowAddCheckpointModal(true);
+                        }}
+                        className="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-bold px-3 py-2 rounded-xl text-[11px] uppercase border border-indigo-500/30 cursor-pointer transition-all"
+                      >
+                        + Add Checkpoint
+                      </button>
+                      <button
+                        onClick={() => handleDeleteLocation(loc.id, loc.name)}
+                        className="bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-bold px-3 py-2 rounded-xl text-[11px] uppercase border border-rose-500/30 cursor-pointer transition-all"
+                      >
+                        🗑️ Delete Site
+                      </button>
                     </div>
                   </div>
-                  <div className="flex justify-end pt-2 border-t border-white/5">
-                    <button
-                      onClick={() => handleDeleteLocation(loc.id, loc.name)}
-                      className="bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-bold px-4 py-2 rounded-xl text-[11px] uppercase border border-rose-500/30 cursor-pointer transition-all"
-                    >
-                      🗑️ Delete Site
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
