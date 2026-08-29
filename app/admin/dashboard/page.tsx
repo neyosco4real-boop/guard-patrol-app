@@ -245,6 +245,7 @@ export default function AdminDashboard() {
                         />
                       </div>
                       <a
+                        src={selectedLog.photo_url}
                         href={selectedLog.photo_url}
                         target="_blank"
                         rel="noopener noreferrer"
