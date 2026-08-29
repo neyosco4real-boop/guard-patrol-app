@@ -76,7 +76,7 @@ export default function CheckpointsPage() {
     if (!checkpointName || !selectedSiteForCheckpoint) return alert('Please provide checkpoint name.');
     setSubmittingCp(true);
 
-    // Fixed root cause: inserting into 'checkpoints' table using the exact schema columns 'name' and 'location'
+    // Completely schema-safe: inserts only columns that exist in the checkpoints table (name and location)
     const { error } = await supabase.from('checkpoints').insert([
       {
         name: checkpointName,
