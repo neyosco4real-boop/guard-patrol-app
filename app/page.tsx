@@ -12,7 +12,6 @@ export default function GuardPWA() {
   const [gps, setGps] = useState({ lat: 6.4451, lng: 3.4143 });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -24,21 +23,27 @@ export default function GuardPWA() {
     }
   }, []);
 
-  // Robust parser for QR payload
+  // Robust parser for QR payload and clean UUID extraction
   const handleQRDataChange = (value: string) => {
     setRawInput(value);
     try {
       const parsed = JSON.parse(value);
       if (parsed.checkpoint_name) {
         setCheckpointName(parsed.checkpoint_name);
-        setCheckpointId(parsed.checkpoint_id || '');
-        return;
+      } else {
+        setCheckpointName(value);
       }
+
+      const rawId = parsed.checkpoint_id || parsed.id || value;
+      const uuidMatch = String(rawId).match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+      setCheckpointId(uuidMatch ? uuidMatch[0] : '');
+      return;
     } catch (e) {
-      // Not JSON, fallback to raw string
+      // Not JSON, check if it contains a UUID anywhere or treat as plain name
+      setCheckpointName(value);
+      const uuidMatch = value.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+      setCheckpointId(uuidMatch ? uuidMatch[0] : '');
     }
-    setCheckpointName(value);
-    setCheckpointId(value);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,7 +59,7 @@ export default function GuardPWA() {
     try {
       const { error } = await supabase.from('patrol_logs').insert([
         {
-          checkpoint_id: checkpointId && checkpointId.length < 50 ? checkpointId : null,
+          checkpoint_id: checkpointId || null,
           guard_id: null,
           scanned_at: new Date().toISOString(),
           scanned_location: `Lat: ${gps.lat}, Lng: ${gps.lng}`,
