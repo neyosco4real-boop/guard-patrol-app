@@ -10,6 +10,23 @@ export default function GuardScanPage() {
   const [resolvedId, setResolvedId] = useState('');
   const [notes, setNotes] = useState('Normal Patrol Scan');
   const [gps, setGps] = useState({ lat: 6.4451, lng: 3.4143 });
+
+  useEffect(() => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setGps({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+  }, []);
   const [status, setStatus] = useState('');
 
   const handleScanInput = (rawInput: string) => {
