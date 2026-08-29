@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 export default function GuardScanPage() {
@@ -10,10 +10,8 @@ export default function GuardScanPage() {
   const [resolvedId, setResolvedId] = useState('');
   const [notes, setNotes] = useState('Normal Patrol Scan');
   const [gps, setGps] = useState({ lat: 6.4451, lng: 3.4143 });
-  const [scanning, setScanning] = useState(false);
   const [status, setStatus] = useState('');
 
-  // Function to handle simulated or camera scan input
   const handleScanInput = (rawInput: string) => {
     setCheckpointData(rawInput);
     try {
@@ -27,7 +25,6 @@ export default function GuardScanPage() {
         setResolvedId(rawInput);
       }
     } catch (e) {
-      // If it's just a raw UUID string or plain text name
       setResolvedName(rawInput);
       setResolvedId(rawInput);
       setStatus(`✓ Checkpoint Input Registered`);
@@ -40,8 +37,9 @@ export default function GuardScanPage() {
       alert('Please enter your guard name.');
       return;
     }
-    if (!resolvedName.trim()) {
-      alert('Please scan or select a checkpoint.');
+    const finalName = resolvedName || checkpointData;
+    if (!finalName.trim()) {
+      alert('Please scan or enter a checkpoint.');
       return;
     }
 
@@ -52,7 +50,7 @@ export default function GuardScanPage() {
           guard_id: null,
           scanned_at: new Date().toISOString(),
           scanned_location: `Lat: ${gps.lat}, Lng: ${gps.lng}`,
-          notes: `${guardName}: ${notes} (Checkpoint: ${resolvedName})`,
+          notes: `${guardName}: ${notes} (Checkpoint: ${finalName})`,
         },
       ]);
 
@@ -63,6 +61,7 @@ export default function GuardScanPage() {
       setResolvedName('');
       setResolvedId('');
       setNotes('Normal Patrol Scan');
+      setStatus('');
     } catch (err: any) {
       alert('Error submitting log: ' + err.message);
     }
@@ -72,7 +71,6 @@ export default function GuardScanPage() {
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center font-sans">
       <div className="w-full max-w-md space-y-6">
         
-        {/* Header */}
         <div className="bg-slate-900 border border-white/10 p-6 rounded-3xl shadow-xl text-center space-y-2">
           <h1 className="text-xl font-black text-white uppercase tracking-wider">Guard Patrol PWA</h1>
           <p className="text-xs text-slate-400">Standalone Terminal & Geofence Sync</p>
@@ -81,7 +79,6 @@ export default function GuardScanPage() {
           </div>
         </div>
 
-        {/* Form Container */}
         <form onSubmit={handleSubmit} className="bg-slate-900 border border-white/10 p-6 rounded-3xl shadow-xl space-y-5">
           
           <div className="space-y-2">
@@ -97,20 +94,27 @@ export default function GuardScanPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-mono uppercase text-cyan-400 tracking-wider">Scanned Checkpoint / QR Data</label>
+            <label className="text-[10px] font-mono uppercase text-cyan-400 tracking-wider">Scanned Checkpoint Raw Payload</label>
             <input
               type="text"
-              placeholder="Scan QR or paste payload..."
+              placeholder="Scan QR or paste JSON..."
               value={checkpointData}
               onChange={(e) => handleScanInput(e.target.value)}
-              className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-slate-300 focus:outline-none focus:border-cyan-500 truncate"
+              className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-slate-400 focus:outline-none focus:border-cyan-500 truncate"
               required
             />
-            {resolvedName && (
-              <div className="p-3 bg-cyan-950/30 border border-cyan-500/20 rounded-xl text-xs text-cyan-300 font-bold">
-                🎯 Target Checkpoint: {resolvedName}
-              </div>
-            )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-mono uppercase text-cyan-400 tracking-wider">Resolved Checkpoint Name (For Submission)</label>
+            <input
+              type="text"
+              value={resolvedName}
+              onChange={(e) => setResolvedName(e.target.value)}
+              placeholder="Human-readable name appears here..."
+              className="w-full bg-cyan-950/40 border border-cyan-500/40 rounded-xl px-4 py-3 text-sm font-bold text-cyan-300 focus:outline-none focus:border-cyan-400"
+              required
+            />
             {status && <p className="text-[10px] font-mono text-emerald-400">{status}</p>}
           </div>
 
