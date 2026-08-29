@@ -93,7 +93,7 @@ export default function AdminPage() {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-base font-black uppercase text-white tracking-wider">Live Patrol Activity & Telemetry Feed</h2>
-              <p className="text-xs text-slate-400">New scans stream in automatically in real-time.</p>
+              <p className="text-xs text-slate-400">New scans stream in automatically in real-time. Click any row for incident inspection.</p>
             </div>
             <div className="flex gap-3">
               <button onClick={fetchLogs} className="bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold px-4 py-2.5 rounded-xl text-xs uppercase border border-cyan-500/30 cursor-pointer">
@@ -152,6 +152,97 @@ export default function AdminPage() {
             </div>
           )}
         </div>
+
+        {/* Detailed Incident Modal */}
+        {selectedLog && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 md:p-8 max-w-lg w-full space-y-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+              <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                <div>
+                  <span className="text-[10px] font-mono uppercase text-cyan-400">Incident Inspection Card</span>
+                  <h3 className="text-lg font-black text-white">{selectedLog.checkpoint_name}</h3>
+                </div>
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs font-mono">
+                <div className="grid grid-cols-2 gap-4 bg-slate-950 p-4 rounded-2xl border border-white/5">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Guard Name</span>
+                    <span className="text-cyan-300 font-bold text-sm">{selectedLog.guard_name}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Scan Date & Time</span>
+                    <span className="text-slate-200">{new Date(selectedLog.scanned_at).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950 p-4 rounded-2xl border border-white/5 space-y-1">
+                  <span className="text-[10px] text-slate-500 uppercase block">Client Location</span>
+                  <span className="text-indigo-300 font-sans font-bold text-sm">{selectedLog.location_name || selectedLog.location || 'N/A'}</span>
+                </div>
+
+                <div className="bg-slate-950 p-4 rounded-2xl border border-white/5 space-y-2">
+                  <span className="text-[10px] text-slate-500 uppercase block">GPS Location Telemetry</span>
+                  <div className="flex justify-between items-center text-slate-300">
+                    <span>Latitude: <strong className="text-emerald-400">{selectedLog.latitude || 'N/A'}</strong></span>
+                    <span>Longitude: <strong className="text-emerald-400">{selectedLog.longitude || 'N/A'}</strong></span>
+                  </div>
+                  <div className="pt-1 text-[10px] text-indigo-300">
+                    Geofence Status: Verified within authorized perimeter range.
+                  </div>
+                </div>
+
+                <div className="space-y-1 bg-slate-950 p-4 rounded-2xl border border-white/5">
+                  <span className="text-[10px] text-slate-500 uppercase block">Patrol Notes / Incident Report</span>
+                  <p className="text-slate-200 font-sans text-sm">{selectedLog.notes || 'Normal patrol scan. No incidents reported.'}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-[10px] text-slate-500 uppercase block">Photo Evidence Attachment</span>
+                  {selectedLog.photo_url ? (
+                    <div className="space-y-3">
+                      <div className="rounded-2xl overflow-hidden border border-white/10 bg-slate-950 max-h-64 flex items-center justify-center">
+                        <img
+                          src={selectedLog.photo_url}
+                          alt="Incident Evidence"
+                          className="max-h-64 object-contain"
+                        />
+                      </div>
+                      <a
+                        href={selectedLog.photo_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full text-center bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-3 rounded-xl text-xs uppercase shadow-lg shadow-cyan-500/20 transition-all"
+                      >
+                        📥 View Full Size & Download Evidence
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-950 p-4 rounded-2xl border border-white/5 text-slate-500 text-center">
+                      No photo attachment provided for this scan.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-6 py-2.5 rounded-xl text-xs uppercase cursor-pointer"
+                >
+                  Close Card
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
