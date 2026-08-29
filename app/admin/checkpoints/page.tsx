@@ -70,12 +70,11 @@ export default function CheckpointsPage() {
     if (!locationName) return alert('Please enter a location name.');
     setSubmittingLoc(true);
 
+    // Save only columns that exist in Supabase 'locations' table (name, address)
     const { error } = await supabase.from('locations').insert([
       {
         name: locationName,
         address: locationAddress,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
       },
     ]);
 
@@ -214,7 +213,7 @@ export default function CheckpointsPage() {
 
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <label className="text-[10px] uppercase font-mono text-slate-400">GPS Coordinates (Geofence)</label>
+                  <label className="text-[10px] uppercase font-mono text-slate-400">GPS Coordinates (Geofence Reference)</label>
                   <button
                     type="button"
                     onClick={handleUseCurrentLocation}
@@ -451,9 +450,6 @@ export default function CheckpointsPage() {
                             <span>🏢</span> {loc.name}
                           </div>
                           <p className="text-xs text-slate-400">{loc.address || 'No address specified.'}</p>
-                          <div className="text-[11px] font-mono text-emerald-400">
-                            {loc.latitude && loc.longitude ? `GPS: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : 'No GPS coordinates'}
-                          </div>
                         </div>
                       </div>
 
