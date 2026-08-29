@@ -49,14 +49,18 @@ export default function GuardPWA() {
     setLoading(true);
     setSuccess(false);
 
+    const coordString = `${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}`;
+
     try {
       const { error } = await supabase.from('patrol_logs').insert([
         {
           checkpoint_id: checkpointId || null,
           guard_name: guardName.trim(),
           checkpoint_name: checkpointName.trim(),
+          location: checkpointName.trim(),
+          coordinates: coordString,
           scanned_at: new Date().toISOString(),
-          scanned_location: `Lat: ${gps.lat}, Lng: ${gps.lng}`,
+          scanned_location: coordString,
           notes: notes.trim(),
         },
       ]);
