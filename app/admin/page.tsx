@@ -56,6 +56,39 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* Header Banner */}
+        <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/20 p-8 rounded-3xl shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 px-3 py-1 rounded-full text-indigo-300 text-xs font-mono">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Tom Salem Security Operations — Real-Time Live Feed Active
+            </div>
+            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white">
+              Guard Patrol Live Command
+            </h1>
+            <p className="text-xs md:text-sm text-slate-400 max-w-lg">
+              Live streaming dashboard tracking checkpoint verifications, date & time stamps, precise GPS coordinates, and photo evidence instantly.
+            </p>
+          </div>
+          
+          <div className="flex flex-wrap gap-3">
+            <a
+              href="/admin/qr-codes"
+              className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-5 py-3 rounded-2xl text-xs uppercase shadow-lg shadow-cyan-500/20 transition-all"
+            >
+              📷 QR Generator
+            </a>
+            <a
+              href="/admin/checkpoints"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-5 py-3 rounded-2xl text-xs uppercase border border-white/10 transition-all"
+            >
+              🏢 Manage Checkpoints
+            </a>
+          </div>
+        </div>
+
+        {/* Live Logs Section */}
         <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
           <div className="flex justify-between items-center">
             <div>
