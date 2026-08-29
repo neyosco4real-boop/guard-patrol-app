@@ -76,10 +76,11 @@ export default function CheckpointsPage() {
     if (!checkpointName || !selectedSiteForCheckpoint) return alert('Please provide checkpoint name.');
     setSubmittingCp(true);
 
-    // Completely schema-safe: inserts only columns that exist in the checkpoints table (name and location)
+    // Explicitly target location_id to match your database schema
     const { error } = await supabase.from('checkpoints').insert([
       {
         name: checkpointName,
+        location_id: selectedSiteForCheckpoint.id,
         location: selectedSiteForCheckpoint.name,
       },
     ]);
@@ -274,7 +275,7 @@ export default function CheckpointsPage() {
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
                     JSON.stringify({
                       checkpoint: activeQrCheckpoint.name,
-                      location: activeQrCheckpoint.location,
+                      location: locations.find((l) => l.id === activeQrCheckpoint.location_id)?.name || activeQrCheckpoint.location || 'Site',
                     })
                   )}`}
                   alt="Checkpoint QR Code"
@@ -283,7 +284,7 @@ export default function CheckpointsPage() {
               </div>
               <div className="pt-2">
                 <p className="text-sm font-black text-white">{activeQrCheckpoint.name}</p>
-                <p className="text-xs font-mono text-cyan-400 uppercase">Location: {activeQrCheckpoint.location}</p>
+                <p className="text-xs font-mono text-cyan-400 uppercase">Location: {locations.find((l) => l.id === activeQrCheckpoint.location_id)?.name || activeQrCheckpoint.location || 'Site'}</p>
               </div>
             </div>
 
@@ -292,7 +293,7 @@ export default function CheckpointsPage() {
                 href={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(
                   JSON.stringify({
                     checkpoint: activeQrCheckpoint.name,
-                    location: activeQrCheckpoint.location,
+                    location: locations.find((l) => l.id === activeQrCheckpoint.location_id)?.name || activeQrCheckpoint.location || 'Site',
                   })
                 )}`}
                 target="_blank"
