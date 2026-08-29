@@ -74,11 +74,11 @@ export default function CheckpointsPage() {
     if (!checkpointName || !selectedSiteForCheckpoint) return alert('Please provide checkpoint name.');
     setSubmittingCp(true);
 
-    // Save only columns that exist in the Supabase 'checkpoints' table (name, location_id)
+    // The 'checkpoints' table uses 'location' column instead of 'location_id'
     const { error } = await supabase.from('checkpoints').insert([
       {
         name: checkpointName,
-        location_id: selectedSiteForCheckpoint.id,
+        location: selectedSiteForCheckpoint.name,
       },
     ]);
 
