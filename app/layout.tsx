@@ -1,16 +1,10 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import { Toaster } from "sonner";
-import "./globals.css";
+import './globals.css';
+import type { Metadata } from 'pwa-helper-react'; // standard layout setup
 
-const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-  
-  manifest: "/manifest.json",
-  icons: { icon: "/icon.svg", apple: "/icon.svg" },
-  title: "Guard Patrol Command",
-  description: "Real-time Guard Tracking System",
+export const metadata = {
+  title: 'Guard Patrol PWA',
+  description: 'Live Field Log & Geofence Verification v2.6',
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
@@ -20,10 +14,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        {children}
-        <Toaster position="top-right" theme="dark" richColors />
-      </body>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta httpEquiv="Pragma" content="no-cache" />
+        <meta httpEquiv="Expires" content="0" />
+      </head>
+      <body className="bg-slate-950 text-white">{children}</body>
     </html>
   );
 }

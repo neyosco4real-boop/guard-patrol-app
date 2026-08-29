@@ -1,385 +1,272 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
-interface Checkpoint {
-  id: string;
-  site_id?: string;
-  name: string;
-  radius: string;
-  lat?: number | null;
-  lng?: number | null;
-}
-
-interface Site {
-  id: string;
-  name: string;
-  checkpoints: Checkpoint[];
-}
-
-export default function GuardScannerPage() {
+export default function ScanPage() {
+  const [checkpointId, setCheckpointId] = useState<string>('');
+  const [checkpointName, setCheckpointName] = useState<string>('');
+  const [siteName, setSiteName] = useState<string>('Tom Salem Head Office');
+  
   const [guardName, setGuardName] = useState('');
-  const [scannedCheckpoint, setScannedCheckpoint] = useState<Checkpoint | null>(null);
-  const [matchedSite, setMatchedSite] = useState<Site | null>(null);
-  
-  // Patrol Modes
-  const [patrolType, setPatrolType] = useState<'normal' | 'incident'>('normal');
-  const [incidentNotes, setIncidentNotes] = useState('');
-  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
-  
-  // Geofence & Status
-  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [distanceVariance, setDistanceVariance] = useState<number | null>(null);
-  const [isScanningActive, setIsScanningActive] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Camera Capture Ref
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [notes, setNotes] = useState('Normal Patrol Scan');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [gps, setGps] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
+  const [status, setStatus] = useState<string>('READY');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [scanning, setScanning] = useState<boolean>(false);
 
   useEffect(() => {
-    const savedGuard = localStorage.getItem('guard_patrol_name');
-    if (savedGuard) setGuardName(savedGuard);
-  }, []);
-
-  const handleGuardNameChange = (name: string) => {
-    setGuardName(name);
-    localStorage.setItem('guard_patrol_name', name);
-  };
-
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371e3;
-    const rad = Math.PI / 180;
-    const dLat = (lat2 - lat1) * rad;
-    const dLon = (lon2 - lon1) * rad;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
-  const handleQRSuccess = async (decodedText: string) => {
-    setIsScanningActive(false);
-
-    const { data: dbCheckpoints } = await supabase.from('checkpoints').select('*');
-    const { data: dbSites } = await supabase.from('sites').select('*');
-
-    const matchedCp = dbCheckpoints?.find(
-      (cp) => cp.name.trim().toLowerCase() === decodedText.trim().toLowerCase()
-    );
-
-    if (matchedCp) {
-      setScannedCheckpoint(matchedCp);
-      const site = dbSites?.find((s) => s.id === matchedCp.site_id);
-      setMatchedSite(site || { id: 'default', name: 'Main Station', checkpoints: [] });
-    } else {
-      setScannedCheckpoint({
-        id: 'manual-' + Date.now(),
-        name: decodedText,
-        radius: '50m'
-      });
-      setMatchedSite({ id: 'default', name: 'General Precinct', checkpoints: [] });
+    if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
 
-    if ("geolocation" in navigator) {
+    if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const uLat = pos.coords.latitude;
-          const uLng = pos.coords.longitude;
-          setUserCoords({ lat: uLat, lng: uLng });
-
-          if (matchedCp && matchedCp.lat && matchedCp.lng) {
-            const dist = calculateDistance(uLat, uLng, matchedCp.lat, matchedCp.lng);
-            setDistanceVariance(dist);
-          }
-        },
-        () => console.warn("Location permission unavailable."),
-        { enableHighAccuracy: true, timeout: 10000 }
+        (pos) => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => console.warn('GPS Error:', err),
+        { enableHighAccuracy: true }
       );
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (!isScanningActive) return;
+    if (checkpointId && checkpointId.length === 36) {
+      fetchCheckpointDetails(checkpointId);
+    }
+  }, [checkpointId]);
 
-    const scanner = new Html5QrcodeScanner(
-      'qr-reader-container',
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      false
-    );
-
-    scanner.render(
-      (decodedText) => {
-        handleQRSuccess(decodedText);
-        scanner.clear();
-      },
-      () => {}
-    );
-
-    return () => {
-      scanner.clear().catch(() => {});
-    };
-  }, [isScanningActive]);
-
-  const startCamera = async () => {
+  const startFreshScanner = async () => {
+    setScanning(true);
+    setErrorMessage(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      setCameraStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      const html5QrCode = new Html5Qrcode("reader");
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        async (decodedText) => {
+          const uuidMatch = decodedText.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+          const scannedId = uuidMatch ? uuidMatch[0].trim() : decodedText.trim();
+          
+          if (scannedId.length === 36) {
+            setCheckpointId(scannedId);
+            await html5QrCode.stop();
+            setScanning(false);
+          }
+        },
+        () => {}
+      );
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(`Camera error: ${err?.message || 'Could not start camera'}`);
+      setScanning(false);
+    }
+  };
+
+  const fetchCheckpointDetails = async (id: string) => {
+    const { data } = await supabase
+      .from('checkpoints')
+      .select('*, sites(name)')
+      .eq('id', id)
+      .single();
+
+    if (data) {
+      if (data.name) setCheckpointName(data.name);
+      if (data.sites?.name) setSiteName(data.sites.name);
+    }
+  };
+
+  const handleScanSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!checkpointId || !uuidRegex.test(checkpointId)) {
+      setErrorMessage('Security Error: Invalid Checkpoint ID format.');
+      setStatus('ERROR');
+      return;
+    }
+
+    setStatus('SUBMITTING');
+    setErrorMessage(null);
+
+    try {
+      let photoUrl = '';
+      if (photoFile) {
+        const fileExt = photoFile.name.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('patrol_photos').upload(fileName, photoFile);
+        if (!uploadError) {
+          const { data: publicUrlData } = supabase.storage.from('patrol_photos').getPublicUrl(fileName);
+          photoUrl = publicUrlData.publicUrl;
+        }
       }
-    } catch (err) {
-      alert("Unable to access camera for photo proof.");
+
+      const payload = {
+        checkpoint_id: checkpointId,
+        checkpoint_name: checkpointName || 'Patrol Checkpoint',
+        location_name: siteName || 'Tom Salem Head Office',
+        guard_name: guardName || 'Officer',
+        latitude: gps.lat,
+        longitude: gps.lng,
+        notes: notes || 'Normal Patrol Scan',
+        photo_url: photoUrl,
+        status: 'ACKNOWLEDGED',
+        scanned_at: new Date().toISOString(),
+      };
+
+      const { error: insertError } = await supabase.from('patrol_logs').insert([payload]);
+
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
+
+      setSuccessMessage('Patrol scan successfully recorded and verified!');
+      setStatus('SUCCESS');
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(`Submission failed: ${err.message || 'Database error'}`);
+      setStatus('ERROR');
     }
-  };
-
-  const stopCamera = () => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach((t) => t.stop());
-      setCameraStream(null);
-    }
-  };
-
-  useEffect(() => {
-    if (patrolType === 'incident' && !photoDataUrl) {
-      startCamera();
-    } else {
-      stopCamera();
-    }
-    return () => stopCamera();
-  }, [patrolType, photoDataUrl]);
-
-  const takeSnapshot = () => {
-    if (!videoRef.current) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      setPhotoDataUrl(canvas.toDataURL('image/jpeg', 0.6));
-      stopCamera();
-    }
-  };
-
-  const handleSubmitReport = async () => {
-    if (!guardName.trim()) {
-      alert("Please enter Guard Name before submitting report.");
-      return;
-    }
-
-    if (!scannedCheckpoint) {
-      alert("Please scan a valid checkpoint QR code first.");
-      return;
-    }
-
-    setSubmitting(true);
-
-    let allowedRadiusMeters = 50;
-    if (scannedCheckpoint.radius) {
-      const parsed = parseInt(scannedCheckpoint.radius.replace(/\D/g, ''), 10);
-      if (!isNaN(parsed)) allowedRadiusMeters = parsed;
-    }
-
-    let finalStatus = 'VERIFIED';
-    if (patrolType === 'incident') {
-      finalStatus = 'INCIDENT';
-    } else if (distanceVariance !== null && distanceVariance > allowedRadiusMeters) {
-      finalStatus = 'REJECTED';
-    }
-
-    const payload = {
-      guard_name: guardName.trim(),
-      location_name: matchedSite?.name || 'Main Station',
-      checkpoint_name: scannedCheckpoint.name,
-      status: finalStatus,
-      notes: patrolType === 'incident' ? 'Incident Reported' : 'Normal Patrol Scan',
-      incident_notes: incidentNotes,
-      photo_url: photoDataUrl || '',
-      distance_meters: distanceVariance ? Math.round(distanceVariance) : 0,
-      scanned_at: new Date().toISOString()
-    };
-
-    // DIRECT SUPABASE UPLOAD (Bypasses Local IndexedDB Downloads)
-    const { error } = await supabase.from('patrol_logs').insert([payload]);
-
-    if (error) {
-      alert("Error submitting report: " + error.message);
-      setToastMessage("❌ Failed to send scan to Command Dashboard.");
-    } else {
-      setToastMessage("⚡ Report Sent Live to Command Dashboard!");
-    }
-
-    setSubmitting(false);
-
-    // Reset Form State
-    setScannedCheckpoint(null);
-    setPatrolType('normal');
-    setIncidentNotes('');
-    setPhotoDataUrl(null);
-    setDistanceVariance(null);
-    setIsScanningActive(true);
-    setTimeout(() => setToastMessage(null), 4000);
   };
 
   return (
-    <div className="min-h-screen bg-[#070b18] text-white p-4 font-sans max-w-lg mx-auto space-y-5">
-      
-      {/* Top Header */}
-      <div className="border-b border-[#1a233d] pb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-black text-white">Guard Patrol Terminal</h1>
-          <p className="text-xs text-[#828cb0]">Direct Command Feed Scanner</p>
-        </div>
-        <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full border bg-[#064e3b] text-[#10b981] border-[#10b981]/40">
-          LIVE DIRECT FEED
-        </span>
-      </div>
-
-      {/* Toast Pop-up Notification */}
-      {toastMessage && (
-        <div className="bg-[#0c1226] border-2 border-[#3b82f6] text-white p-3.5 rounded-xl text-xs font-bold shadow-2xl flex items-center justify-between animate-fadeIn">
-          <span>{toastMessage}</span>
-          <button onClick={() => setToastMessage(null)} className="text-white font-black">✕</button>
-        </div>
-      )}
-
-      {/* Guard Name Input */}
-      <div className="bg-[#0b1021] border border-[#1a233d] p-4 rounded-2xl space-y-2">
-        <label className="text-xs font-bold text-[#828cb0] uppercase tracking-wider block">
-          👮 Guard Identification
-        </label>
-        <input 
-          type="text"
-          placeholder="Enter Guard Full Name or ID..."
-          value={guardName}
-          onChange={(e) => handleGuardNameChange(e.target.value)}
-          className="w-full bg-[#070b18] border border-[#1e293b] rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-[#3b82f6]"
-        />
-      </div>
-
-      {/* Camera QR Reader */}
-      {isScanningActive ? (
-        <div className="bg-[#0b1021] border border-[#1a233d] p-4 rounded-2xl space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-[#828cb0] uppercase">1. Scan Checkpoint QR</span>
-            <span className="text-[10px] bg-[#2563eb] text-white px-2 py-0.5 rounded-full font-bold">CAMERA ACTIVE</span>
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center justify-center font-sans">
+      <div className="max-w-md w-full bg-slate-900 border border-white/10 rounded-3xl p-6 shadow-2xl space-y-5">
+        
+        <div className="text-center space-y-1.5">
+          <div className="w-12 h-12 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-cyan-500/30">
+            <span className="text-xl">🛡️</span>
           </div>
-          <div id="qr-reader-container" className="overflow-hidden rounded-xl bg-black border border-[#1a233d]"></div>
+          <h1 className="text-base font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+            Guard Patrol PWA
+          </h1>
+          <p className="text-[11px] text-slate-400 font-mono">Clean Rebuilt Scan Terminal</p>
         </div>
-      ) : (
-        <div className="bg-[#0c1226] border border-[#3b82f6]/50 p-4 rounded-2xl space-y-3 shadow-lg">
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-[#60a5fa] uppercase">📍 Checkpoint Scanned</span>
-            <button 
-              onClick={() => { setIsScanningActive(true); setScannedCheckpoint(null); }}
-              className="text-xs text-[#ef4444] underline font-bold"
+
+        {/* GPS Widget */}
+        <div className="flex items-center justify-between bg-slate-950 px-3.5 py-2.5 rounded-2xl border border-white/10 text-xs font-mono">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-slate-300">
+              {gps.lat ? `GPS Active (${gps.lat.toFixed(4)}, ${gps.lng?.toFixed(4)})` : 'Acquiring GPS...'}
+            </span>
+          </div>
+        </div>
+
+        {/* Fresh Scanner Box */}
+        <div className="bg-slate-950 p-4 rounded-2xl border border-white/10 space-y-3 text-center">
+          <div id="reader" className="overflow-hidden rounded-xl"></div>
+          {!scanning ? (
+            <button
+              type="button"
+              onClick={startFreshScanner}
+              className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black py-3 rounded-xl text-xs uppercase shadow-lg shadow-blue-500/20 cursor-pointer"
             >
-              Rescan QR
+              📷 Tap to Launch Fresh Scanner
             </button>
-          </div>
-          <div>
-            <h3 className="text-base font-extrabold text-white">{scannedCheckpoint?.name}</h3>
-            <p className="text-xs text-[#828cb0]">{matchedSite?.name || 'Assigned Site'}</p>
-          </div>
-
-          {distanceVariance !== null && (
-            <div className={`p-2.5 rounded-xl border text-xs font-bold flex justify-between items-center ${
-              distanceVariance > (parseInt(scannedCheckpoint?.radius || '50', 10))
-                ? 'bg-[#450a0a] border-[#ef4444] text-[#ef4444]'
-                : 'bg-[#064e3b]/30 border-[#10b981] text-[#10b981]'
-            }`}>
-              <span>{distanceVariance > (parseInt(scannedCheckpoint?.radius || '50', 10)) ? '🚨 OUT OF STATION (Unverified)' : '✅ WITHIN STATION GEOFENCE'}</span>
-              <span>{Math.round(distanceVariance)}m away</span>
-            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="w-full bg-rose-950 text-rose-300 font-bold py-2 rounded-xl text-xs uppercase border border-rose-500/30 cursor-pointer"
+            >
+              Cancel Camera Scan
+            </button>
           )}
         </div>
-      )}
 
-      {/* Submission Form */}
-      {scannedCheckpoint && (
-        <div className="bg-[#0b1021] border border-[#1a233d] p-4 rounded-2xl space-y-4">
-          <span className="text-xs font-bold text-[#828cb0] uppercase block">2. Select Patrol Status</span>
-          
-          <div className="grid grid-cols-2 gap-3">
-            <button 
-              onClick={() => setPatrolType('normal')}
-              className={`py-3 px-3 rounded-xl text-xs font-bold transition-all border ${
-                patrolType === 'normal' 
-                  ? 'bg-[#2563eb] border-[#3b82f6] text-white shadow-lg' 
-                  : 'bg-[#070b18] border-[#1e293b] text-[#828cb0]'
-              }`}
+        {successMessage ? (
+          <div className="bg-emerald-950/60 border border-emerald-500/40 p-6 rounded-2xl text-center space-y-3">
+            <span className="text-3xl">✅</span>
+            <h3 className="text-sm font-bold text-emerald-300 uppercase">Scan Logged Successfully</h3>
+            <p className="text-xs text-slate-300">{successMessage}</p>
+            <button
+              onClick={() => {
+                setSuccessMessage(null);
+                setStatus('READY');
+                setCheckpointId('');
+                setCheckpointName('');
+                setNotes('Normal Patrol Scan');
+                setPhotoFile(null);
+              }}
+              className="w-full bg-emerald-500 text-slate-950 font-black py-2.5 rounded-xl text-xs uppercase mt-2 cursor-pointer"
             >
-              🟢 Normal Patrol
-            </button>
-            <button 
-              onClick={() => setPatrolType('incident')}
-              className={`py-3 px-3 rounded-xl text-xs font-bold transition-all border ${
-                patrolType === 'incident' 
-                  ? 'bg-[#f59e0b] border-[#f59e0b] text-black shadow-lg' 
-                  : 'bg-[#070b18] border-[#1e293b] text-[#828cb0]'
-              }`}
-            >
-              ⚠️ Report Incident
+              Scan Another Checkpoint
             </button>
           </div>
+        ) : (
+          <form onSubmit={handleScanSubmit} className="space-y-4">
+            <div>
+              <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Guard Name</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Officer Joshua"
+                value={guardName}
+                onChange={(e) => setGuardName(e.target.value)}
+                className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-cyan-400"
+              />
+            </div>
 
-          {patrolType === 'incident' && (
-            <div className="space-y-3 pt-2 border-t border-[#1a233d]">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-[#828cb0] uppercase">Note Incident Details</label>
-                <textarea 
-                  rows={3}
-                  placeholder="Describe breach, hazard, or damaged checkpoint..."
-                  value={incidentNotes}
-                  onChange={(e) => setIncidentNotes(e.target.value)}
-                  className="w-full bg-[#070b18] border border-[#1e293b] rounded-xl p-3 text-xs text-white outline-none focus:border-[#f59e0b]"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-[#828cb0] uppercase">Attach Photo Proof</label>
-                {!photoDataUrl ? (
-                  <div className="space-y-2">
-                    <video ref={videoRef} autoPlay playsInline className="w-full h-44 object-cover rounded-xl border border-[#1e293b] bg-black" />
-                    <button 
-                      type="button" 
-                      onClick={takeSnapshot}
-                      className="w-full py-2.5 bg-[#f59e0b] text-black font-extrabold text-xs rounded-xl shadow-md"
-                    >
-                      📸 Snap Photo Evidence
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <img src={photoDataUrl} alt="Incident Proof" className="w-full h-44 object-cover rounded-xl border border-[#f59e0b]" />
-                    <button 
-                      type="button" 
-                      onClick={() => setPhotoDataUrl(null)}
-                      className="w-full py-2 bg-[#1e293b] text-xs font-bold text-white rounded-xl"
-                    >
-                      Retake Photo
-                    </button>
-                  </div>
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-[10px] font-bold uppercase text-slate-400">Scanned Checkpoint</label>
+                {checkpointId && (
+                  <button
+                    type="button"
+                    onClick={() => { setCheckpointId(''); setCheckpointName(''); }}
+                    className="text-[9px] text-rose-400 uppercase font-mono hover:underline cursor-pointer"
+                  >
+                    Reset
+                  </button>
                 )}
               </div>
+              <input
+                type="text"
+                readOnly
+                value={checkpointName ? `${checkpointName} (Verified)` : (checkpointId ? `UUID: ${checkpointId}` : 'Scan a QR Code above')}
+                className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-3 py-2.5 text-xs text-cyan-300 font-mono outline-none cursor-default"
+              />
             </div>
-          )}
 
-          <button 
-            onClick={handleSubmitReport}
-            disabled={submitting}
-            className="w-full py-3.5 bg-[#10b981] hover:bg-[#059669] active:scale-95 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all"
-          >
-            {submitting ? 'Transmitting Scan Report...' : '📡 Send Scan Report Directly'}
-          </button>
-        </div>
-      )}
+            <div>
+              <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Patrol Notes</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none resize-none focus:border-cyan-400"
+              />
+            </div>
 
+            <div>
+              <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Photo Evidence (Optional)</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+                className="w-full text-xs text-slate-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-800 file:text-cyan-300 hover:file:bg-slate-700 cursor-pointer"
+              />
+            </div>
+
+            {errorMessage && (
+              <div className="bg-rose-950/60 border border-rose-500/40 p-3 rounded-xl text-xs text-rose-300 font-mono">
+                {errorMessage}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={status === 'SUBMITTING' || !checkpointId || checkpointId.length !== 36}
+              className="w-full bg-cyan-500 text-slate-950 font-black py-3 rounded-xl text-xs uppercase shadow-lg shadow-cyan-500/20 disabled:opacity-45 transition-all cursor-pointer"
+            >
+              {status === 'SUBMITTING' ? 'Submitting Log...' : '🚨 Submit Patrol Log'}
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
