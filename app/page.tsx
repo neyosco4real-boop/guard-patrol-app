@@ -57,8 +57,6 @@ export default function GuardPWA() {
           checkpoint_id: checkpointId || null,
           guard_name: guardName.trim(),
           checkpoint_name: checkpointName.trim(),
-          location: checkpointName.trim(),
-          coordinates: coordString,
           scanned_at: new Date().toISOString(),
           scanned_location: coordString,
           notes: notes.trim(),
