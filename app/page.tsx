@@ -1,11 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Scanner } from '@yudiel/react-qr-scanner';
 
 export default function ScanPage() {
-  const router = useRouter();
   const [guardName, setGuardName] = useState('');
   const [checkpointName, setCheckpointName] = useState('');
   const [notes, setNotes] = useState('Normal Patrol Scan');
@@ -15,6 +13,7 @@ export default function ScanPage() {
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState(false);
 
   useEffect(() => {
     if ('geolocation' in navigator) {
@@ -80,7 +79,12 @@ export default function ScanPage() {
       });
 
       if (response.ok) {
-        router.push('/admin');
+        setSuccessMsg(true);
+        setCheckpointName('');
+        setNotes('Normal Patrol Scan');
+        setIsIncident(false);
+        setMediaUrl('');
+        setTimeout(() => setSuccessMsg(false), 4000);
       } else {
         alert('Submission failed.');
       }
@@ -129,6 +133,13 @@ export default function ScanPage() {
               Simulate Scan
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Success Notification Banner */}
+      {successMsg && (
+        <div className="bg-emerald-950 border border-emerald-500 text-emerald-400 p-3 rounded-xl text-xs font-bold text-center animate-pulse">
+          ✓ Patrol log successfully submitted and synced to live feed!
         </div>
       )}
 
