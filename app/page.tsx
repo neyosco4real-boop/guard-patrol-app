@@ -7,7 +7,10 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 export default function HomePage() {
   const router = useRouter();
   const [guardName, setGuardName] = useState('');
+  const [checkpointId, setCheckpointId] = useState('');
   const [checkpointName, setCheckpointName] = useState('');
+  const [locationText, setLocationText] = useState('');
+  const [displayCheckpoint, setDisplayCheckpoint] = useState('');
   const [notes, setNotes] = useState('Normal Patrol Scan');
   const [isIncident, setIsIncident] = useState(false);
   const [mediaUrl, setMediaUrl] = useState('');
@@ -43,12 +46,19 @@ export default function HomePage() {
   const handleScanResult = (rawValue: string) => {
     try {
       const parsed = JSON.parse(rawValue);
-      const formattedName = parsed.checkpoint_name && parsed.location 
-        ? `${parsed.checkpoint_name} (${parsed.location})` 
-        : parsed.checkpoint_name || parsed.location || rawValue;
-      setCheckpointName(formattedName);
+      const cId = parsed.checkpoint_id || rawValue;
+      const cName = parsed.checkpoint_name || 'Checkpoint';
+      const cLoc = parsed.location || '';
+      
+      setCheckpointId(cId);
+      setCheckpointName(cName);
+      setLocationText(cLoc);
+      setDisplayCheckpoint(`${cName}${cLoc ? ` (${cLoc})` : ''}`);
     } catch {
+      setCheckpointId(rawValue);
       setCheckpointName(rawValue);
+      setLocationText('');
+      setDisplayCheckpoint(rawValue);
     }
     setShowScanner(false);
   };
@@ -63,8 +73,9 @@ export default function HomePage() {
 
       const payload = {
         guardName: guardName || 'Officer Joshua',
-        checkpointId: checkpointName || 'Front Gate',
+        checkpointId: checkpointId || 'Front Gate',
         checkpointName: checkpointName || 'Front Gate',
+        location: locationText || 'Main Premises',
         notes,
         isIncident,
         mediaUrl,
@@ -81,7 +92,6 @@ export default function HomePage() {
       });
 
       if (res.ok) {
-        alert('Patrol log submitted successfully!');
         router.push('/admin');
       } else {
         alert('Failed to submit patrol log.');
@@ -132,7 +142,7 @@ export default function HomePage() {
             <div className="flex gap-3 w-full mt-4">
               <button
                 type="button"
-                onClick={() => handleScanResult('CR Awolowo Rd (Chicken Republic)')}
+                onClick={() => handleScanResult(JSON.stringify({ checkpoint_id: "9791db2e-0a56-44d6-83b3-6ea72bec8b52", checkpoint_name: "CR Awolowo Rd", location: "Chicken Republic" }))}
                 className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-3 rounded-xl text-xs uppercase tracking-wider cursor-pointer"
               >
                 Simulate Scan
@@ -182,14 +192,18 @@ export default function HomePage() {
           <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Scanned Checkpoint Name</label>
           <input
             type="text"
-            value={checkpointName}
-            onChange={(e) => setCheckpointName(e.target.value)}
+            value={displayCheckpoint}
+            onChange={(e) => {
+              setDisplayCheckpoint(e.target.value);
+              setCheckpointName(e.target.value);
+              setCheckpointId(e.target.value);
+            }}
             placeholder="Scan QR code..."
             className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
             required
           />
-          {checkpointName && (
-            <p className="text-xs text-emerald-400 mt-1.5">✓ Resolved Checkpoint: {checkpointName}</p>
+          {displayCheckpoint && (
+            <p className="text-xs text-emerald-400 mt-1.5">✓ Resolved Checkpoint: {displayCheckpoint}</p>
           )}
         </div>
 
@@ -225,7 +239,7 @@ export default function HomePage() {
           <label className="block text-xs font-bold uppercase tracking-wider text-cyan-300">
             📷 Live Incident Camera Capture
           </label>
-          <p className="text-11px text-slate-400">
+          <p className="text-[11px] text-slate-400">
             Tap below to capture a direct photo from your device camera or upload evidence.
           </p>
           <input
