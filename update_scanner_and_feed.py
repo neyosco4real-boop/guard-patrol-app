@@ -1,4 +1,15 @@
+import os
 
+# 1. Update app/scan/page.tsx to include Incident Notes and Photo/Camera Evidence capture
+scan_path = 'app/scan/page.tsx'
+with open(scan_path, 'r', encoding='utf-8') as f:
+    scan_code = f.read()
+
+# Let's ensure the scanner state includes incident status, custom notes, and media url / camera input
+print("Updating scanner with incident notes and camera capture...")
+
+# We will write a complete, robust patch for app/scan/page.tsx
+updated_scan_code = '''
 'use client';
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
@@ -143,3 +154,9 @@ export default function ScanPage() {
     </div>
   );
 }
+'''
+
+with open(scan_path, 'w', encoding='utf-8') as f:
+    f.write(updated_scan_code)
+
+print("Scanner successfully updated with incident notes, incident toggle, camera/photo link input, and live GPS mapping.")
