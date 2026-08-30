@@ -1,9 +1,8 @@
 import os
 
-for path in ['app/scan/page.tsx', 'app/components/QRScanner.tsx']:
-    if os.path.exists(path):
-        print(f"=== {path} ===")
-        with open(path, 'r', encoding='utf-8') as f:
-            for line in f.readlines():
-                if any(k in line.lower() for k in ['coord', 'lat', 'lng', 'gps', 'location', 'navigator', 'geolocation']):
-                    print("  ", line.strip())
+scan_path = 'app/scan/page.tsx'
+if os.path.exists(scan_path):
+    with open(scan_path, 'r', encoding='utf-8') as f:
+        print(f.read())
+else:
+    print("app/scan/page.tsx not found")
