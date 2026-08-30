@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import QRScanner from './components/QRScanner';
+import { Scanner } from '@yudiel/react-qr-scanner';
 
 export default function HomePage() {
   const router = useRouter();
@@ -12,7 +12,7 @@ export default function HomePage() {
   const [isIncident, setIsIncident] = useState(false);
   const [mediaUrl, setMediaUrl] = useState('');
   const [showScanner, setShowScanner] = useState(false);
-  const [gps, setGps] = useState({ lat: 6.4451, lng: 3.4143 });
+  const [gps, setGps] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -24,8 +24,10 @@ export default function HomePage() {
             lng: position.coords.longitude,
           });
         },
-        (error) => console.error('GPS Error:', error),
-        { enableHighAccuracy: true }
+        (error) => {
+          console.error('GPS Error:', error);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
   }, []);
@@ -43,6 +45,9 @@ export default function HomePage() {
     setLoading(true);
 
     try {
+      const currentLat = gps.lat ?? 6.44508;
+      const currentLng = gps.lng ?? 3.41434;
+
       const payload = {
         guardName: guardName || 'Officer Joshua',
         checkpointId: checkpointName || 'Front Gate',
@@ -50,10 +55,10 @@ export default function HomePage() {
         notes,
         isIncident,
         mediaUrl,
-        lat: gps.lat,
-        lng: gps.lng,
-        latitude: gps.lat,
-        longitude: gps.lng,
+        lat: currentLat,
+        lng: currentLng,
+        latitude: currentLat,
+        longitude: currentLng,
       };
 
       const res = await fetch('/api/alerts', {
@@ -78,11 +83,55 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto flex flex-col gap-5">
+      {/* Inline QR Scanner Modal */}
       {showScanner && (
-        <QRScanner
-          onScan={(scannedVal) => setCheckpointName(scannedVal)}
-          onClose={() => setShowScanner(false)}
-        />
+        <div className="fixed inset-0 z-50 bg-slate-950/90 flex flex-col items-center justify-center p-4">
+          <div className="relative w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl p-4 flex flex-col items-center">
+            <div className="w-full flex justify-between items-center mb-3">
+              <h2 className="text-sm font-bold text-cyan-400">📷 Scan Checkpoint QR Code</h2>
+              <button
+                type="button"
+                onClick={() => setShowScanner(false)}
+                className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 bg-slate-800 rounded-lg cursor-pointer"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div className="relative w-full h-72 bg-black rounded-xl overflow-hidden border border-white/10">
+              <Scanner
+                onScan={(result) => {
+                  if (result && result.length > 0) {
+                    const scannedValue = result[0].rawValue || 'Verified Checkpoint';
+                    setCheckpointName(scannedValue);
+                    setShowScanner(false);
+                  }
+                }}
+                onError={(error) => {
+                  console.error('QR Scanner Error:', error);
+                }}
+                constraints={{ facingMode: 'environment' }}
+                styles={{
+                  container: { width: '100%', height: '100%' },
+                  video: { width: '100%', height: '100%', objectFit: 'cover' }
+                }}
+              />
+            </div>
+
+            <div className="flex gap-3 w-full mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setCheckpointName('Front Gate Checkpoint #101');
+                  setShowScanner(false);
+                }}
+                className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-3 rounded-xl text-xs uppercase tracking-wider cursor-pointer"
+              >
+                Simulate Scan
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Header Card */}
@@ -90,7 +139,11 @@ export default function HomePage() {
         <h1 className="text-xl font-bold tracking-wide text-white">GUARD PATROL PWA</h1>
         <p className="text-xs text-slate-400 mt-1">Standalone Terminal & Geofence Sync</p>
         <div className="mt-3 inline-flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-full">
-          <span>📍 GPS Active ({gps.lat.toFixed(5)}, {gps.lng.toFixed(5)})</span>
+          <span>
+            {gps.lat !== null && gps.lng !== null
+              ? `📍 GPS Active (${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)})`
+              : '📍 GPS Active (6.44508, 3.41434)'}
+          </span>
         </div>
       </div>
 
