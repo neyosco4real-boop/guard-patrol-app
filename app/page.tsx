@@ -74,7 +74,7 @@ export default function ScanPage() {
         id: Date.now().toString(),
         guardName: guardName.trim(),
         location: 'Tom Salem Head Office',
-        checkpointName: checkpointName || 'Front Gate',
+        checkpointName: checkpointName.trim() || 'Front Gate',
         notes: notes.trim() || (isIncident ? 'INCIDENT EMERGENCY REPORT' : 'Normal Patrol Scan'),
         isIncident,
         mediaUrl,
@@ -83,18 +83,22 @@ export default function ScanPage() {
         createdAt: new Date().toISOString(),
       };
 
-      const cached = localStorage.getItem('tom_salem_patrol_alerts');
       let alerts = [];
+      const cached = localStorage.getItem('tom_salem_patrol_alerts');
       if (cached) {
         try {
           alerts = JSON.parse(cached);
-        } catch (err) {
-          console.error(err);
+          if (!Array.isArray(alerts)) alerts = [];
+        } catch {
+          alerts = [];
         }
       }
 
       const updated = [newAlert, ...alerts];
       localStorage.setItem('tom_salem_patrol_alerts', JSON.stringify(updated));
+
+      // Force window storage event dispatch for multi-tab or immediate sync
+      window.dispatchEvent(new Event('storage'));
 
       setSuccessMsg(true);
       setCheckpointName('');
@@ -103,8 +107,8 @@ export default function ScanPage() {
       setMediaUrl('');
       setTimeout(() => setSuccessMsg(false), 4000);
     } catch (error) {
-      console.error(error);
-      alert('Error submitting log.');
+      console.error('Submit error:', error);
+      alert('Error submitting log. Check console storage limits.');
     } finally {
       setLoading(false);
     }
