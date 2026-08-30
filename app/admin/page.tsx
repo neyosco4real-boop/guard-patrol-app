@@ -47,13 +47,13 @@ export default function AdminPage() {
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/qr-generator"
+            href="/admin/qr-codes"
             className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs uppercase cursor-pointer transition-all shadow-md"
           >
             QR Generator
           </Link>
           <Link
-            href="/checkpoints"
+            href="/admin/checkpoints"
             className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs uppercase cursor-pointer border border-white/10 transition-all"
           >
             Checkpoints
