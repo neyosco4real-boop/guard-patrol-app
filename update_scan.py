@@ -1,4 +1,4 @@
-'use client';
+code = ''''use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -208,3 +208,9 @@ export default function ScanPage() {
     </main>
   );
 }
+'''
+
+with open('app/scan/page.tsx', 'w', encoding='utf-8') as f:
+    f.write(code)
+
+print('Updated scan page successfully!')
