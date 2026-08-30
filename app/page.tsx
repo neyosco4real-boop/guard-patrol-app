@@ -96,6 +96,8 @@ export default function ScanPage() {
 
       const updated = [newAlert, ...alerts];
       localStorage.setItem('tom_salem_patrol_alerts', JSON.stringify(updated));
+      
+      // Dispatch both native storage event and custom patrol update event
       window.dispatchEvent(new Event('storage'));
       window.dispatchEvent(new Event('patrol_update'));
 
