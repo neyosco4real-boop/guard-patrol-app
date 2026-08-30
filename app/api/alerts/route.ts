@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     const newAlert = {
       id: Date.now().toString(),
       guardName: body.guardName || body.guard || 'Officer',
+      location: body.location || body.checkpointName || 'Main Facility',
       checkpointName: body.checkpointName || body.location || 'Unknown Checkpoint',
       notes: body.notes || 'Normal Patrol Scan',
       isIncident: !!body.isIncident,

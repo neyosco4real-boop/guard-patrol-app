@@ -33,7 +33,7 @@ export default function AdminPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-6 max-w-6xl mx-auto flex flex-col gap-6">
+    <main className="min-h-screen bg-slate-950 text-white p-6 max-w-7xl mx-auto flex flex-col gap-6">
       {/* Top Bar */}
       <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
         <div>
@@ -90,32 +90,43 @@ export default function AdminPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-white/10 text-xs text-slate-400 uppercase tracking-wider">
-                  <th className="py-3 px-4">Guard</th>
-                  <th className="py-3 px-4">Checkpoint</th>
-                  <th className="py-3 px-4">GPS Coordinates</th>
-                  <th className="py-3 px-4">Status / Notes</th>
-                  <th className="py-3 px-4">Timestamp</th>
-                  <th className="py-3 px-4 text-right">Action</th>
+                  <th className="py-3 px-3">Date/Time</th>
+                  <th className="py-3 px-3">Guard Name</th>
+                  <th className="py-3 px-3">Location</th>
+                  <th className="py-3 px-3">Checkpoint</th>
+                  <th className="py-3 px-3">GPS Coordinates</th>
+                  <th className="py-3 px-3">Report Attached</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 text-sm">
                 {alerts.map((alert) => (
                   <tr key={alert.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-white">{alert.guardName}</td>
-                    <td className="py-3 px-4 text-cyan-300 font-medium">{alert.checkpointName}</td>
-                    <td className="py-3 px-4 text-xs font-mono text-slate-300">
+                    <td className="py-3 px-3 text-xs text-slate-300 whitespace-nowrap">
+                      {new Date(alert.createdAt).toLocaleString()}
+                    </td>
+                    <td className="py-3 px-3 font-semibold text-white whitespace-nowrap">{alert.guardName}</td>
+                    <td className="py-3 px-3 text-slate-300">{alert.location}</td>
+                    <td className="py-3 px-3 text-cyan-300 font-medium">{alert.checkpointName}</td>
+                    <td className="py-3 px-3 text-xs font-mono text-slate-300 whitespace-nowrap">
                       📍 {Number(alert.lat).toFixed(5)}, {Number(alert.lng).toFixed(5)}
                     </td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${alert.isIncident ? 'bg-red-950 text-red-400 border border-red-500/30' : 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'}`}>
-                        {alert.isIncident ? '🚨 INCIDENT' : '✓ Normal'}
+                    <td className="py-3 px-3">
+                      {alert.mediaUrl ? (
+                        <span className="inline-flex items-center gap-1 bg-cyan-950 text-cyan-400 border border-cyan-500/30 px-2.5 py-0.5 rounded-full text-xs font-bold">
+                          📷 Yes
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 text-xs font-medium">None</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${alert.isIncident ? 'bg-red-950 text-red-400 border border-red-500/30' : 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'}`}>
+                        {alert.isIncident ? '🚨 Incident' : '✓ Normal'}
                       </span>
-                      <p className="text-xs text-slate-400 mt-1 truncate max-w-xs">{alert.notes}</p>
                     </td>
-                    <td className="py-3 px-4 text-xs text-slate-400">
-                      {new Date(alert.createdAt).toLocaleTimeString()}
-                    </td>
-                    <td className="py-3 px-4 text-right">
+                    <td className="py-3 px-3 text-right">
                       <button
                         onClick={() => setSelectedAlert(alert)}
                         className="bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 cursor-pointer"
@@ -146,12 +157,16 @@ export default function AdminPage() {
             </div>
             <div className="space-y-3 text-xs">
               <div>
+                <span className="text-slate-400 uppercase tracking-wide block">Date / Time:</span>
+                <span className="font-medium text-slate-200">{new Date(selectedAlert.createdAt).toLocaleString()}</span>
+              </div>
+              <div>
                 <span className="text-slate-400 uppercase tracking-wide block">Guard Officer:</span>
                 <span className="font-bold text-white text-sm">{selectedAlert.guardName}</span>
               </div>
               <div>
-                <span className="text-slate-400 uppercase tracking-wide block">Checkpoint Scanned:</span>
-                <span className="font-bold text-cyan-300 text-sm">{selectedAlert.checkpointName}</span>
+                <span className="text-slate-400 uppercase tracking-wide block">Location & Checkpoint:</span>
+                <span className="font-bold text-cyan-300 text-sm">{selectedAlert.location} — {selectedAlert.checkpointName}</span>
               </div>
               <div>
                 <span className="text-slate-400 uppercase tracking-wide block">GPS Coordinates:</span>
