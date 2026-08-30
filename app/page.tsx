@@ -40,13 +40,26 @@ export default function HomePage() {
     }
   };
 
+  const handleScanResult = (rawValue: string) => {
+    try {
+      const parsed = JSON.parse(rawValue);
+      const formattedName = parsed.checkpoint_name && parsed.location 
+        ? `${parsed.checkpoint_name} (${parsed.location})` 
+        : parsed.checkpoint_name || parsed.location || rawValue;
+      setCheckpointName(formattedName);
+    } catch {
+      setCheckpointName(rawValue);
+    }
+    setShowScanner(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const currentLat = gps.lat ?? 6.44508;
-      const currentLng = gps.lng ?? 3.41434;
+      const currentLat = gps.lat ?? 6.44509;
+      const currentLng = gps.lng ?? 3.41433;
 
       const payload = {
         guardName: guardName || 'Officer Joshua',
@@ -102,9 +115,7 @@ export default function HomePage() {
               <Scanner
                 onScan={(result) => {
                   if (result && result.length > 0) {
-                    const scannedValue = result[0].rawValue || 'Verified Checkpoint';
-                    setCheckpointName(scannedValue);
-                    setShowScanner(false);
+                    handleScanResult(result[0].rawValue || '');
                   }
                 }}
                 onError={(error) => {
@@ -121,10 +132,7 @@ export default function HomePage() {
             <div className="flex gap-3 w-full mt-4">
               <button
                 type="button"
-                onClick={() => {
-                  setCheckpointName('Front Gate Checkpoint #101');
-                  setShowScanner(false);
-                }}
+                onClick={() => handleScanResult('CR Awolowo Rd (Chicken Republic)')}
                 className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-3 rounded-xl text-xs uppercase tracking-wider cursor-pointer"
               >
                 Simulate Scan
@@ -142,7 +150,7 @@ export default function HomePage() {
           <span>
             {gps.lat !== null && gps.lng !== null
               ? `📍 GPS Active (${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)})`
-              : '📍 GPS Active (6.44508, 3.41434)'}
+              : '📍 GPS Active (6.44509, 3.41433)'}
           </span>
         </div>
       </div>
@@ -217,7 +225,7 @@ export default function HomePage() {
           <label className="block text-xs font-bold uppercase tracking-wider text-cyan-300">
             📷 Live Incident Camera Capture
           </label>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-11px text-slate-400">
             Tap below to capture a direct photo from your device camera or upload evidence.
           </p>
           <input
