@@ -57,7 +57,8 @@ export default function PatrolLiveFeed() {
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isIncident ? 'bg-red-600 text-white' : 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'}`}>
                       {log.status || (isIncident ? 'INCIDENT' : 'VERIFIED')}
                     </span>
-                    <span className="font-mono text-slate-300">Checkpoint: {log.checkpoint_id || log.scanned_location || 'Main Gate'}</span>
+                    <span className="font-mono text-slate-300">Checkpoint: {log.checkpoint_id || 'Main Gate'}</span>
+                            {log.scanned_location && <div className="text-cyan-400 font-mono mt-0.5">📍 {log.scanned_location}</div>}
                   </div>
                   {log.notes && <p className="text-slate-200 mt-1 font-sans">{log.notes}</p>}
                   {log.media_url && (
