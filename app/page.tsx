@@ -5,7 +5,7 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 
 export default function ScanPage() {
   const [guardName, setGuardName] = useState('');
-  const [checkpointName, setCheckpointName] = useState('');
+  const [checkpointName, setCheckpointName] = useState('Front Gate');
   const [notes, setNotes] = useState('Normal Patrol Scan');
   const [isIncident, setIsIncident] = useState(false);
   const [mediaUrl, setMediaUrl] = useState('');
@@ -62,11 +62,6 @@ export default function ScanPage() {
       alert('Please enter your Guard Name.');
       return;
     }
-    if (!checkpointName.trim()) {
-      alert('Mandatory Error: You must scan a checkpoint QR code before submitting a patrol log.');
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -79,7 +74,7 @@ export default function ScanPage() {
         id: Date.now().toString(),
         guardName: guardName.trim(),
         location: 'Tom Salem Head Office',
-        checkpointName: checkpointName.trim(),
+        checkpointName: checkpointName.trim() || 'Front Gate',
         notes: notes.trim() || (isIncident ? 'INCIDENT EMERGENCY REPORT' : 'Normal Patrol Scan'),
         isIncident,
         mediaUrl,
@@ -104,7 +99,7 @@ export default function ScanPage() {
       window.dispatchEvent(new Event('storage'));
 
       setSuccessMsg(true);
-      setCheckpointName('');
+      setCheckpointName('Front Gate');
       setNotes('Normal Patrol Scan');
       setIsIncident(false);
       setMediaUrl('');
@@ -203,20 +198,16 @@ export default function ScanPage() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Scanned Checkpoint *</label>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Scanned Checkpoint</label>
           <input
             type="text"
             value={checkpointName}
-            readOnly
-            placeholder="Scan QR code using viewfinder above..."
-            className={`w-full bg-slate-950 border rounded-xl px-4 py-3 text-sm cursor-not-allowed ${checkpointName ? 'border-emerald-500/50 text-emerald-400 font-bold' : 'border-red-500/50 text-red-400'}`}
+            onChange={(e) => setCheckpointName(e.target.value)}
+            placeholder="Scan QR code or enter checkpoint..."
+            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
             required
           />
-          {!checkpointName ? (
-            <p className="text-[11px] text-red-400 mt-1.5 font-semibold">⚠️ Mandatory: You must open the QR scanner and scan a checkpoint before submission.</p>
-          ) : (
-            <p className="text-[11px] text-emerald-400 mt-1.5">✓ Checkpoint verified successfully via scan.</p>
-          )}
+          <p className="text-xs text-emerald-400 mt-1.5">✓ Assigned to Location: Tom Salem Head Office</p>
         </div>
 
         <div>
@@ -261,8 +252,8 @@ export default function ScanPage() {
 
         <button
           type="submit"
-          disabled={loading || !checkpointName}
-          className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold py-4 rounded-xl uppercase tracking-wider transition-all shadow-lg cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed text-sm mt-2"
+          disabled={loading}
+          className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold py-4 rounded-xl uppercase tracking-wider transition-all shadow-lg cursor-pointer disabled:opacity-50 text-sm mt-2"
         >
           {loading ? 'Submitting...' : '🚀 SUBMIT PATROL LOG'}
         </button>
