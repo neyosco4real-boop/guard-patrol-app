@@ -62,6 +62,11 @@ export default function ScanPage() {
       alert('Please enter your Guard Name.');
       return;
     }
+    if (!checkpointName.trim()) {
+      alert('Mandatory Error: You must scan a checkpoint QR code before submitting a patrol log.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -74,7 +79,7 @@ export default function ScanPage() {
         id: Date.now().toString(),
         guardName: guardName.trim(),
         location: 'Tom Salem Head Office',
-        checkpointName: checkpointName.trim() || 'Front Gate',
+        checkpointName: checkpointName.trim(),
         notes: notes.trim() || (isIncident ? 'INCIDENT EMERGENCY REPORT' : 'Normal Patrol Scan'),
         isIncident,
         mediaUrl,
@@ -96,8 +101,6 @@ export default function ScanPage() {
 
       const updated = [newAlert, ...alerts];
       localStorage.setItem('tom_salem_patrol_alerts', JSON.stringify(updated));
-
-      // Force window storage event dispatch for multi-tab or immediate sync
       window.dispatchEvent(new Event('storage'));
 
       setSuccessMsg(true);
@@ -108,7 +111,7 @@ export default function ScanPage() {
       setTimeout(() => setSuccessMsg(false), 4000);
     } catch (error) {
       console.error('Submit error:', error);
-      alert('Error submitting log. Check console storage limits.');
+      alert('Error submitting log.');
     } finally {
       setLoading(false);
     }
@@ -200,17 +203,19 @@ export default function ScanPage() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Scanned Checkpoint</label>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Scanned Checkpoint *</label>
           <input
             type="text"
             value={checkpointName}
-            onChange={(e) => setCheckpointName(e.target.value)}
-            placeholder="Scan QR code (e.g. Front Gate)..."
-            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+            readOnly
+            placeholder="Scan QR code using viewfinder above..."
+            className={`w-full bg-slate-950 border rounded-xl px-4 py-3 text-sm cursor-not-allowed ${checkpointName ? 'border-emerald-500/50 text-emerald-400 font-bold' : 'border-red-500/50 text-red-400'}`}
             required
           />
-          {checkpointName && (
-            <p className="text-xs text-emerald-400 mt-1.5">✓ Assigned to Location: Tom Salem Head Office</p>
+          {!checkpointName ? (
+            <p className="text-[11px] text-red-400 mt-1.5 font-semibold">⚠️ Mandatory: You must open the QR scanner and scan a checkpoint before submission.</p>
+          ) : (
+            <p className="text-[11px] text-emerald-400 mt-1.5">✓ Checkpoint verified successfully via scan.</p>
           )}
         </div>
 
@@ -256,8 +261,8 @@ export default function ScanPage() {
 
         <button
           type="submit"
-          disabled={loading}
-          className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold py-4 rounded-xl uppercase tracking-wider transition-all shadow-lg cursor-pointer disabled:opacity-50 text-sm mt-2"
+          disabled={loading || !checkpointName}
+          className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold py-4 rounded-xl uppercase tracking-wider transition-all shadow-lg cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed text-sm mt-2"
         >
           {loading ? 'Submitting...' : '🚀 SUBMIT PATROL LOG'}
         </button>
