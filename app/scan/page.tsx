@@ -27,24 +27,40 @@ export default function ScanPage() {
   }, []);
 
   const handleScanSuccess = async (decodedText: string) => {
-    setCheckpointId(decodedText);
+    let extractedId = decodedText;
+    try {
+      const parsed = JSON.parse(decodedText);
+      if (parsed.checkpoint_id) {
+        extractedId = parsed.checkpoint_id;
+      } else if (parsed.id) {
+        extractedId = parsed.id;
+      }
+    } catch (e) {
+      // Not a JSON string, keep raw text
+    }
+
+    setCheckpointId(extractedId);
     setShowScanner(false);
     
     try {
       const res = await fetch('/api/checkpoints');
       if (res.ok) {
         const data = await res.json();
-        const found = data.find((cp: any) => cp.id === decodedText || cp.qr_code === decodedText || cp.name === decodedText);
+        const found = data.find((cp: any) => 
+          cp.id === extractedId || 
+          cp.qr_code === extractedId || 
+          cp.name.toLowerCase() === extractedId.toLowerCase()
+        );
         if (found) {
           setCheckpointName(found.name);
         } else {
-          setCheckpointName(decodedText);
+          setCheckpointName(extractedId);
         }
       } else {
-        setCheckpointName(decodedText);
+        setCheckpointName(extractedId);
       }
     } catch (err) {
-      setCheckpointName(decodedText);
+      setCheckpointName(extractedId);
     }
   };
 
