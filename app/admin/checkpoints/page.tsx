@@ -161,6 +161,67 @@ export default function CheckpointsPage() {
     setShowHtmlModal(true);
   };
 
+  const handleDownloadHTMLFile = () => {
+    const alerts = getFilteredAlerts();
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Certified Patrol Report - ${selectedExportLocation}</title>
+  <style>
+    body { font-family: monospace; background: #020617; color: #f8fafc; padding: 20px; }
+    h1 { color: #38bdf8; font-size: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+    th, td { border: 1px solid #334155; padding: 10px; text-align: left; }
+    th { background: #0f172a; color: #38bdf8; }
+    .incident { color: #f87171; font-weight: bold; }
+    .normal { color: #4ade80; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Tom Salem Security Operations - Certified Telemetry Audit Report</h1>
+  <p><strong>Filter Location:</strong> ${selectedExportLocation}</p>
+  <p><strong>Generated On:</strong> ${new Date().toLocaleString()}</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Date/Time</th>
+        <th>Guard</th>
+        <th>Location</th>
+        <th>Checkpoint</th>
+        <th>GPS</th>
+        <th>Status</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${alerts.map((item: any) => `
+        <tr>
+          <td>${new Date(item.createdAt).toLocaleString()}</td>
+          <td>${item.guardName}</td>
+          <td>${item.location || 'Tom Salem Head Office'}</td>
+          <td>${item.checkpointName}</td>
+          <td>${Number(item.lat).toFixed(4)}, ${Number(item.lng).toFixed(4)}</td>
+          <td class="${item.isIncident ? 'incident' : 'normal'}">${item.isIncident ? 'Incident' : 'Normal'}</td>
+          <td>${item.notes}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `patrol_report_${selectedExportLocation.replace(/\s+/g, '_').toLowerCase()}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <main className="min-h-screen bg-slate-950 text-white p-6 max-w-7xl mx-auto flex flex-col gap-6">
       {/* Top Bar */}
@@ -396,6 +457,12 @@ export default function CheckpointsPage() {
                 <p className="text-xs text-slate-400">Filter: {selectedExportLocation === 'all' ? 'All Locations (Global Report)' : selectedExportLocation}</p>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDownloadHTMLFile}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer flex items-center gap-1.5"
+                >
+                  📥 Download HTML
+                </button>
                 <button
                   onClick={() => window.print()}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer"
