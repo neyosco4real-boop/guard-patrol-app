@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 
-let alertsStore: any[] = [];
+declare global {
+  var __alertsStore: any[] | undefined;
+}
+
+if (!globalThis.__alertsStore) {
+  globalThis.__alertsStore = [];
+}
 
 export async function GET() {
-  return NextResponse.json(alertsStore);
+  return NextResponse.json(globalThis.__alertsStore || []);
 }
 
 export async function POST(request: Request) {
@@ -22,7 +28,11 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     };
 
-    alertsStore.unshift(newAlert);
+    if (!globalThis.__alertsStore) {
+      globalThis.__alertsStore = [];
+    }
+
+    globalThis.__alertsStore.unshift(newAlert);
 
     return NextResponse.json({ success: true, alert: newAlert }, { status: 201 });
   } catch (error) {
@@ -32,6 +42,6 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  alertsStore = [];
+  globalThis.__alertsStore = [];
   return NextResponse.json({ success: true });
 }
