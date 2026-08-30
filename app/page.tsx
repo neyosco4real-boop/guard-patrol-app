@@ -33,7 +33,7 @@ export default function ScanPage() {
       const rawValue = result[0].rawValue;
       try {
         const parsed = JSON.parse(rawValue);
-        const name = parsed.checkpoint_name || parsed.location || rawValue;
+        const name = parsed.checkpoint_name || parsed.location || parsed.name || rawValue;
         setCheckpointName(name);
       } catch {
         setCheckpointName(rawValue);
@@ -58,11 +58,10 @@ export default function ScanPage() {
       const currentLng = lng ?? 3.41434;
 
       const payload = {
-        guardName: guardName || 'Officer',
         guard: guardName || 'Officer',
-        checkpointId: checkpointName,
-        checkpointName: checkpointName,
-        location: checkpointName,
+        guardName: guardName || 'Officer',
+        checkpointName: checkpointName || 'Unknown Checkpoint',
+        location: checkpointName || 'Unknown Checkpoint',
         notes,
         isIncident,
         mediaUrl,
@@ -136,14 +135,12 @@ export default function ScanPage() {
         </div>
       )}
 
-      {/* Success Notification Banner */}
       {successMsg && (
         <div className="bg-emerald-950 border border-emerald-500 text-emerald-400 p-3 rounded-xl text-xs font-bold text-center animate-pulse">
           ✓ Patrol log successfully submitted and synced to live feed!
         </div>
       )}
 
-      {/* Header */}
       <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 text-center shadow-lg">
         <h1 className="text-xl font-bold tracking-wide text-white">GUARD PATROL PWA</h1>
         <p className="text-xs text-slate-400 mt-1">Standalone Terminal & Geofence Sync</p>
@@ -152,7 +149,6 @@ export default function ScanPage() {
         </div>
       </div>
 
-      {/* Open Scanner Button */}
       <button
         type="button"
         onClick={() => setShowScanner(true)}
@@ -161,7 +157,6 @@ export default function ScanPage() {
         📷 OPEN QR SCANNER VIEWFINDER
       </button>
 
-      {/* Form */}
       <form onSubmit={handleSubmit} className="bg-slate-900 border border-white/10 rounded-2xl p-5 space-y-4 shadow-lg">
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Guard Name</label>
