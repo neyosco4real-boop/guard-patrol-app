@@ -16,6 +16,9 @@ export default function ScanPage() {
   const [successMsg, setSuccessMsg] = useState(false);
 
   useEffect(() => {
+    const savedGuard = localStorage.getItem('tom_salem_guard_name');
+    if (savedGuard) setGuardName(savedGuard);
+
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -53,41 +56,52 @@ export default function ScanPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!guardName.trim()) {
+      alert('Please enter your Guard Name.');
+      return;
+    }
     setLoading(true);
 
     try {
+      localStorage.setItem('tom_salem_guard_name', guardName.trim());
+
       const currentLat = lat ?? 6.44508;
       const currentLng = lng ?? 3.41434;
 
-      const payload = {
-        guardName: guardName || 'Officer',
+      const newAlert = {
+        id: Date.now().toString(),
+        guardName: guardName.trim(),
         location: 'Tom Salem Head Office',
         checkpointName: checkpointName || 'Front Gate',
-        notes,
+        notes: notes.trim() || (isIncident ? 'INCIDENT EMERGENCY REPORT' : 'Normal Patrol Scan'),
         isIncident,
         mediaUrl,
         lat: currentLat,
         lng: currentLng,
+        createdAt: new Date().toISOString(),
       };
 
-      const response = await fetch('/api/alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        setSuccessMsg(true);
-        setCheckpointName('');
-        setNotes('Normal Patrol Scan');
-        setIsIncident(false);
-        setMediaUrl('');
-        setTimeout(() => setSuccessMsg(false), 4000);
-      } else {
-        alert('Submission failed.');
+      const cached = localStorage.getItem('tom_salem_patrol_alerts');
+      let alerts = [];
+      if (cached) {
+        try {
+          alerts = JSON.parse(cached);
+        } catch (err) {
+          console.error(err);
+        }
       }
+
+      const updated = [newAlert, ...alerts];
+      localStorage.setItem('tom_salem_patrol_alerts', JSON.stringify(updated));
+
+      setSuccessMsg(true);
+      setCheckpointName('');
+      setNotes('Normal Patrol Scan');
+      setIsIncident(false);
+      setMediaUrl('');
+      setTimeout(() => setSuccessMsg(false), 4000);
     } catch (error) {
       console.error(error);
       alert('Error submitting log.');
