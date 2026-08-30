@@ -11,15 +11,45 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/alerts');
       const data = await res.json();
-      if (Array.isArray(data)) {
+      if (Array.isArray(data) && data.length > 0) {
         setAlerts(data);
+        localStorage.setItem('tom_salem_patrol_alerts', JSON.stringify(data));
+      } else if (Array.isArray(data) && data.length === 0) {
+        // If API is empty, check localStorage backup
+        const cached = localStorage.getItem('tom_salem_patrol_alerts');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAlerts(parsed);
+          } else {
+            setAlerts([]);
+          }
+        } else {
+          setAlerts([]);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch telemetry alerts:', err);
+      // Fallback to localStorage on network error
+      const cached = localStorage.getItem('tom_salem_patrol_alerts');
+      if (cached) {
+        setAlerts(JSON.parse(cached));
+      }
     }
   };
 
   useEffect(() => {
+    // Load initial state from localStorage immediately to prevent blank flash on refresh
+    const cached = localStorage.getItem('tom_salem_patrol_alerts');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) setAlerts(parsed);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     fetchAlerts();
     const interval = setInterval(fetchAlerts, 5000);
     return () => clearInterval(interval);
@@ -28,6 +58,7 @@ export default function AdminPage() {
   const handleClearFeed = async () => {
     if (confirm('Are you sure you want to clear the live telemetry feed?')) {
       await fetch('/api/alerts', { method: 'DELETE' });
+      localStorage.removeItem('tom_salem_patrol_alerts');
       setAlerts([]);
     }
   };
@@ -107,7 +138,7 @@ export default function AdminPage() {
                       {new Date(alert.createdAt).toLocaleString()}
                     </td>
                     <td className="py-3 px-3 font-semibold text-white whitespace-nowrap">{alert.guardName}</td>
-                    <td className="py-3 px-3 text-slate-300">{alert.location}</td>
+                    <td className="py-3 px-3 text-slate-300 font-medium">{alert.location || 'Tom Salem Head Office'}</td>
                     <td className="py-3 px-3 text-cyan-300 font-medium">{alert.checkpointName}</td>
                     <td className="py-3 px-3 text-xs font-mono text-slate-300 whitespace-nowrap">
                       📍 {Number(alert.lat).toFixed(5)}, {Number(alert.lng).toFixed(5)}
@@ -165,8 +196,12 @@ export default function AdminPage() {
                 <span className="font-bold text-white text-sm">{selectedAlert.guardName}</span>
               </div>
               <div>
-                <span className="text-slate-400 uppercase tracking-wide block">Location & Checkpoint:</span>
-                <span className="font-bold text-cyan-300 text-sm">{selectedAlert.location} — {selectedAlert.checkpointName}</span>
+                <span className="text-slate-400 uppercase tracking-wide block">Parent Location:</span>
+                <span className="font-bold text-white text-sm">{selectedAlert.location || 'Tom Salem Head Office'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 uppercase tracking-wide block">Assigned Checkpoint:</span>
+                <span className="font-bold text-cyan-300 text-sm">{selectedAlert.checkpointName}</span>
               </div>
               <div>
                 <span className="text-slate-400 uppercase tracking-wide block">GPS Coordinates:</span>

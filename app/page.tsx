@@ -58,17 +58,14 @@ export default function ScanPage() {
       const currentLng = lng ?? 3.41434;
 
       const payload = {
-        guard: guardName || 'Officer',
         guardName: guardName || 'Officer',
-        checkpointName: checkpointName || 'Unknown Checkpoint',
-        location: checkpointName || 'Unknown Checkpoint',
+        location: 'Tom Salem Head Office',
+        checkpointName: checkpointName || 'Front Gate',
         notes,
         isIncident,
         mediaUrl,
         lat: currentLat,
         lng: currentLng,
-        latitude: currentLat,
-        longitude: currentLng,
       };
 
       const response = await fetch('/api/alerts', {
@@ -124,12 +121,12 @@ export default function ScanPage() {
             <button
               type="button"
               onClick={() => {
-                setCheckpointName('CR Awolowo Rd (Chicken Republic)');
+                setCheckpointName('Front Gate');
                 setShowScanner(false);
               }}
               className="mt-4 w-full bg-cyan-500 text-slate-950 font-bold py-3 rounded-xl text-xs uppercase cursor-pointer"
             >
-              Simulate Scan
+              Simulate Scan (Front Gate)
             </button>
           </div>
         </div>
@@ -143,7 +140,7 @@ export default function ScanPage() {
 
       <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 text-center shadow-lg">
         <h1 className="text-xl font-bold tracking-wide text-white">GUARD PATROL PWA</h1>
-        <p className="text-xs text-slate-400 mt-1">Standalone Terminal & Geofence Sync</p>
+        <p className="text-xs text-slate-400 mt-1">Tom Salem Head Office Terminal</p>
         <div className="mt-3 inline-flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-full">
           <span>📍 {lat !== null && lng !== null ? `GPS Active (${lat.toFixed(5)}, ${lng.toFixed(5)})` : '📍 GPS Active (6.44508, 3.41434)'}</span>
         </div>
@@ -164,24 +161,34 @@ export default function ScanPage() {
             type="text"
             value={guardName}
             onChange={(e) => setGuardName(e.target.value)}
-            placeholder="e.g. Officer Joshua"
+            placeholder="e.g. Officer Joe"
             className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
             required
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Scanned Checkpoint Name</label>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Parent Location</label>
+          <input
+            type="text"
+            value="Tom Salem Head Office"
+            disabled
+            className="w-full bg-slate-950/60 border border-white/10 rounded-xl px-4 py-3 text-slate-400 text-sm cursor-not-allowed"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Scanned Checkpoint</label>
           <input
             type="text"
             value={checkpointName}
             onChange={(e) => setCheckpointName(e.target.value)}
-            placeholder="Scan QR code..."
+            placeholder="Scan QR code (e.g. Front Gate)..."
             className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
             required
           />
           {checkpointName && (
-            <p className="text-xs text-emerald-400 mt-1.5">✓ Resolved Checkpoint: {checkpointName}</p>
+            <p className="text-xs text-emerald-400 mt-1.5">✓ Assigned to Location: Tom Salem Head Office</p>
           )}
         </div>
 
