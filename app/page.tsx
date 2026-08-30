@@ -150,9 +150,14 @@ export default function HomePage() {
           </label>
         </div>
 
-        {/* Live Camera Capture */}
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">📷 Live Incident Photo Capture</label>
+        {/* Live Camera Capture Section */}
+        <div className="bg-cyan-950/20 border border-cyan-500/30 p-4 rounded-xl space-y-2">
+          <label className="block text-xs font-bold uppercase tracking-wider text-cyan-300">
+            📷 Live Incident Camera Capture
+          </label>
+          <p className="text-[11px] text-slate-400">
+            Tap below to capture a direct photo from your device camera or upload evidence.
+          </p>
           <input
             type="file"
             accept="image/*"
@@ -161,7 +166,7 @@ export default function HomePage() {
             className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-cyan-500 file:text-slate-950 hover:file:bg-cyan-400 cursor-pointer"
           />
           {mediaUrl && (
-            <p className="text-xs text-emerald-400 mt-2 font-semibold">✓ Photo attached successfully</p>
+            <p className="text-xs text-emerald-400 font-semibold mt-1">✓ Incident Photo Attached Successfully</p>
           )}
         </div>
 
