@@ -1,565 +1,468 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 export default function CheckpointsPage() {
-  const [locations, setLocations] = useState<any[]>([]);
-  const [checkpoints, setCheckpoints] = useState<any[]>([]);
-  const [logs, setLogs] = useState<any[]>([]);
-  const [selectedLocationId, setSelectedLocationId] = useState<string>('all');
-  const [loading, setLoading] = useState(true);
+  const [locations, setLocations] = useState<any[]>([
+    {
+      id: '1',
+      name: 'Chicken Republic',
+      address: 'Nigeria',
+      checkpoints: [{ id: 'c1', name: 'CR Awolowo Rd' }]
+    },
+    {
+      id: '2',
+      name: 'Multichoice',
+      address: 'Victoria Island',
+      checkpoints: [{ id: 'c2', name: 'Swimming Pool' }]
+    },
+    {
+      id: '3',
+      name: 'Tom Salem Head Office',
+      address: 'No address specified.',
+      checkpoints: [{ id: 'c3', name: 'Front Gate' }]
+    }
+  ]);
 
-  // Modals state
+  const [newLocationName, setNewLocationName] = useState('');
+  const [newLocationAddress, setNewLocationAddress] = useState('');
   const [showAddLocationModal, setShowAddLocationModal] = useState(false);
+  const [activeLocationId, setActiveLocationId] = useState<string | null>(null);
+  const [newCheckpointName, setNewCheckpointName] = useState('');
   const [showAddCheckpointModal, setShowAddCheckpointModal] = useState(false);
-  const [selectedSiteForCheckpoint, setSelectedSiteForCheckpoint] = useState<any>(null);
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [showQrModal, setShowQrModal] = useState(false);
-  const [activeQrCheckpoint, setActiveQrCheckpoint] = useState<any>(null);
 
-  // Location form state
-  const [locationName, setLocationName] = useState('');
-  const [locationAddress, setLocationAddress] = useState('');
-  const [submittingLoc, setSubmittingLoc] = useState(false);
-
-  // Checkpoint form state
-  const [checkpointName, setCheckpointName] = useState('');
-  const [submittingCp, setSubmittingCp] = useState(false);
+  // Export & Report State
+  const [selectedExportLocation, setSelectedExportLocation] = useState('all');
+  const [htmlReportData, setHtmlReportData] = useState<any[] | null>(null);
+  const [showHtmlModal, setShowHtmlModal] = useState(false);
 
   useEffect(() => {
-    fetchData();
+    const saved = localStorage.getItem('tom_salem_locations');
+    if (saved) {
+      try {
+        setLocations(JSON.parse(saved));
+      } catch (e) {
+        console.error(e);
+      }
+    }
   }, []);
 
-  const fetchData = async () => {
-    setLoading(true);
-    const { data: locs } = await supabase.from('locations').select('*').order('name');
-    if (locs) setLocations(locs);
-
-    const { data: cps } = await supabase.from('checkpoints').select('*').order('name');
-    if (cps) setCheckpoints(cps);
-
-    const { data: patrolLogs } = await supabase
-      .from('patrol_logs')
-      .select('*')
-      .order('scanned_at', { ascending: false });
-    if (patrolLogs) setLogs(patrolLogs);
-
-    setLoading(false);
+  const saveLocations = (updated: any[]) => {
+    setLocations(updated);
+    localStorage.setItem('tom_salem_locations', JSON.stringify(updated));
   };
 
-  const handleCreateLocation = async (e: React.FormEvent) => {
+  const handleCreateLocation = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!locationName) return alert('Please enter a location name.');
-    setSubmittingLoc(true);
-
-    const { error } = await supabase.from('locations').insert([
-      {
-        name: locationName,
-        address: locationAddress,
-      },
-    ]);
-
-    if (error) {
-      alert('Error creating location: ' + error.message);
-    } else {
-      setLocationName('');
-      setLocationAddress('');
-      setShowAddLocationModal(false);
-      fetchData();
-    }
-    setSubmittingLoc(false);
+    if (!newLocationName.trim()) return;
+    const newLoc = {
+      id: Date.now().toString(),
+      name: newLocationName.trim(),
+      address: newLocationAddress.trim() || 'No address specified.',
+      checkpoints: []
+    };
+    saveLocations([...locations, newLoc]);
+    setNewLocationName('');
+    setNewLocationAddress('');
+    setShowAddLocationModal(false);
   };
 
-  const handleCreateCheckpoint = async (e: React.FormEvent) => {
+  const handleDeleteLocation = (id: string) => {
+    if (confirm('Are you sure you want to delete this location site?')) {
+      saveLocations(locations.filter(loc => loc.id !== id));
+    }
+  };
+
+  const handleAddCheckpoint = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!checkpointName || !selectedSiteForCheckpoint) return alert('Please provide checkpoint name.');
-    setSubmittingCp(true);
-
-    // Send ONLY location_id and name to match the database schema precisely
-    const { error } = await supabase.from('checkpoints').insert([
-      {
-        name: checkpointName,
-        location_id: selectedSiteForCheckpoint.id,
-      },
-    ]);
-
-    if (error) {
-      alert('Error creating checkpoint: ' + error.message);
-    } else {
-      setCheckpointName('');
-      setShowAddCheckpointModal(false);
-      setSelectedSiteForCheckpoint(null);
-      fetchData();
-    }
-    setSubmittingCp(false);
+    if (!newCheckpointName.trim() || !activeLocationId) return;
+    const updated = locations.map(loc => {
+      if (loc.id === activeLocationId) {
+        return {
+          ...loc,
+          checkpoints: [...loc.checkpoints, { id: Date.now().toString(), name: newCheckpointName.trim() }]
+        };
+      }
+      return loc;
+    });
+    saveLocations(updated);
+    setNewCheckpointName('');
+    setShowAddCheckpointModal(false);
+    setActiveLocationId(null);
   };
 
-  const handleDeleteLocation = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete site "${name}" and all its checkpoints?`)) return;
-    const { error } = await supabase.from('locations').delete().eq('id', id);
-    if (error) {
-      alert('Error deleting location: ' + error.message);
-    } else {
-      fetchData();
-    }
+  const handleDeleteCheckpoint = (locId: string, cpId: string) => {
+    const updated = locations.map(loc => {
+      if (loc.id === locId) {
+        return {
+          ...loc,
+          checkpoints: loc.checkpoints.filter((cp: any) => cp.id !== cpId)
+        };
+      }
+      return loc;
+    });
+    saveLocations(updated);
   };
 
-  const handleDeleteCheckpoint = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete checkpoint "${name}"?`)) return;
-    const { error } = await supabase.from('checkpoints').delete().eq('id', id);
-    if (error) {
-      alert('Error deleting checkpoint: ' + error.message);
-    } else {
-      fetchData();
+  const getFilteredAlerts = () => {
+    const cached = localStorage.getItem('tom_salem_patrol_alerts');
+    let alerts = [];
+    if (cached) {
+      try {
+        alerts = JSON.parse(cached);
+      } catch (e) {
+        console.error(e);
+      }
     }
-  };
 
-  // Filter logs based on selected location
-  const filteredLogs = logs.filter((log) => {
-    if (selectedLocationId === 'all') return true;
-    const loc = locations.find((l) => l.id === selectedLocationId);
-    if (!loc) return true;
-    return (
-      log.location_id === loc.id ||
-      log.location_name?.toLowerCase() === loc.name.toLowerCase() ||
-      log.location?.toLowerCase() === loc.name.toLowerCase()
-    );
-  });
+    if (selectedExportLocation === 'all') {
+      return alerts;
+    }
+
+    return alerts.filter((alert: any) => {
+      const locName = alert.location || 'Tom Salem Head Office';
+      return locName.toLowerCase() === selectedExportLocation.toLowerCase();
+    });
+  };
 
   const handleDownloadCSV = () => {
-    if (filteredLogs.length === 0) {
-      alert('No telemetry records found for export.');
+    const alerts = getFilteredAlerts();
+    if (alerts.length === 0) {
+      alert('No patrol logs found for the selected location.');
       return;
     }
 
-    const headers = ['Date & Time', 'Guard Name', 'Location', 'Checkpoint', 'Latitude', 'Longitude', 'Geofence Status', 'Notes', 'Photo URL'];
-    const rows = filteredLogs.map((l) => [
-      new Date(l.scanned_at).toISOString(),
-      `"${l.guard_name || ''}"`,
-      `"${l.location_name || l.location || ''}"`,
-      `"${l.checkpoint_name || ''}"`,
-      l.latitude || '',
-      l.longitude || '',
-      'Verified',
-      `"${(l.notes || '').replace(/"/g, '""')}"`,
-      `"${l.photo_url || ''}"`,
+    const headers = ['Date/Time', 'Guard Name', 'Location', 'Checkpoint', 'GPS Coordinates', 'Report Attached', 'Status', 'Notes'];
+    const rows = alerts.map((a: any) => [
+      `"${new Date(a.createdAt).toLocaleString()}"`,
+      `"${a.guardName || 'Officer'}"`,
+      `"${a.location || 'Tom Salem Head Office'}"`,
+      `"${a.checkpointName || 'Unknown'}"`,
+      `"${Number(a.lat).toFixed(5)}, ${Number(a.lng).toFixed(5)}"`,
+      `"${a.mediaUrl ? 'Yes' : 'None'}"`,
+      `"${a.isIncident ? 'Incident' : 'Normal'}"`,
+      `"${(a.notes || '').replace(/"/g, '""')}"`
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `patrol_report_${selectedLocationId === 'all' ? 'global' : selectedLocationId}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `patrol_report_${selectedExportLocation.replace(/\s+/g, '_').toLowerCase()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
+  const handleViewHTML = () => {
+    const alerts = getFilteredAlerts();
+    setHtmlReportData(alerts);
+    setShowHtmlModal(true);
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10 font-sans">
-      
+    <main className="min-h-screen bg-slate-950 text-white p-6 max-w-7xl mx-auto flex flex-col gap-6">
+      {/* Top Bar */}
+      <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
+        <div>
+          <div className="inline-flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1 rounded-full mb-2">
+            <span>● Site Management & Certified Report Exports</span>
+          </div>
+          <h1 className="text-2xl font-extrabold text-white">Checkpoint & Location Command</h1>
+          <p className="text-xs text-slate-400 mt-1">
+            Manage physical locations, site geofences, checkpoints, generate QR codes, and view certified patrol report HTML summaries instantly.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowAddLocationModal(true)}
+            className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs uppercase cursor-pointer transition-all shadow-md"
+          >
+            + Create Location
+          </button>
+          <Link
+            href="/admin/qr-codes"
+            className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs uppercase cursor-pointer border border-white/10 transition-all"
+          >
+            QR Generator
+          </Link>
+          <Link
+            href="/admin"
+            className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs uppercase cursor-pointer border border-white/10 transition-all"
+          >
+            Dashboard
+          </Link>
+        </div>
+      </div>
+
+      {/* Registered Location Sites */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-extrabold uppercase tracking-wider text-cyan-400">Registered Location Sites ({locations.length})</h2>
+          <button
+            onClick={() => setShowAddLocationModal(true)}
+            className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 cursor-pointer"
+          >
+            + Add Location Site
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {locations.map((loc) => (
+            <div key={loc.id} className="bg-slate-900 border border-white/10 rounded-2xl p-5 flex flex-col justify-between gap-4 shadow-xl">
+              <div>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-cyan-300">🏢 {loc.name}</h3>
+                  <button
+                    onClick={() => handleDeleteLocation(loc.id)}
+                    className="text-red-400 hover:text-red-300 text-xs font-bold px-2 py-1 bg-red-950/40 rounded-lg border border-red-500/30 cursor-pointer"
+                  >
+                    Delete Site
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">{loc.address}</p>
+              </div>
+
+              <div className="border-t border-white/10 pt-3 flex flex-col gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Checkpoints ({loc.checkpoints.length})
+                </span>
+                <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+                  {loc.checkpoints.length === 0 ? (
+                    <span className="text-xs text-slate-500 italic">No checkpoints added yet.</span>
+                  ) : (
+                    loc.checkpoints.map((cp: any) => (
+                      <div key={cp.id} className="bg-slate-950 border border-white/10 px-3 py-2 rounded-xl flex items-center justify-between text-xs">
+                        <span className="font-medium text-slate-200">📍 {cp.name}</span>
+                        <div className="flex items-center gap-1.5">
+                          <Link
+                            href={`/admin/qr-codes?location=${encodeURIComponent(loc.name)}&checkpoint=${encodeURIComponent(cp.name)}`}
+                            className="bg-cyan-950 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded font-bold hover:bg-cyan-900"
+                          >
+                            QR
+                          </Link>
+                          <button
+                            onClick={() => handleDeleteCheckpoint(loc.id, cp.id)}
+                            className="text-red-400 hover:text-red-300 font-bold px-1"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setActiveLocationId(loc.id);
+                  setShowAddCheckpointModal(true);
+                }}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-cyan-400 font-bold py-2 rounded-xl text-xs uppercase cursor-pointer border border-white/10 transition-all"
+              >
+                + Add Checkpoint
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Patrol Reports & Incident Exports */}
+      <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col gap-5">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <div>
+            <h2 className="text-sm font-extrabold uppercase tracking-wider text-cyan-400">Patrol Reports & Incident Exports</h2>
+            <p className="text-xs text-slate-400 mt-1">Select a specific location site to filter and view certified reports.</p>
+          </div>
+          <select
+            value={selectedExportLocation}
+            onChange={(e) => setSelectedExportLocation(e.target.value)}
+            className="bg-slate-950 border border-cyan-500/40 text-cyan-300 font-bold text-xs px-4 py-2.5 rounded-xl focus:outline-none cursor-pointer"
+          >
+            <option value="all">🌍 All Locations (Global Report)</option>
+            {locations.map((loc) => (
+              <option key={loc.id} value={loc.name}>
+                🏢 {loc.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            onClick={handleDownloadCSV}
+            className="w-full bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 font-bold py-4 rounded-xl text-xs uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center gap-2 shadow-md"
+          >
+            📊 Download Excel (CSV) for Selected Location
+          </button>
+          <button
+            onClick={handleViewHTML}
+            className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold py-4 rounded-xl text-xs uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center gap-2 shadow-lg"
+          >
+            🌐 View HTML Report for Selected Location
+          </button>
+        </div>
+      </div>
+
       {/* Add Location Modal */}
       {showAddLocationModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 md:p-8 max-w-lg w-full space-y-6 shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center border-b border-white/10 pb-4">
-              <h3 className="text-lg font-black text-white uppercase">+ Create Location Site</h3>
-              <button onClick={() => setShowAddLocationModal(false)} className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer">✕</button>
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <form onSubmit={handleCreateLocation} className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-white/10 pb-3">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-cyan-400">Create New Location Site</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddLocationModal(false)}
+                className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 bg-slate-800 rounded-lg cursor-pointer"
+              >
+                ✕ Close
+              </button>
             </div>
-
-            <form onSubmit={handleCreateLocation} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-mono text-slate-400">Location Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Tom Salem Head Office"
-                  value={locationName}
-                  onChange={(e) => setLocationName(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-mono text-slate-400">Address / Description</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Ikoyi, Lagos."
-                  value={locationAddress}
-                  onChange={(e) => setLocationAddress(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setShowAddLocationModal(false)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-5 py-2.5 rounded-xl text-xs uppercase cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingLoc}
-                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs uppercase transition-all shadow-lg shadow-cyan-500/20 cursor-pointer disabled:opacity-50"
-                >
-                  {submittingLoc ? 'Saving...' : 'Save Location'}
-                </button>
-              </div>
-            </form>
-          </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Site Name</label>
+              <input
+                type="text"
+                value={newLocationName}
+                onChange={(e) => setNewLocationName(e.target.value)}
+                placeholder="e.g. Sterling Bank Branch"
+                className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-cyan-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Address / Region</label>
+              <input
+                type="text"
+                value={newLocationAddress}
+                onChange={(e) => setNewLocationAddress(e.target.value)}
+                placeholder="e.g. Marina, Lagos"
+                className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold py-3 rounded-xl uppercase text-xs tracking-wider cursor-pointer"
+            >
+              Save Location Site
+            </button>
+          </form>
         </div>
       )}
 
       {/* Add Checkpoint Modal */}
-      {showAddCheckpointModal && selectedSiteForCheckpoint && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 md:p-8 max-w-md w-full space-y-6 shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center border-b border-white/10 pb-4">
-              <div>
-                <span className="text-[10px] font-mono uppercase text-cyan-400">Site: {selectedSiteForCheckpoint.name}</span>
-                <h3 className="text-lg font-black text-white uppercase">+ Add Checkpoint</h3>
-              </div>
-              <button onClick={() => setShowAddCheckpointModal(false)} className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer">✕</button>
-            </div>
-
-            <form onSubmit={handleCreateCheckpoint} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-mono text-slate-400">Checkpoint Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Back Gate, Server Room"
-                  value={checkpointName}
-                  onChange={(e) => setCheckpointName(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setShowAddCheckpointModal(false)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-5 py-2.5 rounded-xl text-xs uppercase cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingCp}
-                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs uppercase transition-all shadow-lg shadow-cyan-500/20 cursor-pointer disabled:opacity-50"
-                >
-                  {submittingCp ? 'Saving...' : 'Save Checkpoint'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* QR Code Modal for Checkpoint */}
-      {showQrModal && activeQrCheckpoint && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 md:p-8 max-w-sm w-full space-y-6 shadow-2xl text-center">
+      {showAddCheckpointModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <form onSubmit={handleAddCheckpoint} className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
             <div className="flex justify-between items-center border-b border-white/10 pb-3">
-              <h3 className="text-sm font-black text-white uppercase">Checkpoint QR Code</h3>
-              <button onClick={() => setShowQrModal(false)} className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer">✕</button>
-            </div>
-
-            <div className="space-y-2">
-              <div className="bg-white p-4 rounded-2xl inline-block shadow-lg">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                    JSON.stringify({
-                      checkpoint: activeQrCheckpoint.name,
-                      location: locations.find((l) => l.id === activeQrCheckpoint.location_id)?.name || 'Site',
-                    })
-                  )}`}
-                  alt="Checkpoint QR Code"
-                  className="w-48 h-48 mx-auto"
-                />
-              </div>
-              <div className="pt-2">
-                <p className="text-sm font-black text-white">{activeQrCheckpoint.name}</p>
-                <p className="text-xs font-mono text-cyan-400 uppercase">Location: {locations.find((l) => l.id === activeQrCheckpoint.location_id)?.name || 'Site'}</p>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <a
-                href={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(
-                  JSON.stringify({
-                    checkpoint: activeQrCheckpoint.name,
-                    location: locations.find((l) => l.id === activeQrCheckpoint.location_id)?.name || 'Site',
-                  })
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-3 rounded-xl text-xs uppercase cursor-pointer transition-all shadow-md shadow-cyan-500/20"
-              >
-                Download HQ QR
-              </a>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-cyan-400">Add Checkpoint to Location</h3>
               <button
-                onClick={() => setShowQrModal(false)}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-3 rounded-xl text-xs uppercase cursor-pointer"
+                type="button"
+                onClick={() => setShowAddCheckpointModal(false)}
+                className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 bg-slate-800 rounded-lg cursor-pointer"
               >
-                Close
+                ✕ Close
               </button>
             </div>
-          </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Checkpoint Name</label>
+              <input
+                type="text"
+                value={newCheckpointName}
+                onChange={(e) => setNewCheckpointName(e.target.value)}
+                placeholder="e.g. Vault Room / Server Room"
+                className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-cyan-500"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold py-3 rounded-xl uppercase text-xs tracking-wider cursor-pointer"
+            >
+              Save Checkpoint
+            </button>
+          </form>
         </div>
       )}
 
       {/* HTML Report View Modal */}
-      {showReportModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white text-slate-900 rounded-3xl p-6 md:p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto space-y-6 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-300 pb-4">
+      {showHtmlModal && htmlReportData && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] flex flex-col gap-4 shadow-2xl overflow-hidden">
+            <div className="flex justify-between items-center border-b border-white/10 pb-3">
               <div>
-                <h1 className="text-xl font-black uppercase tracking-tight">Tom Salem Security Operations</h1>
-                <p className="text-xs font-bold text-slate-600">Official Certified Patrol & Incident Telemetry Report</p>
+                <h3 className="text-sm font-extrabold uppercase tracking-wider text-cyan-400">Certified HTML Patrol Report</h3>
+                <p className="text-xs text-slate-400">Filter: {selectedExportLocation === 'all' ? 'All Locations (Global Report)' : selectedExportLocation}</p>
               </div>
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-2 rounded-xl text-xs uppercase cursor-pointer"
-              >
-                ✕ Close Report
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer"
+                >
+                  🖨️ Print / Save PDF
+                </button>
+                <button
+                  onClick={() => setShowHtmlModal(false)}
+                  className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 bg-slate-800 rounded-lg cursor-pointer"
+                >
+                  ✕ Close
+                </button>
+              </div>
             </div>
 
-            <div className="flex justify-between text-xs font-mono text-slate-600">
-              <p>Generated: {new Date().toLocaleString()}</p>
-              <p>Scope: {selectedLocationId === 'all' ? 'All Locations (Global Report)' : locations.find(l => l.id === selectedLocationId)?.name || 'Selected Site'}</p>
-            </div>
+            <div className="overflow-y-auto flex-1 space-y-4 pr-2">
+              <div className="bg-slate-950 border border-white/10 p-4 rounded-xl flex justify-between items-center text-xs">
+                <div>
+                  <span className="font-bold text-white block text-sm">Tom Salem Security Operations</span>
+                  <span className="text-slate-400">Automated Telemetry Audit Report</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-400 block">Generated On:</span>
+                  <span className="font-mono text-cyan-400">{new Date().toLocaleString()}</span>
+                </div>
+              </div>
 
-            <div className="space-y-4">
-              <h2 className="text-sm font-black uppercase border-b border-slate-300 pb-1">Telemetry Summary ({filteredLogs.length} Records)</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+              {htmlReportData.length === 0 ? (
+                <div className="text-center py-12 text-slate-500 text-sm">
+                  No patrol logs recorded for this selection.
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-slate-400 bg-slate-100 font-bold">
-                      <th className="p-2 border border-slate-300">Date & Time</th>
-                      <th className="p-2 border border-slate-300">Guard</th>
-                      <th className="p-2 border border-slate-300">Location</th>
-                      <th className="p-2 border border-slate-300">Checkpoint</th>
-                      <th className="p-2 border border-slate-300">GPS Coordinates</th>
-                      <th className="p-2 border border-slate-300">Status</th>
-                      <th className="p-2 border border-slate-300">Notes / Evidence</th>
+                    <tr className="border-b border-white/10 text-slate-400 uppercase tracking-wider">
+                      <th className="py-2.5 px-3">Date/Time</th>
+                      <th className="py-2.5 px-3">Guard</th>
+                      <th className="py-2.5 px-3">Location</th>
+                      <th className="py-2.5 px-3">Checkpoint</th>
+                      <th className="py-2.5 px-3">GPS</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">Notes</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {filteredLogs.map((log) => (
-                      <tr key={log.id} className="border-b border-slate-200">
-                        <td className="p-2 border border-slate-300">{new Date(log.scanned_at).toLocaleString()}</td>
-                        <td className="p-2 border border-slate-300 font-bold">{log.guard_name}</td>
-                        <td className="p-2 border border-slate-300">{log.location_name || log.location || 'N/A'}</td>
-                        <td className="p-2 border border-slate-300">{log.checkpoint_name}</td>
-                        <td className="p-2 border border-slate-300 font-mono text-[10px]">
-                          {log.latitude ? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}` : 'N/A'}
+                  <tbody className="divide-y divide-white/5">
+                    {htmlReportData.map((item: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-slate-800/40">
+                        <td className="py-2.5 px-3 whitespace-nowrap text-slate-300">{new Date(item.createdAt).toLocaleString()}</td>
+                        <td className="py-2.5 px-3 font-semibold text-white">{item.guardName}</td>
+                        <td className="py-2.5 px-3 text-slate-300">{item.location || 'Tom Salem Head Office'}</td>
+                        <td className="py-2.5 px-3 text-cyan-300 font-medium">{item.checkpointName}</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-400">{Number(item.lat).toFixed(4)}, {Number(item.lng).toFixed(4)}</td>
+                        <td className="py-2.5 px-3">
+                          <span className={`px-2 py-0.5 rounded font-bold ${item.isIncident ? 'bg-red-950 text-red-400' : 'bg-emerald-950 text-emerald-400'}`}>
+                            {item.isIncident ? 'Incident' : 'Normal'}
+                          </span>
                         </td>
-                        <td className="p-2 border border-slate-300 text-emerald-700 font-bold">Verified</td>
-                        <td className="p-2 border border-slate-300">
-                          <div>{log.notes || 'Normal patrol scan.'}</div>
-                          {log.photo_url && <a href={log.photo_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 underline font-bold mt-1 block">[View Photo Evidence]</a>}
-                        </td>
+                        <td className="py-2.5 px-3 text-slate-300">{item.notes}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-
-            <div className="pt-6 flex justify-between text-xs font-mono border-t border-slate-300 items-center">
-              <div>Authorized By: Tom Salem Security Command</div>
-              <button
-                onClick={() => window.print()}
-                className="bg-slate-900 text-white font-bold px-5 py-2.5 rounded-xl text-xs uppercase cursor-pointer"
-              >
-                🖨️ Print / Save as PDF
-              </button>
+              )}
             </div>
           </div>
         </div>
       )}
-
-      {/* Main UI */}
-      <div className="max-w-7xl mx-auto space-y-8">
-        
-        {/* Header Banner */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/20 p-8 rounded-3xl shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 px-3 py-1 rounded-full text-indigo-300 text-xs font-mono">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              Site Management & Certified Report Exports
-            </div>
-            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white">
-              Checkpoint & Location Command
-            </h1>
-            <p className="text-xs md:text-sm text-slate-400 max-w-lg">
-              Manage physical locations, site geofences, checkpoints, generate QR codes, and view certified patrol report HTML summaries instantly.
-            </p>
-          </div>
-          
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => setShowAddLocationModal(true)}
-              className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-5 py-3 rounded-2xl text-xs uppercase shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
-            >
-              + Create Location
-            </button>
-            <a
-              href="/admin/qr-codes"
-              className="bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold px-5 py-3 rounded-2xl text-xs uppercase border border-cyan-500/30 transition-all"
-            >
-              📷 QR Generator
-            </a>
-            <a
-              href="/admin"
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-5 py-3 rounded-2xl text-xs uppercase border border-white/10 transition-all"
-            >
-              📊 Dashboard
-            </a>
-          </div>
-        </div>
-
-        {/* Registered Location Sites */}
-        <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-base font-black uppercase text-white tracking-wider">Registered Location Sites ({locations.length})</h2>
-            <button
-              onClick={() => setShowAddLocationModal(true)}
-              className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-bold px-4 py-2 rounded-xl text-xs uppercase cursor-pointer transition-all"
-            >
-              + Add Location Site
-            </button>
-          </div>
-
-          {loading ? (
-            <div className="text-center py-10 text-xs text-slate-500 font-mono">Loading sites...</div>
-          ) : locations.length === 0 ? (
-            <div className="text-center py-10 text-xs text-slate-500 font-mono">No location sites registered yet.</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {locations.map((loc) => {
-                const siteCheckpoints = checkpoints.filter((cp) => cp.location_id === loc.id);
-                return (
-                  <div key={loc.id} className="bg-slate-950 border border-white/10 rounded-2xl p-6 space-y-4 flex flex-col justify-between">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-cyan-400 font-black text-sm">
-                            <span>🏢</span> {loc.name}
-                          </div>
-                          <p className="text-xs text-slate-400">{loc.address || 'No address specified.'}</p>
-                        </div>
-                      </div>
-
-                      {/* Checkpoints list for this location with QR action */}
-                      <div className="space-y-2 pt-2 border-t border-white/5">
-                        <div className="flex justify-between items-center text-[11px] font-mono text-slate-400 uppercase">
-                          <span>Checkpoints ({siteCheckpoints.length})</span>
-                        </div>
-                        {siteCheckpoints.length === 0 ? (
-                          <div className="text-[11px] text-slate-600 italic">No checkpoints added yet.</div>
-                        ) : (
-                          <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                            {siteCheckpoints.map((cp) => (
-                              <div key={cp.id} className="flex items-center justify-between bg-slate-900 border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-200">
-                                <div className="flex items-center gap-2 font-mono truncate">
-                                  <span>📍</span>
-                                  <span className="truncate">{cp.name}</span>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <button
-                                    onClick={() => {
-                                      setActiveQrCheckpoint(cp);
-                                      setShowQrModal(true);
-                                    }}
-                                    className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-bold px-2 py-1 rounded-lg text-[10px] uppercase cursor-pointer border border-cyan-500/30"
-                                    title="View QR Code"
-                                  >
-                                    📷 QR
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteCheckpoint(cp.id, cp.name)}
-                                    className="text-rose-400 hover:text-rose-200 font-bold text-sm cursor-pointer px-1"
-                                    title="Delete checkpoint"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-center pt-3 border-t border-white/5">
-                      <button
-                        onClick={() => {
-                          setSelectedSiteForCheckpoint(loc);
-                          setShowAddCheckpointModal(true);
-                        }}
-                        className="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-bold px-3 py-2 rounded-xl text-[11px] uppercase border border-indigo-500/30 cursor-pointer transition-all"
-                      >
-                        + Add Checkpoint
-                      </button>
-                      <button
-                        onClick={() => handleDeleteLocation(loc.id, loc.name)}
-                        className="bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-bold px-3 py-2 rounded-xl text-[11px] uppercase border border-rose-500/30 cursor-pointer transition-all"
-                      >
-                        🗑️ Delete Site
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Patrol Reports & Incident Exports */}
-        <div className="bg-slate-900/80 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h2 className="text-base font-black uppercase text-white tracking-wider">Patrol Reports & Incident Exports</h2>
-              <p className="text-xs text-slate-400">Select a specific location site to filter and view certified reports.</p>
-            </div>
-            
-            <select
-              value={selectedLocationId}
-              onChange={(e) => setSelectedLocationId(e.target.value)}
-              className="bg-slate-950 border border-indigo-500/30 rounded-xl px-4 py-3 text-xs text-cyan-300 font-mono font-bold focus:outline-none cursor-pointer"
-            >
-              <option value="all">🌍 All Locations (Global Report)</option>
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>
-                  🏢 {loc.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            <button
-              onClick={handleDownloadCSV}
-              className="bg-slate-800 hover:bg-slate-700 text-emerald-300 font-black p-5 rounded-2xl text-xs uppercase border border-emerald-500/30 flex items-center justify-center gap-3 cursor-pointer shadow-lg transition-all"
-            >
-              📊 Download Excel (CSV) for Selected Location
-            </button>
-            <button
-              onClick={() => setShowReportModal(true)}
-              className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black p-5 rounded-2xl text-xs uppercase shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-3 cursor-pointer transition-all"
-            >
-              👁️ View HTML Report for Selected Location
-            </button>
-          </div>
-        </div>
-
-      </div>
-    </div>
+    </main>
   );
 }
