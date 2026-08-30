@@ -97,6 +97,7 @@ export default function ScanPage() {
       const updated = [newAlert, ...alerts];
       localStorage.setItem('tom_salem_patrol_alerts', JSON.stringify(updated));
       window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new Event('patrol_update'));
 
       setSuccessMsg(true);
       setCheckpointName('Front Gate');
