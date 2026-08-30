@@ -1,4 +1,6 @@
-'import { useState, useEffect } from \'react\';'
+'use client';
+
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import QRScanner from '@/app/components/QRScanner';
 
