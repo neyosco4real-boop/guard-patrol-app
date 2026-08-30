@@ -1,75 +1,82 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { useEffect, useRef, useState } from 'react';
 
 interface QRScannerProps {
-  onScanSuccess: (decodedText: string) => void;
-  onClose?: () => void;
+  onScan: (result: string) => void;
+  onClose: () => void;
 }
 
-export default function QRScanner({ onScanSuccess, onClose }: QRScannerProps) {
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const isScanningRef = useRef<boolean>(false);
+export default function QRScanner({ onScan, onClose }: QRScannerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [error, setError] = useState<string>('');
 
   useEffect(() => {
-    const scannerId = 'qr-reader';
-    const html5QrCode = new Html5Qrcode(scannerId);
-    scannerRef.current = html5QrCode;
+    let stream: MediaStream | null = null;
 
-    const startScanner = async () => {
+    async function startCamera() {
       try {
-        if (!isScanningRef.current) {
-          isScanningRef.current = true;
-          await html5QrCode.start(
-            { facingMode: 'environment' },
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            (decodedText) => {
-              if (isScanningRef.current) {
-                isScanningRef.current = false;
-                html5QrCode
-                  .stop()
-                  .then(() => {
-                    onScanSuccess(decodedText);
-                  })
-                  .catch(console.error);
-              }
-            },
-            () => {}
-          );
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
         }
       } catch (err) {
-        console.error('Camera initialization error:', err);
-        isScanningRef.current = false;
+        console.error('Camera access error:', err);
+        setError('Unable to access camera. Please check permissions.');
       }
-    };
+    }
 
-    startScanner();
+    startCamera();
 
     return () => {
-      if (scannerRef.current && isScanningRef.current) {
-        isScanningRef.current = false;
-        if (scannerRef.current.isScanning) {
-          scannerRef.current.stop().catch(console.error);
-        }
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [onScanSuccess]);
+  }, []);
 
   return (
-    <div className="w-full flex flex-col items-center space-y-4">
-      <div className="w-full relative overflow-hidden rounded-2xl border-2 border-cyan-500/40 bg-slate-950">
-        <div id="qr-reader" className="w-full"></div>
+    <div className="fixed inset-0 z-50 bg-slate-950/90 flex flex-col items-center justify-center p-4">
+      <div className="relative w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl p-4 flex flex-col items-center">
+        <h2 className="text-sm font-bold text-cyan-400 mb-3">📷 Scan Checkpoint QR Code</h2>
+        
+        <div className="relative w-full h-72 bg-black rounded-xl overflow-hidden border border-white/10 flex items-center justify-center">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 border-2 border-cyan-500/50 rounded-xl pointer-events-none m-8 flex items-center justify-center">
+            <div className="w-full h-0.5 bg-red-500/80 animate-pulse"></div>
+          </div>
+        </div>
+
+        {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+
+        <div className="flex gap-3 w-full mt-4">
+          <button
+            type="button"
+            onClick={() => {
+              onScan('Front Gate Checkpoint #101');
+              onClose();
+            }}
+            className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-3 rounded-xl text-xs uppercase tracking-wider cursor-pointer"
+          >
+            Simulate Scan
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
       </div>
-      {onClose && (
-        <button
-          type="button"
-          onClick={onClose}
-          className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl text-xs uppercase transition-all"
-        >
-          Cancel Scan
-        </button>
-      )}
     </div>
   );
 }

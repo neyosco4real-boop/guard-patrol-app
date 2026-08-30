@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import QRScanner from './components/QRScanner';
 
 export default function HomePage() {
   const router = useRouter();
@@ -10,6 +11,7 @@ export default function HomePage() {
   const [notes, setNotes] = useState('Normal Patrol Scan');
   const [isIncident, setIsIncident] = useState(false);
   const [mediaUrl, setMediaUrl] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
   const [gps, setGps] = useState({ lat: 6.4451, lng: 3.4143 });
   const [loading, setLoading] = useState(false);
 
@@ -76,6 +78,13 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto flex flex-col gap-5">
+      {showScanner && (
+        <QRScanner
+          onScan={(scannedVal) => setCheckpointName(scannedVal)}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
+
       {/* Header Card */}
       <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 text-center shadow-lg">
         <h1 className="text-xl font-bold tracking-wide text-white">GUARD PATROL PWA</h1>
@@ -85,10 +94,10 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* QR Scanner Viewfinder Button */}
+      {/* Real QR Scanner Viewfinder Button */}
       <button
         type="button"
-        onClick={() => alert('QR Scanner Viewfinder Active')}
+        onClick={() => setShowScanner(true)}
         className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm tracking-wide cursor-pointer"
       >
         📷 OPEN QR SCANNER VIEWFINDER
