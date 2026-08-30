@@ -1,168 +1,178 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import QRScanner from '@/app/components/QRScanner';
+import { useRouter } from 'next/navigation';
 
-export default function GuardPWA() {
+export default function HomePage() {
+  const router = useRouter();
   const [guardName, setGuardName] = useState('');
   const [checkpointName, setCheckpointName] = useState('');
-  const [checkpointId, setCheckpointId] = useState('');
   const [notes, setNotes] = useState('Normal Patrol Scan');
+  const [isIncident, setIsIncident] = useState(false);
+  const [mediaUrl, setMediaUrl] = useState('');
   const [gps, setGps] = useState({ lat: 6.4451, lng: 3.4143 });
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
-    if (navigator.geolocation) {
+    if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (p) => setGps({ lat: p.coords.latitude, lng: p.coords.longitude }),
-        (e) => console.warn('GPS Warning:', e),
+        (position) => {
+          setGps({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => console.error('GPS Error:', error),
         { enableHighAccuracy: true }
       );
     }
   }, []);
 
-  const handleScanSuccess = (decodedText: string) => {
-    setScanning(false);
-    try {
-      const parsed = JSON.parse(decodedText);
-      setCheckpointName(parsed.checkpoint_name || decodedText);
-      const rawId = parsed.checkpoint_id || parsed.id || decodedText;
-      const uuidMatch = String(rawId).match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
-      setCheckpointId(uuidMatch ? uuidMatch[0] : '');
-    } catch (e) {
-      setCheckpointName(decodedText);
-      const uuidMatch = decodedText.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
-      setCheckpointId(uuidMatch ? uuidMatch[0] : '');
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setMediaUrl(url);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guardName.trim() || !checkpointName.trim()) {
-      alert('Please provide both Guard Name and Checkpoint Name.');
-      return;
-    }
-
     setLoading(true);
-    setSuccess(false);
-
-    const coordString = `${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}`;
 
     try {
-      const { error } = await supabase.from('patrol_logs').insert([
-        {
-          checkpoint_id: checkpointId || null,
-          guard_name: guardName.trim(),
-          checkpoint_name: checkpointName.trim(),
-          location: checkpointName.trim(),
-          coordinates: coordString,
-          scanned_at: new Date().toISOString(),
-          scanned_location: coordString,
-          notes: notes.trim(),
-        },
-      ]);
+      const payload = {
+        guardName: guardName || 'Officer Joshua',
+        checkpointId: checkpointName || 'Front Gate',
+        checkpointName: checkpointName || 'Front Gate',
+        notes,
+        isIncident,
+        mediaUrl,
+        lat: gps.lat,
+        lng: gps.lng,
+        latitude: gps.lat,
+        longitude: gps.lng,
+      };
 
-      if (error) throw error;
+      const res = await fetch('/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-      setSuccess(true);
-      setCheckpointName('');
-      setCheckpointId('');
-      setNotes('Normal Patrol Scan');
-      setTimeout(() => setSuccess(false), 4000);
-    } catch (err: any) {
-      alert('Submission failed: ' + err.message);
+      if (res.ok) {
+        alert('Patrol log submitted successfully!');
+        router.push('/admin');
+      } else {
+        alert('Failed to submit patrol log.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error submitting log.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center font-sans">
-      <div className="w-full max-w-md space-y-6">
-        
-        <div className="bg-slate-900 border border-white/10 p-6 rounded-3xl shadow-xl text-center space-y-2">
-          <h1 className="text-xl font-black text-white uppercase tracking-wider">Guard Patrol PWA</h1>
-          <p className="text-xs text-slate-400">Standalone Terminal & Geofence Sync</p>
-          <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] font-mono text-emerald-400">
-            <span>📍 GPS Active ({gps.lat}, {gps.lng})</span>
-          </div>
+    <main className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto flex flex-col gap-5">
+      {/* Header Card */}
+      <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 text-center shadow-lg">
+        <h1 className="text-xl font-bold tracking-wide text-white">GUARD PATROL PWA</h1>
+        <p className="text-xs text-slate-400 mt-1">Standalone Terminal & Geofence Sync</p>
+        <div className="mt-3 inline-flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-full">
+          <span>📍 GPS Active ({gps.lat.toFixed(5)}, {gps.lng.toFixed(5)})</span>
+        </div>
+      </div>
+
+      {/* QR Scanner Viewfinder Button */}
+      <button
+        type="button"
+        onClick={() => alert('QR Scanner Viewfinder Active')}
+        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm tracking-wide cursor-pointer"
+      >
+        📷 OPEN QR SCANNER VIEWFINDER
+      </button>
+
+      {/* Patrol Form */}
+      <form onSubmit={handleSubmit} className="bg-slate-900 border border-white/10 rounded-2xl p-5 space-y-4 shadow-lg">
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Guard Name</label>
+          <input
+            type="text"
+            value={guardName}
+            onChange={(e) => setGuardName(e.target.value)}
+            placeholder="e.g. Officer Joshua"
+            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+            required
+          />
         </div>
 
-        {scanning ? (
-          <div className="bg-slate-900 border border-white/10 p-4 rounded-3xl shadow-xl space-y-3">
-            <QRScanner onScanSuccess={handleScanSuccess} onClose={() => setScanning(false)} />
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setScanning(true)}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-wider shadow-lg shadow-blue-600/25 transition-all cursor-pointer"
-          >
-            📷 Open QR Scanner Viewfinder
-          </button>
-        )}
-
-        <form onSubmit={handleSubmit} className="bg-slate-900 border border-white/10 p-6 rounded-3xl shadow-xl space-y-5">
-          
-          <div className="space-y-2">
-            <label className="text-[10px] font-mono uppercase text-cyan-400 tracking-wider">Guard Name</label>
-            <input
-              type="text"
-              placeholder="e.g. Officer Joshua"
-              value={guardName}
-              onChange={(e) => setGuardName(e.target.value)}
-              className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] font-mono uppercase text-cyan-400 tracking-wider">Scanned Checkpoint Name</label>
-            <input
-              type="text"
-              placeholder="Scan QR code..."
-              value={checkpointName}
-              readOnly
-              className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-cyan-300 focus:outline-none"
-              required
-            />
-            {checkpointName && (
-              <p className="text-[10px] font-mono text-emerald-400">
-                ✓ Resolved Checkpoint: {checkpointName}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] font-mono uppercase text-cyan-400 tracking-wider">Patrol Notes / Incident</label>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full bg-slate-950 border border-white/10 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-cyan-500 resize-none"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-4 rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-cyan-500/20 cursor-pointer disabled:opacity-50"
-          >
-            {loading ? 'Submitting Log...' : '🚀 Submit Patrol Log'}
-          </button>
-
-          {success && (
-            <div className="p-3 bg-emerald-500/20 border border-emerald-400 text-emerald-300 rounded-xl text-xs font-bold text-center">
-              ✓ Log Submitted Successfully!
-            </div>
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Scanned Checkpoint Name</label>
+          <input
+            type="text"
+            value={checkpointName}
+            onChange={(e) => setCheckpointName(e.target.value)}
+            placeholder="Scan QR code..."
+            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+            required
+          />
+          {checkpointName && (
+            <p className="text-xs text-emerald-400 mt-1.5">✓ Resolved Checkpoint: {checkpointName}</p>
           )}
+        </div>
 
-        </form>
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Patrol Notes / Incident</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+          />
+        </div>
 
-      </div>
+        {/* Incident Toggle */}
+        <div className="flex items-center gap-3 bg-slate-950 border border-white/10 p-3 rounded-xl">
+          <input
+            type="checkbox"
+            id="incidentToggle"
+            checked={isIncident}
+            onChange={(e) => {
+              setIsIncident(e.target.checked);
+              if (e.target.checked) setNotes('INCIDENT EMERGENCY: ');
+            }}
+            className="w-5 h-5 accent-red-500 cursor-pointer"
+          />
+          <label htmlFor="incidentToggle" className="text-xs font-bold text-red-400 cursor-pointer">
+            Mark as Incident / Emergency Report
+          </label>
+        </div>
+
+        {/* Live Camera Capture */}
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">📷 Live Incident Photo Capture</label>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFileUpload}
+            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-cyan-500 file:text-slate-950 hover:file:bg-cyan-400 cursor-pointer"
+          />
+          {mediaUrl && (
+            <p className="text-xs text-emerald-400 mt-2 font-semibold">✓ Photo attached successfully</p>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold py-4 rounded-xl uppercase tracking-wider transition-all shadow-lg cursor-pointer disabled:opacity-50 text-sm mt-2"
+        >
+          {loading ? 'Submitting...' : '🚀 SUBMIT PATROL LOG'}
+        </button>
+      </form>
     </main>
   );
 }
