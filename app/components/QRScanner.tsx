@@ -9,46 +9,49 @@ interface QRScannerProps {
 }
 
 export default function QRScanner({ onScanSuccess, onClose }: QRScannerProps) {
-  const isScanningRef = useRef(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const isScanningRef = useRef<boolean>(false);
 
   useEffect(() => {
-    const html5Qrcode = new Html5Qrcode('qr-reader');
+    const scannerId = 'qr-reader';
+    const html5QrCode = new Html5Qrcode(scannerId);
+    scannerRef.current = html5QrCode;
 
     const startScanner = async () => {
       try {
-        isScanningRef.current = true;
-        await html5Qrcode.start(
-          { facingMode: 'environment' },
-          {
-            fps: 20,
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-              const minDimension = Math.min(viewfinderWidth, viewfinderHeight);
-              return {
-                width: Math.floor(minDimension * 0.85),
-                height: Math.floor(minDimension * 0.85),
-              };
+        if (!isScanningRef.current) {
+          isScanningRef.current = true;
+          await html5QrCode.start(
+            { facingMode: 'environment' },
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            (decodedText) => {
+              if (isScanningRef.current) {
+                isScanningRef.current = false;
+                html5QrCode
+                  .stop()
+                  .then(() => {
+                    onScanSuccess(decodedText);
+                  })
+                  .catch(console.error);
+              }
             },
-          },
-          (decodedText) => {
-            if (isScanningRef.current) {
-              isScanningRef.current = false;
-              html5Qrcode.stop().then(() => {
-                onScanSuccess(decodedText);
-              }).catch(console.error);
-            }
-          },
-          () => {}
-        );
+            () => {}
+          );
+        }
       } catch (err) {
         console.error('Camera initialization error:', err);
+        isScanningRef.current = false;
       }
     };
 
     startScanner();
 
     return () => {
-      if (html5Qrcode.isScanning) {
-        html5Qrcode.stop().catch(console.error);
+      if (scannerRef.current && isScanningRef.current) {
+        isScanningRef.current = false;
+        if (scannerRef.current.isScanning) {
+          scannerRef.current.stop().catch(console.error);
+        }
       }
     };
   }, [onScanSuccess]);
