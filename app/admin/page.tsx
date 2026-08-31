@@ -74,6 +74,88 @@ export default function AdminPage() {
     setNewCheckpoint('');
   };
 
+  // Export functions
+  const exportToCSV = () => {
+    const headers = ['Date/Time', 'Guard Name', 'Location', 'Checkpoint', 'GPS Coordinates', 'Geofence', 'Status', 'Incident Report'];
+    const rows = alerts.map((a) => [
+      `"${new Date(a.createdAt).toLocaleString()}"`,
+      `"${a.guardName}"`,
+      `"${a.location}"`,
+      `"${a.checkpointName}"`,
+      `"${a.lat}, ${a.lng}"`,
+      `"Within Perimeter"`,
+      `"${a.isIncident ? 'Incident' : 'Successful Scan'}"`,
+      `"${(a.notes || '').replace(/"/g, '""')}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `TomSalem_Patrol_Report_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToHTMLView = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Tom Salem Security Operations - Certified Patrol Report</title>
+          <style>
+            body { font-family: monospace, sans-serif; background: #fff; color: #111; padding: 20px; }
+            h1 { font-size: 20px; margin-bottom: 5px; }
+            p { font-size: 12px; color: #555; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th { background: #f4f4f4; }
+            .incident { color: #d9534f; font-weight: bold; }
+            .success { color: #5cb85c; font-weight: bold; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>
+          <h1>TOM SALEM SECURITY OPERATIONS</h1>
+          <p>Certified Patrol Telemetry & Incident Report | Generated: ${new Date().toLocaleString()}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Date/Time</th>
+                <th>Guard Name</th>
+                <th>Location</th>
+                <th>Checkpoint</th>
+                <th>GPS Coordinates</th>
+                <th>Status</th>
+                <th>Incident Report</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${alerts.map(a => `
+                <tr>
+                  <td>${new Date(a.createdAt).toLocaleString()}</td>
+                  <td><b>${a.guardName}</b></td>
+                  <td>${a.location}</td>
+                  <td>${a.checkpointName}</td>
+                  <td>${a.lat}, ${a.lng}</td>
+                  <td class="${a.isIncident ? 'incident' : 'success'}">${a.isIncident ? 'Incident' : 'Successful Scan'}</td>
+                  <td>${a.notes || 'Normal Patrol Scan'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   return (
     <main className="min-h-screen bg-[#070913] text-white p-6 md:p-10 font-sans flex flex-col gap-8 relative">
       {/* Header section */}
@@ -89,7 +171,21 @@ export default function AdminPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={exportToCSV}
+            className="bg-slate-900 hover:bg-slate-800 text-cyan-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-800 flex items-center gap-2 cursor-pointer shadow"
+          >
+            📊 Export Excel (CSV)
+          </button>
+          <button
+            type="button"
+            onClick={exportToHTMLView}
+            className="bg-slate-900 hover:bg-slate-800 text-cyan-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-800 flex items-center gap-2 cursor-pointer shadow"
+          >
+            🖨️ View Print / HTML Report
+          </button>
           <button
             type="button"
             onClick={() => setActiveTab('qr')}
