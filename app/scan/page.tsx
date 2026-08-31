@@ -91,7 +91,6 @@ function ScanContent() {
     }
   };
 
-  // Sync offline queue when coming online
   useEffect(() => {
     if (isOnline) {
       syncOfflineQueue();
@@ -127,7 +126,6 @@ function ScanContent() {
     }
   };
 
-  // Web NFC Scanning
   const startNfcScan = async () => {
     if (!('NDEFReader' in window)) {
       alert('Web NFC is not supported on this device/browser (try Chrome on Android).');
@@ -157,25 +155,21 @@ function ScanContent() {
     }
   };
 
-  // Web Audio Beep on successful scan
   const playBeep = () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'sine';
-      osc.frequency.value = 880; // A5 note
+      osc.frequency.value = 880;
       gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
       osc.connect(gain);
       gain.connect(audioCtx.destination);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.15);
-    } catch {
-      // Audio context might be restricted before user gesture
-    }
+    } catch {}
   };
 
-  // QR Scanning Loop
   useEffect(() => {
     let animationFrameId: number;
 
@@ -333,6 +327,8 @@ function ScanContent() {
       setErrorMsg(`⚠️ GEOFENCE ALERT: You are ${Math.round(distanceMeters)}m away from the checkpoint! Maximum allowed radius is 50m. Log flagged as Unverified.`);
     }
 
+    const photoTag = incidentPhoto ? ` [PHOTO_DATA:${incidentPhoto}]` : '';
+    const cleanNotes = notes ? notes.trim() : 'Routine Patrol Check';
     const payload = {
       id: 'patrol_' + Date.now(),
       guard_name: guardName.trim(),
@@ -340,13 +336,13 @@ function ScanContent() {
       checkpoint: checkpointName || 'General Checkpoint',
       latitude: currentLat.toString(),
       longitude: currentLng.toString(),
-      notes: notes ? `${notes} [Distance: ${Math.round(distanceMeters)}m]${incidentPhoto ? ' [Has Photo]' : ''}` : `Distance: ${Math.round(distanceMeters)}m`
+      notes: `${cleanNotes} [Distance: ${Math.round(distanceMeters)}m]${photoTag}`
     };
 
     if (!isOnline) {
       try {
         const queue: QueuedPatrol[] = JSON.parse(localStorage.getItem('patrol_offline_queue') || '[]');
-        queue.push(payload);
+        queue.push({ ...payload, timestamp: new Date().toISOString() });
         localStorage.setItem('patrol_offline_queue', JSON.stringify(queue));
         updateQueueCount();
         setSuccessMsg('📴 Offline: Patrol log safely queued locally. Will auto-sync when online.');
@@ -377,10 +373,9 @@ function ScanContent() {
       setNotes('');
       setIncidentPhoto(null);
     } catch (err: any) {
-      // Fallback to queue if network drop occurs during submit
       try {
         const queue: QueuedPatrol[] = JSON.parse(localStorage.getItem('patrol_offline_queue') || '[]');
-        queue.push(payload);
+        queue.push({ ...payload, timestamp: new Date().toISOString() });
         localStorage.setItem('patrol_offline_queue', JSON.stringify(queue));
         updateQueueCount();
         setSuccessMsg('📴 Network interruption detected. Patrol saved to offline queue.');
@@ -439,7 +434,7 @@ function ScanContent() {
                 type="button"
                 onClick={() => {
                   setLocationName('Multichoice HQ');
-                  setCheckpointName('Front Gate');
+                  setCheckpointName('Customer Hall');
                   playBeep();
                   stopCamera();
                 }}
