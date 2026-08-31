@@ -114,6 +114,24 @@ export default function PatrolApp() {
     }
   };
 
+  const getCoordinates = (): Promise<string> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve('N/A');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude.toFixed(5);
+          const lon = position.coords.longitude.toFixed(5);
+          resolve(`${lat}, ${lon}`);
+        },
+        () => resolve('N/A'),
+        { timeout: 10000, enableHighAccuracy: true }
+      );
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guardName || !locationSite) {
@@ -123,7 +141,9 @@ export default function PatrolApp() {
 
     setLoading(true);
     try {
+      const gpsCoords = await getCoordinates();
       const fullNotes = `${notes}${incidentPhoto ? ' [Incident Photo Attached]' : ''}`;
+      
       const res = await fetch('/api/scans', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -131,8 +151,8 @@ export default function PatrolApp() {
           guard_name: guardName,
           location: locationSite,
           checkpoint: checkpoint || 'Main Entrance',
-          gps_coordinates: 'Captured',
-          incident_report: fullNotes,
+          gps_coordinates: gpsCoords,
+          incident_report: fullNotes || 'No issue',
           status: status
         })
       });
@@ -140,7 +160,7 @@ export default function PatrolApp() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
 
-      alert('Telemetry transmitted successfully!');
+      alert('Telemetry transmitted successfully with live GPS!');
       setCheckpoint('');
       setNotes('');
       setIncidentPhoto(null);
@@ -155,7 +175,7 @@ export default function PatrolApp() {
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
         <h1 className="text-xl font-bold mb-1">🛡️ Guard Patrol Scanner</h1>
-        <p className="text-sm text-slate-400 mb-6">Scan physical checkpoint QRs and capture incident media.</p>
+        <p className="text-sm text-slate-400 mb-6">Scan physical checkpoint QRs and capture live GPS telemetry.</p>
         
         {scanning ? (
           <div className="mb-6 bg-slate-950 p-4 rounded-xl border border-teal-500/50 text-center">

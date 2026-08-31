@@ -22,8 +22,8 @@ export async function GET() {
       let checkpoint = 'General Scan';
       let status = 'Completed';
       let incident_report = 'None';
+      let gps_coordinates = 'N/A';
 
-      // Parse the packed string format: "Location | CP: ... | Status: ... | Notes: ..."
       if (rawLoc.includes(' | ')) {
         const parts = rawLoc.split(' | ');
         location = parts[0]?.trim() || rawLoc;
@@ -36,6 +36,8 @@ export async function GET() {
             status = part.replace('Status:', '').trim();
           } else if (part.startsWith('Notes:')) {
             incident_report = part.replace('Notes:', '').trim();
+          } else if (part.startsWith('GPS:')) {
+            gps_coordinates = part.replace('GPS:', '').trim();
           }
         }
       }
@@ -46,7 +48,7 @@ export async function GET() {
         checkpoint,
         status,
         incident_report,
-        gps_coordinates: log.gps_coordinates || 'N/A'
+        gps_coordinates
       };
     });
 
@@ -65,7 +67,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Missing required patrol fields' }, { status: 400 });
     }
 
-    const packedLocation = `${location} | CP: ${checkpoint || 'N/A'} | Status: ${status || 'Completed'} | Notes: ${incident_report || 'None'}`;
+    const packedLocation = `${location} | CP: ${checkpoint || 'N/A'} | Status: ${status || 'Completed'} | GPS: ${gps_coordinates || 'N/A'} | Notes: ${incident_report || 'None'}`;
 
     const minimalPayload = {
       guard_name,
