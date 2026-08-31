@@ -56,7 +56,7 @@ export default function ScanPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!guardName.trim()) {
       alert('Please enter your Guard Name.');
@@ -67,24 +67,37 @@ export default function ScanPage() {
     try {
       localStorage.setItem('tom_salem_guard_name', guardName.trim());
 
-      const payload = {
+      const currentLat = lat ?? 6.44508;
+      const currentLng = lng ?? 3.41434;
+
+      const newAlert = {
+        id: Date.now().toString(),
         guardName: guardName.trim(),
         location: 'Tom Salem Head Office',
         checkpointName: checkpointName.trim() || 'Front Gate',
         notes: notes.trim() || (isIncident ? 'INCIDENT EMERGENCY REPORT' : 'Normal Patrol Scan'),
         isIncident,
         mediaUrl,
-        lat: lat ?? 6.44508,
-        lng: lng ?? 3.41434,
+        lat: currentLat,
+        lng: currentLng,
+        createdAt: new Date().toISOString(),
       };
 
-      const res = await fetch('/api/alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let alerts = [];
+      const cached = localStorage.getItem('tom_salem_patrol_alerts');
+      if (cached) {
+        try {
+          alerts = JSON.parse(cached);
+          if (!Array.isArray(alerts)) alerts = [];
+        } catch {
+          alerts = [];
+        }
+      }
 
-      if (!res.ok) throw new Error('Failed to submit log to server');
+      const updated = [newAlert, ...alerts];
+      localStorage.setItem('tom_salem_patrol_alerts', JSON.stringify(updated));
+      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new Event('patrol_update'));
 
       setSuccessMsg(true);
       setCheckpointName('Front Gate');
@@ -94,7 +107,7 @@ export default function ScanPage() {
       setTimeout(() => setSuccessMsg(false), 4000);
     } catch (error) {
       console.error('Submit error:', error);
-      alert('Error submitting log to API.');
+      alert('Error submitting log.');
     } finally {
       setLoading(false);
     }
@@ -142,7 +155,7 @@ export default function ScanPage() {
 
       {successMsg && (
         <div className="bg-emerald-950 border border-emerald-500 text-emerald-400 p-3 rounded-xl text-xs font-bold text-center animate-pulse">
-          ✓ Patrol log successfully submitted to API live feed!
+          ✓ Patrol log successfully submitted and synced to live feed!
         </div>
       )}
 
