@@ -20,19 +20,40 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { location_name, checkpoint_name, qr_url } = body;
 
-    // Try both standard column configurations to match any database schema variation
+    // Insert accommodating whatever column combination your 'checkpoints' table has
     let { data, error } = await supabase
       .from('checkpoints')
       .insert([{ location: location_name, checkpoint: checkpoint_name, qr_url }])
       .select();
 
     if (error) {
-      const res2 = await supabase
+      // Try with checkpoint_name column
+      let res2 = await supabase
         .from('checkpoints')
-        .insert([{ location_name, checkpoint_name, qr_url }])
+        .insert([{ location: location_name, checkpoint_name: checkpoint_name, qr_url }])
         .select();
-      if (res2.error) throw res2.error;
-      data = res2.data;
+
+      if (res2.error) {
+        // Try with location_name and checkpoint_name
+        let res3 = await supabase
+          .from('checkpoints')
+          .insert([{ location_name, checkpoint_name, qr_url }])
+          .select();
+        
+        if (res3.error) {
+          // Last resort: try just location and checkpoint with qr_code if qr_url fails
+          let res4 = await supabase
+            .from('checkpoints')
+            .insert([{ location: location_name, checkpoint: checkpoint_name, qr_code: qr_url }])
+            .select();
+          if (res4.error) throw res4.error;
+          data = res4.data;
+        } else {
+          data = res3.data;
+        }
+      } else {
+        data = res2.data;
+      }
     }
 
     return NextResponse.json({ success: true, checkpoint: data?.[0] });
