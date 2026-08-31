@@ -10,6 +10,7 @@ export default function PatrolApp() {
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('Completed');
   const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const [scanning, setScanning] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -39,6 +40,7 @@ export default function PatrolApp() {
 
   const startScanner = async () => {
     setScanning(true);
+    setFeedback(null);
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'environment' } 
@@ -49,7 +51,7 @@ export default function PatrolApp() {
         videoRef.current.play();
       }
     } catch (err) {
-      alert('Camera access denied or unavailable.');
+      setFeedback('Camera access denied or unavailable.');
       setScanning(false);
     }
   };
@@ -62,7 +64,6 @@ export default function PatrolApp() {
     setScanning(false);
   };
 
-  // Throttled scan loop (~4 scans per second) to reduce scanner speed and CPU usage
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
 
@@ -107,8 +108,8 @@ export default function PatrolApp() {
               }
 
               stopScanner();
-              alert(`Scanned successfully: ${rawData}`);
-              return; // Exit loop on successful scan
+              setFeedback('QR Code captured successfully!');
+              return;
             }
           }
         }
@@ -139,11 +140,12 @@ export default function PatrolApp() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guardName || !locationSite) {
-      alert('Please fill in Guard Name and Location Site.');
+      setFeedback('Please fill in Guard Name and Location Site.');
       return;
     }
 
     setLoading(true);
+    setFeedback(null);
     try {
       const fullNotes = `${notes}${incidentPhoto ? ' [Incident Photo Attached]' : ''}`;
       
@@ -163,12 +165,12 @@ export default function PatrolApp() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
 
-      alert('Telemetry transmitted successfully!');
+      setFeedback('Telemetry transmitted successfully!');
       setCheckpoint('');
       setNotes('');
       setIncidentPhoto(null);
     } catch (err: any) {
-      alert('Error: ' + err.message);
+      setFeedback('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -178,8 +180,14 @@ export default function PatrolApp() {
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
         <h1 className="text-xl font-bold mb-1">🛡️ Guard Patrol Scanner</h1>
-        <p className="text-sm text-slate-400 mb-6">Scan physical checkpoint QRs and capture live GPS telemetry.</p>
+        <p className="text-sm text-slate-400 mb-4">Scan physical checkpoint QRs and capture live GPS telemetry.</p>
         
+        {feedback && (
+          <div className="mb-4 p-3 bg-teal-950 border border-teal-500/50 text-teal-300 text-xs rounded-xl text-center font-medium">
+            {feedback}
+          </div>
+        )}
+
         {scanning ? (
           <div className="mb-6 bg-slate-950 p-4 rounded-xl border border-teal-500/50 text-center">
             <video ref={videoRef} className="w-full h-48 object-cover rounded-lg mb-3" muted playsInline />
