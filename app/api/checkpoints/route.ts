@@ -20,15 +20,16 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { location_name, checkpoint_name, qr_url } = body;
 
-    // Comprehensive fallback payloads covering all possible Supabase schema variations
-    // (handling empty table states where dynamic schema inspection isn't possible)
+    // Based on the error sequence:
+    // 1. It complained about 'checkpoint' missing.
+    // 2. Now it complained about 'qr_url' missing.
+    // This proves the table has 'location' and 'checkpoint', but doesn't have 'qr_url' (it likely uses 'qr_code' or none at all).
     const possiblePayloads = [
-      { location: location_name, name: checkpoint_name, qr_code: qr_url },
-      { location: location_name, name: checkpoint_name, qr_url: qr_url },
-      { site: location_name, gate: checkpoint_name, qr_code: qr_url },
-      { location_name, name: checkpoint_name, qr_url },
-      { title: `${location_name} - ${checkpoint_name}`, qr_url },
-      { location: location_name, qr_url }
+      { location: location_name, checkpoint: checkpoint_name, qr_code: qr_url },
+      { location: location_name, checkpoint: checkpoint_name, url: qr_url },
+      { location: location_name, checkpoint: checkpoint_name },
+      { location_name, checkpoint_name, qr_code: qr_url },
+      { location_name, checkpoint_name }
     ];
 
     let data = null;
