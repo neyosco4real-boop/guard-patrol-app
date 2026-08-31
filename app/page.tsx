@@ -16,8 +16,8 @@ export default function GuardScannerPage() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const scanIntervalRef = useRef<any>(null);
 
   // Get GPS coordinates on mount
   useEffect(() => {
@@ -28,7 +28,6 @@ export default function GuardScannerPage() {
         },
         (err) => {
           console.error('Geolocation error:', err);
-          // Default fallback coordinates if GPS is blocked
           setCoords({ lat: 6.4451, lng: 3.4143 });
         },
         { enableHighAccuracy: true }
@@ -38,16 +37,66 @@ export default function GuardScannerPage() {
     }
   }, []);
 
-  // Simple QR scanner simulation / camera handler using BarcodeDetector if supported
+  // Parse QR string formatted like: Location:Main Facility|Checkpoint:Front Gate
+  const parseQRCodeData = (rawData: string) => {
+    try {
+      const parts = rawData.split('|');
+      let parsedLoc = '';
+      let parsedCp = '';
+
+      parts.forEach((part) => {
+        if (part.startsWith('Location:')) {
+          parsedLoc = part.replace('Location:', '').trim();
+        } else if (part.startsWith('Checkpoint:')) {
+          parsedCp = part.replace('Checkpoint:', '').trim();
+        }
+      });
+
+      if (parsedLoc && parsedCp) {
+        setLocation(parsedLoc);
+        setCheckpointName(parsedCp);
+        stopScanner();
+      } else if (rawData.trim()) {
+        // Fallback if generic text or custom QR format
+        setLocation('Main Facility');
+        setCheckpointName(rawData.trim());
+        stopScanner();
+      }
+    } catch (e) {
+      console.error('Failed to parse QR code:', e);
+    }
+  };
+
   const startScanner = async () => {
     setScanning(true);
     setErrorMsg('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        await videoRef.current.play();
+      }
+
+      // Continuously scan frames if BarcodeDetector is supported
+      if ('BarcodeDetector' in window) {
+        //@ts-ignore
+        const barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+        scanIntervalRef.current = setInterval(async () => {
+          if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+            try {
+              const barcodes = await barcodeDetector.detect(videoRef.current);
+              if (barcodes.length > 0) {
+                const scannedText = barcodes[0].rawValue;
+                parseQRCodeData(scannedText);
+              }
+            } catch (err) {
+              // Detection frame skip error handling
+            }
+          }
+        }, 500);
       }
     } catch (err) {
       console.error('Camera access error:', err);
@@ -57,18 +106,15 @@ export default function GuardScannerPage() {
   };
 
   const stopScanner = () => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     setScanning(false);
-  };
-
-  // Mock QR Scan trigger for testing or automatic decoding loop
-  const simulateScanResult = (scannedLoc: string, scannedCp: string) => {
-    setLocation(scannedLoc);
-    setCheckpointName(scannedCp);
-    stopScanner();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -149,31 +195,22 @@ export default function GuardScannerPage() {
           </div>
         )}
 
-        {/* Scanner Viewfinder Modal / Box */}
+        {/* Live Camera Viewfinder */}
         {scanning ? (
-          <div className="flex flex-col gap-3 bg-slate-950 p-4 rounded-2xl border border-cyan-500/50">
-            <div className="relative w-full h-64 bg-black rounded-xl overflow-hidden flex items-center justify-center">
+          <div className="flex flex-col gap-3 bg-slate-950 p-3 rounded-2xl border border-cyan-500/50">
+            <div className="relative w-full h-72 bg-black rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
               <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
-              <div className="absolute inset-0 border-2 border-cyan-400/40 pointer-events-none flex items-center justify-center">
-                <div className="w-48 h-48 border-2 border-dashed border-cyan-400 rounded-lg animate-pulse"></div>
+              <div className="absolute inset-0 border-2 border-cyan-400/30 pointer-events-none flex items-center justify-center">
+                <div className="w-48 h-48 border-2 border-dashed border-cyan-400 rounded-xl animate-pulse"></div>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => simulateScanResult('Chicken Republic', 'Front Gate')}
-                className="flex-1 bg-cyan-400 text-slate-950 text-xs font-bold py-2.5 rounded-xl cursor-pointer"
-              >
-                Simulate QR: Chicken Republic
-              </button>
-              <button
-                type="button"
-                onClick={stopScanner}
-                className="bg-slate-800 text-slate-300 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={stopScanner}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-3 rounded-xl cursor-pointer"
+            >
+              Close Camera
+            </button>
           </div>
         ) : (
           <button
