@@ -35,7 +35,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchAlerts();
-    const interval = setInterval(fetchAlerts, 3000); // Poll every 3 seconds
+    const interval = setInterval(fetchAlerts, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -57,14 +57,14 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={fetchAlerts}
-            className="bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-cyan-500/30 cursor-pointer"
+            className="bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-cyan-500/35 cursor-pointer"
           >
             🔄 Refresh
           </button>
           <button
             type="button"
             onClick={clearAlerts}
-            className="bg-red-950/60 hover:bg-red-900 text-red-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-red-500/30 cursor-pointer"
+            className="bg-red-950/60 hover:bg-red-900 text-red-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-red-500/35 cursor-pointer"
           >
             Clear Feeds
           </button>
@@ -78,7 +78,7 @@ export default function AdminPage() {
 
         {loading ? (
           <p className="text-xs text-slate-500 text-center py-8">Loading telemetry feed...</p>
-        ̉i) : alerts.length === 0 ? (
+        ) : alerts.length === 0 ? (
           <div className="text-center py-12 border border-dashed border-white/10 rounded-xl">
             <p className="text-sm text-slate-400 font-semibold">No patrol logs received yet.</p>
             <p className="text-xs text-slate-500 mt-1">Submissions from the mobile scanner app will appear here instantly.</p>
