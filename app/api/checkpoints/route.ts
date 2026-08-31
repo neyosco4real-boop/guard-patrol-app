@@ -20,13 +20,23 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { location_name, checkpoint_name, qr_url } = body;
 
-    const { data, error } = await supabase
+    // Try inserting with location and checkpoint columns (matching standard schema), fallback/adapt if needed
+    let { data, error } = await supabase
       .from('checkpoints')
-      .insert([{ location_name, checkpoint_name, qr_url }])
+      .insert([{ location, checkpoint: checkpoint_name, qr_url }])
       .select();
 
-    if (error) throw error;
-    return NextResponse.json({ success: true, checkpoint: data[0] });
+    if (error) {
+      // If table uses location_name / checkpoint_name
+      const res2 = await supabase
+        .from('checkpoints')
+        .insert([{ location_name, checkpoint_name, qr_url }])
+        .select();
+      if (res2.error) throw res2.error;
+      data = res2.data;
+    }
+
+    return NextResponse.json({ success: true, checkpoint: data?.[0] });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -37,16 +47,16 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
-    if (!id) {
-      return NextResponse.json({ success: false, error: 'ID is required' }, { status: 400 });
+    let query = supabase.from('checkpoints').delete();
+    if (id) {
+      query = query.eq('id', id);
+    } else {
+      query = query.not('id', 'is', null);
     }
 
-    const { error } = await supabase
-      .from('checkpoints')
-      .delete()
-      .eq('id', id);
-
+    const { error } = await query;
     if (error) throw error;
+
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
