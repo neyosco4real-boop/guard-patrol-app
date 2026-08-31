@@ -50,6 +50,21 @@ export default function CheckpointManagementPage() {
     }
   };
 
+  const handleDeleteLocation = async (locId: string, locName: string) => {
+    if (!confirm(`Delete location "${locName}" and all its checkpoints?`)) return;
+    try {
+      const res = await fetch(`/api/locations?id=${locId}&name=${encodeURIComponent(locName)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        fetchData();
+      } else {
+        alert(data.error || 'Failed to delete location');
+      }
+    } catch (err) {
+      console.error('Error deleting location:', err);
+    }
+  };
+
   const handleAddCheckpoint = async (locationName: string) => {
     const cpName = checkpointInputs[locationName];
     if (!cpName || !cpName.trim()) return;
@@ -94,7 +109,7 @@ export default function CheckpointManagementPage() {
         <div className="flex justify-between items-center bg-[#0b0f19] border border-slate-800 p-6 rounded-3xl shadow-2xl">
           <div>
             <h1 className="text-xl font-extrabold text-white">Checkpoint & QR Deployment Hub</h1>
-            <p className="text-xs text-slate-400">Generate high-resolution QR codes sized specifically for on-site physical printing.</p>
+            <p className="text-xs text-slate-400">Manage locations, add checkpoints, and print high-res QR codes.</p>
           </div>
           <div className="flex gap-3">
             <button
@@ -150,9 +165,18 @@ export default function CheckpointManagementPage() {
                     <h3 className="text-sm font-extrabold text-white">🏢 {loc.name}</h3>
                     <p className="text-[11px] text-slate-400">{loc.address || 'Active Location Site'}</p>
                   </div>
-                  <span className="text-xs font-bold text-cyan-400 bg-slate-900 border border-slate-800 px-3 py-1 rounded-full">
-                    {loc.checkpoints?.length || 0} Checkpoints
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-cyan-400 bg-slate-900 border border-slate-800 px-3 py-1 rounded-full">
+                      {loc.checkpoints?.length || 0} Checkpoints
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteLocation(loc.id, loc.name)}
+                      className="text-[10px] text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 px-3 py-1.5 rounded-xl transition-all cursor-pointer font-bold print:hidden"
+                    >
+                      Delete Location
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
@@ -172,7 +196,7 @@ export default function CheckpointManagementPage() {
                   </button>
                 </div>
 
-                {/* Large Print-Ready QR Cards Grid */}
+                {/* QR Cards Grid */}
                 {loc.checkpoints && loc.checkpoints.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pt-4">
                     {loc.checkpoints.map((cp: any) => (
@@ -182,7 +206,6 @@ export default function CheckpointManagementPage() {
                           <span className="text-sm font-black text-slate-900">📍 {cp.name}</span>
                         </div>
                         
-                        {/* High Resolution Large QR Code (300x300 for crisp printing) */}
                         <div className="bg-white p-2 rounded-xl">
                           <img
                             src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=Location:${encodeURIComponent(loc.name)}|Checkpoint:${encodeURIComponent(cp.name)}`}

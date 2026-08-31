@@ -18,12 +18,34 @@ export async function POST(req: Request) {
       .insert([{ name, address }])
       .select();
 
-    if (error) {
-      // If locations table doesn't exist yet, we can fallback or handle it
-      throw error;
+    if (error) throw error;
+    return NextResponse.json({ success: true, location: data?.[0] });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    const name = searchParams.get('name');
+
+    if (!id && !name) {
+      return NextResponse.json({ success: false, error: 'Location ID or name required' }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, location: data?.[0] });
+    // Delete checkpoints belonging to this location first
+    if (name) {
+      await supabase.from('checkpoints').delete().eq('location', name);
+      await supabase.from('locations').delete().eq('name', name);
+    }
+
+    if (id) {
+      await supabase.from('locations').delete().eq('id', id);
+    }
+
+    return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
