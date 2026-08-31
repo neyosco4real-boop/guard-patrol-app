@@ -1,10 +1,21 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 
-export default function AdminDashboard() {
-  const [logs, setLogs] = useState<any[]>([]);
+interface PatrolLog {
+  id: string | number;
+  created_at: string;
+  guard_name: string;
+  location: string;
+  checkpoint: string;
+  gps_coordinates: string;
+  status: string;
+  incident_report: string;
+}
+
+export default function AdminTelemetryPage() {
+  const [logs, setLogs] = useState<PatrolLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const fetchLogs = async () => {
     try {
@@ -14,7 +25,7 @@ export default function AdminDashboard() {
         setLogs(data.logs || []);
       }
     } catch (err) {
-      console.error('Error fetching patrol logs:', err);
+      console.error('Failed to fetch telemetry logs', err);
     } finally {
       setLoading(false);
     }
@@ -22,101 +33,142 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 5000); // Poll every 5 seconds for live updates
+    const interval = setInterval(fetchLogs, 10000); // Poll every 10s for live updates
     return () => clearInterval(interval);
   }, []);
 
+  const filteredLogs = logs.filter(log => 
+    log.guard_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    log.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    log.checkpoint?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <main className="min-h-screen bg-[#070913] text-white p-6 md:p-12 font-sans flex flex-col items-center">
-      <div className="max-w-6xl w-full flex flex-col gap-8">
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-6 lg:p-10 font-sans selection:bg-teal-500 selection:text-slate-950">
+      {/* Top Header Bar */}
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 bg-slate-900/80 backdrop-blur-md border border-slate-800 p-6 rounded-2xl shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-teal-500 shadow-[0_0_15px_#14b8a6]"></div>
         
-        {/* Header */}
-        <div className="flex justify-between items-center bg-[#0b0f19] border border-slate-800 p-6 rounded-3xl shadow-2xl">
-          <div>
-            <h1 className="text-xl font-extrabold text-white">🛡️ Tom Salem Security - Live Patrol Command</h1>
-            <p className="text-xs text-slate-400">Real-time telemetry monitoring, guard scans, and incident logs.</p>
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-teal-500"></span>
+            </span>
+            <span className="text-xs uppercase tracking-widest text-teal-400 font-mono font-semibold">SecureOps Command Center</span>
           </div>
-          <div className="flex gap-3">
-            <a
-              href="/admin/checkpoints"
-              className="text-xs font-bold text-slate-950 bg-cyan-400 hover:bg-cyan-300 px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg"
-            >
-              📍 Manage Checkpoints & QRs
-            </a>
-            <a
-              href="/"
-              className="text-xs font-bold text-cyan-400 bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-xl hover:bg-slate-800"
-            >
-              📱 Open Scanner PWA
-            </a>
-          </div>
+          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight text-white">Live Guard Telemetry Feed</h1>
         </div>
 
-        {/* Live Logs Table */}
-        <div className="bg-[#0b0f19] border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col gap-4">
-          <div className="flex justify-between items-center border-b border-slate-800 pb-4">
-            <h2 className="text-xs font-extrabold uppercase tracking-wider text-cyan-400">Live Telemetry Feed ({logs.length} Scans Recorded)</h2>
-            <button
-              onClick={fetchLogs}
-              className="text-[10px] text-slate-300 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl hover:bg-slate-800 font-bold"
-            >
-              🔄 Refresh Feed
-            </button>
-          </div>
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <input 
+            type="text" 
+            placeholder="Search guard or location..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-teal-500 w-full md:w-64 transition-all"
+          />
+          <button 
+            onClick={() => { setLoading(true); fetchLogs(); }}
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-400 font-medium px-4 py-2.5 rounded-xl text-sm transition-all flex items-center gap-2 shadow-lg shrink-0"
+          >
+            <span>🔄 Refresh</span>
+          </button>
+        </div>
+      </div>
 
-          {loading ? (
-            <p className="text-xs text-slate-500 text-center py-12">Connecting to telemetry feed...</p>
-          ) : logs.length === 0 ? (
-            <div className="text-center py-16">
-              <p className="text-xs text-slate-400">No patrol scans recorded yet. Use the Scanner PWA to submit logs.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-800 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                    <th className="py-3 px-4">Date / Time</th>
-                    <th className="py-3 px-4">Guard Name</th>
-                    <th className="py-3 px-4">Location & Checkpoint</th>
-                    <th className="py-3 px-4">GPS Coordinates</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Incident Report</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 text-xs">
-                  {logs.map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-900/40 transition-colors">
-                      <td className="py-4 px-4 font-mono text-[11px] text-slate-400">
-                        {new Date(log.created_at).toLocaleString()}
+      {/* Telemetry Stats Grid */}
+      <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm">
+          <p className="text-xs font-mono uppercase text-slate-400 mb-1">Total Scans Recorded</p>
+          <p className="text-3xl font-extrabold text-white font-mono">{logs.length}</p>
+        </div>
+        <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm">
+          <p className="text-xs font-mono uppercase text-slate-400 mb-1">Operational Status</p>
+          <p className="text-xl font-bold text-teal-400 flex items-center gap-2 mt-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-teal-500 shadow-[0_0_8px_#14b8a6]"></span>
+            Active & Secure
+          </p>
+        </div>
+        <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm">
+          <p className="text-xs font-mono uppercase text-slate-400 mb-1">Encryption Protocol</p>
+          <p className="text-xl font-bold text-slate-200 font-mono">TLS 1.3 / Supabase</p>
+        </div>
+      </div>
+
+      {/* Main Table Container */}
+      <div className="max-w-7xl mx-auto bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-md">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-800 bg-slate-950/60 text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                <th className="py-4 px-6">Date & Time</th>
+                <th className="py-4 px-6">Guard Name</th>
+                <th className="py-4 px-6">Location</th>
+                <th className="py-4 px-6">Checkpoint</th>
+                <th className="py-4 px-6">GPS Coordinates</th>
+                <th className="py-4 px-6">Status</th>
+                <th className="py-4 px-6">Incident Report</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 text-sm">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-500 font-mono animate-pulse">
+                    Decrypting live telemetry streams...
+                  </td>
+                </tr>
+              ) : filteredLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-500">
+                    No patrol telemetry records found.
+                  </td>
+                </tr>
+              ) : (
+                filteredLogs.map((log) => {
+                  const dateStr = new Date(log.created_at).toLocaleString();
+                  const isCompleted = log.status?.toLowerCase() === 'completed';
+
+                  return (
+                    <tr key={log.id} className="hover:bg-slate-800/40 transition-colors group">
+                      <td className="py-4 px-6 font-mono text-xs text-slate-300 whitespace-nowrap">
+                        {dateStr}
                       </td>
-                      <td className="py-4 px-4 font-bold text-white">{log.guard_name}</td>
-                      <td className="py-4 px-4">
-                        <span className="font-extrabold text-cyan-400 block">{log.location}</span>
-                        <span className="text-slate-300">📍 {log.checkpoint}</span>
+                      <td className="py-4 px-6 font-semibold text-white whitespace-nowrap flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-teal-500/50 group-hover:bg-teal-400 transition-colors"></span>
+                        {log.guard_name}
                       </td>
-                      <td className="py-4 px-4 font-mono text-[11px] text-slate-400">
-                        {log.gps_coordinates}
+                      <td className="py-4 px-6 text-slate-200 whitespace-nowrap font-medium">
+                        {log.location || 'N/A'}
                       </td>
-                      <td className="py-4 px-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                          log.status === 'Completed'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                        }`}>
-                          {log.status}
+                      <td className="py-4 px-6 text-slate-300 whitespace-nowrap">
+                        <span className="bg-slate-800 text-teal-300 text-xs px-2.5 py-1 rounded-lg border border-slate-700">
+                          {log.checkpoint || 'General Scan'}
                         </span>
                       </td>
-                      <td className="py-4 px-4 text-slate-300 max-w-xs truncate">
-                        {log.incident_report || 'None'}
+                      <td className="py-4 px-6 font-mono text-xs text-teal-400/90 whitespace-nowrap">
+                        {log.gps_coordinates || 'N/A'}
+                      </td>
+                      <td className="py-4 px-6 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${
+                          isCompleted 
+                            ? 'bg-teal-950/60 border-teal-500/40 text-teal-300' 
+                            : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isCompleted ? 'bg-teal-400' : 'bg-amber-400'}`}></span>
+                          {log.status || 'Completed'}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-slate-300 max-w-xs truncate" title={log.incident_report}>
+                        {log.incident_report || 'No issue'}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-
       </div>
     </main>
   );
