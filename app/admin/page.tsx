@@ -75,7 +75,7 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-[#070913] text-white p-6 md:p-10 font-sans flex flex-col gap-8">
-      {/* Header section matching reference */}
+      {/* Header section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-col gap-2">
           <div className="inline-flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1 rounded-full text-xs text-slate-300 w-fit">
@@ -132,21 +132,25 @@ export default function AdminPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-800/80 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-950/40">
-                    <th className="py-4 px-6">Guard</th>
-                    <th className="py-4 px-6">Checkpoint</th>
-                    <th className="py-4 px-6">Notes / Incident</th>
-                    <th className="py-4 px-6">Evidence</th>
-                    <th className="py-4 px-6">Time</th>
+                    <th className="py-4 px-4">Date/Time</th>
+                    <th className="py-4 px-4">Guard Name</th>
+                    <th className="py-4 px-4">Location</th>
+                    <th className="py-4 px-4">Checkpoint</th>
+                    <th className="py-4 px-4">GPS Coordinates</th>
+                    <th className="py-4 px-4">Geofence</th>
+                    <th className="py-4 px-4">Incident Report</th>
+                    <th className="py-4 px-4">Status</th>
+                    <th className="py-4 px-4">Evidence</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-900/60 text-xs">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-500">Loading live telemetry...</td>
+                      <td colSpan={9} className="py-12 text-center text-slate-500">Loading live telemetry...</td>
                     </tr>
                   ) : alerts.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-16 text-center text-slate-500">
+                      <td colSpan={9} className="py-16 text-center text-slate-500">
                         No patrol logs received yet. Submissions from mobile scanners will appear here.
                       </td>
                     </tr>
@@ -158,12 +162,25 @@ export default function AdminPage() {
                           alert.isIncident ? 'bg-red-950/10' : ''
                         }`}
                       >
-                        <td className="py-4 px-6 font-semibold text-cyan-400">{alert.guardName}</td>
-                        <td className="py-4 px-6 font-medium text-slate-200">{alert.checkpointName}</td>
-                        <td className={`py-4 px-6 font-medium ${alert.isIncident ? 'text-red-400 font-bold' : 'text-slate-300'}`}>
+                        <td className="py-4 px-4 text-slate-300 font-mono whitespace-nowrap">
+                          {new Date(alert.createdAt).toLocaleString()}
+                        </td>
+                        <td className="py-4 px-4 font-semibold text-cyan-400 whitespace-nowrap">{alert.guardName}</td>
+                        <td className="py-4 px-4 font-medium text-slate-200 whitespace-nowrap">{alert.location}</td>
+                        <td className="py-4 px-4 font-medium text-slate-300 whitespace-nowrap">{alert.checkpointName}</td>
+                        <td className="py-4 px-4 font-mono text-cyan-300 whitespace-nowrap">{alert.lat}, {alert.lng}</td>
+                        <td className="py-4 px-4 text-emerald-400 font-medium whitespace-nowrap">Within Perimeter</td>
+                        <td className={`py-4 px-4 font-medium max-w-xs truncate ${alert.isIncident ? 'text-red-400 font-bold' : 'text-slate-300'}`}>
                           {alert.notes || 'Normal Patrol Scan'}
                         </td>
-                        <td className="py-4 px-6">
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                            alert.isIncident ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          }`}>
+                            {alert.isIncident ? 'Incident' : 'Successful Scan'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap">
                           {alert.mediaUrl ? (
                             <a href={alert.mediaUrl} target="_blank" rel="noreferrer" className="text-cyan-400 underline font-semibold hover:text-cyan-300">
                               View Photo
@@ -171,9 +188,6 @@ export default function AdminPage() {
                           ) : (
                             <span className="text-slate-500">None</span>
                           )}
-                        </td>
-                        <td className="py-4 px-6 text-slate-400 font-mono">
-                          {new Date(alert.createdAt).toLocaleTimeString()}
                         </td>
                       </tr>
                     ))
