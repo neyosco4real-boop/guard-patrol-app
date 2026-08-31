@@ -20,11 +20,10 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLog, setSelectedLog] = useState<PatrolLog | null>(null);
 
-  // Management modals state
-  const [showLocationModal, setShowLocationModal] = useState(false);
-  const [showCheckpointModal, setShowCheckpointModal] = useState(false);
+  // Unified Modals state
+  const [showLocationManagerModal, setShowLocationManagerModal] = useState(false);
   const [showGeofenceModal, setShowGeofenceModal] = useState(false);
-  const [showQRModal, setShowQRModal] = useState(false);
+  const [activeManagerTab, setActiveManagerTab] = useState<'location' | 'checkpoint' | 'qr'>('location');
   
   const [newLocationName, setNewLocationName] = useState('');
   const [newCheckpointName, setNewCheckpointName] = useState('');
@@ -103,19 +102,17 @@ export default function AdminDashboard() {
     setActionStatus(`Location "${newLocationName}" created successfully!`);
     setNewLocationName('');
     setTimeout(() => {
-      setShowLocationModal(false);
       setActionStatus('');
-    }, 1500);
+    }, 2000);
   };
 
   const handleCreateCheckpoint = (e: React.FormEvent) => {
     e.preventDefault();
-    setActionStatus(`Checkpoint "${newCheckpointName}" created successfully!`);
+    setActionStatus(`Checkpoint "${newCheckpointName}" created and QR code generated!`);
     setNewCheckpointName('');
     setTimeout(() => {
-      setShowCheckpointModal(false);
       setActionStatus('');
-    }, 1500);
+    }, 2000);
   };
 
   const handleSaveGeofence = (e: React.FormEvent) => {
@@ -151,33 +148,21 @@ export default function AdminDashboard() {
                 Live Feed Active
               </span>
             </div>
-            <p className="text-xs text-slate-400">Manage locations, checkpoints, geofences, QR codes, and monitor live guard telemetry.</p>
+            <p className="text-xs text-slate-400">Real-time guard telemetry, location manager, and geofence monitoring.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setShowLocationModal(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors"
+              onClick={() => setShowLocationManagerModal(true)}
+              className="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
             >
-              + Create Location
-            </button>
-            <button
-              onClick={() => setShowCheckpointModal(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors"
-            >
-              + Create Checkpoint
+              <span>🏢</span> Location Manager
             </button>
             <button
               onClick={() => setShowGeofenceModal(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-800 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors"
+              className="bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-800 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
             >
-              📍 Geofence
-            </button>
-            <button
-              onClick={() => setShowQRModal(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors"
-            >
-              🖨️ QR Code
+              <span>📍</span> Geofence
             </button>
             <button
               onClick={exportToCSV}
@@ -188,52 +173,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Geofence Header & Radar Map */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">📍</span>
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider">Geofence Monitoring</h2>
-            </div>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-0.5 rounded">
-              {geofenceRadius}m Radius Active
-            </span>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                </span>
-                <h3 className="text-xs font-bold text-white tracking-wider uppercase">Geofence Radar</h3>
-              </div>
-              <span className="text-[10px] font-mono text-slate-400">Live Telemetry Synchronized</span>
-            </div>
-
-            <div className="relative h-56 w-full bg-slate-950 rounded-xl border border-slate-800/80 flex items-center justify-center overflow-hidden">
-              <div className="absolute h-44 w-44 rounded-full border border-emerald-500/20 bg-emerald-500/5 animate-pulse"></div>
-              <div className="absolute h-28 w-28 rounded-full border border-emerald-500/30"></div>
-              <div className="absolute h-12 w-12 rounded-full border border-emerald-500/50 bg-emerald-500/10"></div>
-              <div className="absolute h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]"></div>
-              <div className="absolute -translate-x-6 -translate-y-8 flex flex-col items-center">
-                <div className="bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-md whitespace-nowrap">
-                  Guard Position
-                </div>
-                <div className="w-2 h-2 rounded-full bg-white border-2 border-emerald-500 mt-0.5"></div>
-              </div>
-              <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:1.5rem_1.5rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-40"></div>
-            </div>
-
-            <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
-              <span>Perimeter Target: <strong className="text-slate-200">Facility Perimeter</strong></span>
-              <span className="text-emerald-400 font-mono">Status: All active guards within {geofenceRadius}m geofence</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Live Patrol Feed Section */}
+        {/* Live Patrol Feed Section (Centered & Prominent) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -320,125 +260,172 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Modal: Create Location */}
-      {showLocationModal && (
+      {/* Unified Location Manager Modal */}
+      {showLocationManagerModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
-              <h3 className="text-sm font-bold text-white">Create New Facility Location</h3>
-              <button onClick={() => setShowLocationModal(false)} className="text-slate-400 hover:text-white text-base">✕</button>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🏢</span>
+                <h3 className="text-sm font-bold text-white">Location & Checkpoint Manager</h3>
+              </div>
+              <button onClick={() => setShowLocationManagerModal(false)} className="text-slate-400 hover:text-white text-base">✕</button>
             </div>
-            <form onSubmit={handleCreateLocation} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-400 uppercase font-semibold mb-1">Location Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. North Warehouse Facility"
-                  value={newLocationName}
-                  onChange={(e) => setNewLocationName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
-                />
+
+            {/* Manager Tabs */}
+            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setActiveManagerTab('location')}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors ${activeManagerTab === 'location' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Create Location
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveManagerTab('checkpoint')}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors ${activeManagerTab === 'checkpoint' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Add Checkpoint
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveManagerTab('qr')}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors ${activeManagerTab === 'qr' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                QR Code
+              </button>
+            </div>
+
+            {/* Tab 1: Create Location */}
+            {activeManagerTab === 'location' && (
+              <form onSubmit={handleCreateLocation} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-400 uppercase font-semibold mb-1">Facility Location Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. North Warehouse Facility"
+                    value={newLocationName}
+                    onChange={(e) => setNewLocationName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
+                <div className="flex justify-end gap-2 pt-2">
+                  <button type="button" onClick={() => setShowLocationManagerModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Close</button>
+                  <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-semibold">Save Location</button>
+                </div>
+              </form>
+            )}
+
+            {/* Tab 2: Add Checkpoint & Save to Generate QR */}
+            {activeManagerTab === 'checkpoint' && (
+              <form onSubmit={handleCreateCheckpoint} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-400 uppercase font-semibold mb-1">Checkpoint Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Gate 3 - Loading Dock"
+                    value={newCheckpointName}
+                    onChange={(e) => setNewCheckpointName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Saving will automatically generate a scannable checkpoint QR code tag.</p>
+                </div>
+                {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
+                <div className="flex justify-end gap-2 pt-2">
+                  <button type="button" onClick={() => setShowLocationManagerModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Close</button>
+                  <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-semibold">Save & Generate QR</button>
+                </div>
+              </form>
+            )}
+
+            {/* Tab 3: QR Code Viewer & Print */}
+            {activeManagerTab === 'qr' && (
+              <div className="space-y-4 text-center">
+                <div className="text-xs text-slate-400">Select checkpoint to generate printable QR tag:</div>
+                <select
+                  value={selectedCheckpointForQR}
+                  onChange={(e) => setSelectedCheckpointForQR(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono focus:outline-none"
+                >
+                  <option>Gate 1 - North Perimeter</option>
+                  <option>Gate 2 - Main Entrance</option>
+                  <option>Warehouse Loading Dock</option>
+                  <option>Admin Block Rear Exit</option>
+                </select>
+                <div className="bg-white p-6 rounded-xl inline-block shadow-lg my-1">
+                  <div className="w-36 h-36 bg-slate-950 flex items-center text-[10px] text-white p-2 font-mono text-center justify-center rounded">
+                    [QR: {selectedCheckpointForQR}]
+                  </div>
+                </div>
+                <div className="pt-2 flex gap-2">
+                  <button onClick={() => window.print()} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-xl text-xs font-semibold">Print QR Tag</button>
+                  <button onClick={() => setShowLocationManagerModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs">Close</button>
+                </div>
               </div>
-              {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowLocationModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Cancel</button>
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-semibold">Save Location</button>
-              </div>
-            </form>
+            )}
           </div>
         </div>
       )}
 
-      {/* Modal: Create Checkpoint */}
-      {showCheckpointModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
-              <h3 className="text-sm font-bold text-white">Create New Checkpoint</h3>
-              <button onClick={() => setShowCheckpointModal(false)} className="text-slate-400 hover:text-white text-base">✕</button>
-            </div>
-            <form onSubmit={handleCreateCheckpoint} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-400 uppercase font-semibold mb-1">Checkpoint Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Gate 3 - Loading Dock"
-                  value={newCheckpointName}
-                  onChange={(e) => setNewCheckpointName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowCheckpointModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Cancel</button>
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-semibold">Save Checkpoint</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Geofence Settings */}
+      {/* Geofence Monitoring Modal (Triggered by Top Right Geofence Button) */}
       {showGeofenceModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
-              <h3 className="text-sm font-bold text-white">Configure Geofence Perimeter</h3>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">📍</span>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Geofence Monitoring & Radar</h3>
+              </div>
               <button onClick={() => setShowGeofenceModal(false)} className="text-slate-400 hover:text-white text-base">✕</button>
             </div>
-            <form onSubmit={handleSaveGeofence} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-400 uppercase font-semibold mb-1">Radius (Meters)</label>
-                <input
-                  type="number"
-                  required
-                  min="5"
-                  max="500"
-                  value={geofenceRadius}
-                  onChange={(e) => setGeofenceRadius(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-500"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Guards scanning outside this radius will be flagged as unverified.</p>
-              </div>
-              {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowGeofenceModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Cancel</button>
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-semibold">Save Radius</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {/* Modal: Generate QR Code */}
-      {showQRModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <h3 className="text-sm font-bold text-white">Checkpoint QR Code</h3>
-              <button onClick={() => setShowQRModal(false)} className="text-slate-400 hover:text-white text-base">✕</button>
-            </div>
-            <div className="text-xs text-slate-400">Select checkpoint to generate printable QR tag:</div>
-            <select
-              value={selectedCheckpointForQR}
-              onChange={(e) => setSelectedCheckpointForQR(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono focus:outline-none"
-            >
-              <option>Gate 1 - North Perimeter</option>
-              <option>Gate 2 - Main Entrance</option>
-              <option>Warehouse Loading Dock</option>
-              <option>Admin Block Rear Exit</option>
-            </select>
-            <div className="bg-white p-6 rounded-xl inline-block shadow-lg my-2">
-              <div className="w-36 h-36 bg-slate-950 flex items-center text-[10px] text-white p-2 font-mono text-center justify-center rounded">
-                [QR: {selectedCheckpointForQR}]
+            <div className="space-y-4">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-slate-400 block font-semibold">Active Perimeter Radius</span>
+                  <strong className="text-emerald-400 font-mono text-sm">{geofenceRadius} meters</strong>
+                </div>
+                <form onSubmit={handleSaveGeofence} className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="5"
+                    max="500"
+                    value={geofenceRadius}
+                    onChange={(e) => setGeofenceRadius(e.target.value)}
+                    className="w-20 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                  <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-semibold">Update</button>
+                </form>
+              </div>
+
+              {actionStatus && <div className="text-emerald-400 text-xs font-medium text-center">{actionStatus}</div>}
+
+              <div className="relative h-56 w-full bg-slate-950 rounded-xl border border-slate-800/80 flex items-center justify-center overflow-hidden">
+                <div className="absolute h-44 w-44 rounded-full border border-emerald-500/20 bg-emerald-500/5 animate-pulse"></div>
+                <div className="absolute h-28 w-28 rounded-full border border-emerald-500/30"></div>
+                <div className="absolute h-12 w-12 rounded-full border border-emerald-500/50 bg-emerald-500/10"></div>
+                <div className="absolute h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]"></div>
+                <div className="absolute -translate-x-6 -translate-y-8 flex flex-col items-center">
+                  <div className="bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-md whitespace-nowrap">
+                    Guard Position
+                  </div>
+                  <div className="w-2 h-2 rounded-full bg-white border-2 border-emerald-500 mt-0.5"></div>
+                </div>
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:1.5rem_1.5rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-40"></div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+                <span>Perimeter Target: <strong className="text-slate-200">Facility Perimeter</strong></span>
+                <span className="text-emerald-400 font-mono">Status: All active guards within {geofenceRadius}m geofence</span>
               </div>
             </div>
-            <div className="pt-2 flex gap-2">
-              <button onClick={() => window.print()} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-xl text-xs font-semibold">Print QR Tag</button>
-              <button onClick={() => setShowQRModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs">Close</button>
+
+            <div className="pt-3 border-t border-slate-800 flex justify-end">
+              <button onClick={() => setShowGeofenceModal(false)} className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-2 rounded-xl text-xs font-semibold">Close Radar</button>
             </div>
           </div>
         </div>
