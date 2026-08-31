@@ -16,7 +16,6 @@ export async function GET() {
 
     if (error) throw error;
     
-    // Normalize data for admin view
     const formattedLogs = (data || []).map((log: any) => {
       let loc = log.location || '';
       let cp = log.checkpoint || '';
@@ -28,7 +27,9 @@ export async function GET() {
       return {
         ...log,
         location: loc,
-        checkpoint: cp || 'General Scan'
+        checkpoint: cp || log.checkpoint || 'General Scan',
+        gps_coordinates: log.gps_coordinates || log.gps || 'N/A',
+        incident_report: log.incident_report || log.notes || 'None'
       };
     });
 
@@ -49,34 +50,37 @@ export async function POST(req: Request) {
 
     const combinedLocation = checkpoint ? `${location} | ${checkpoint}` : location;
 
-    const insertPayload: any = {
+    // 1. Try full schema payload first
+    let payload: any = {
       guard_name,
       location: combinedLocation,
+      checkpoint: checkpoint || '',
       gps_coordinates: gps_coordinates || 'N/A',
       incident_report: incident_report || 'None',
       status: status || 'Completed',
       created_at: new Date().toISOString()
     };
 
-    // Try inserting with checkpoint column if it exists, otherwise fallback to combined location
-    let { data, error } = await supabase
-      .from('patrol_logs')
-      .insert([
-        {
-          ...insertPayload,
-          checkpoint: checkpoint || ''
-        }
-      ])
-      .select();
+    let { data, error } = await supabase.from('patrol_logs').insert([payload]).select();
 
+    // 2. If checkpoint column is missing, strip it
     if (error && error.message.includes('checkpoint')) {
-      // Fallback if checkpoint column does not exist in Supabase table
-      const retry = await supabase
-        .from('patrol_logs')
-        .insert([insertPayload])
-        .select();
+      delete payload.checkpoint;
+      const retry = await supabase.from('patrol_logs').insert([payload]).select();
       data = retry.data;
       error = retry.error;
+    }
+
+    // 3. If gps_coordinates column is missing, strip it or map to gps
+    if (error && (error.message.includes('gps_coordinates') || error.message.includes('column'))) {
+      delete payload.gps_coordinates;
+      delete payload.incident_report;
+      payload.notes = incident_report || 'None';
+      payload.gps = gps_coordinates || 'N/A';
+      
+      const retryFinal = await supabase.from('patrol_logs').insert([payload]).select();
+      data = retryFinal.data;
+      error = retryFinal.error;
     }
 
     if (error) throw error;
