@@ -1,40 +1,33 @@
 import { NextResponse } from 'next/server';
 
-declare global {
-  var __alertsStore: any[] | undefined;
-}
-
-if (!globalThis.__alertsStore) {
-  globalThis.__alertsStore = [];
-}
-
 export async function GET() {
-  return NextResponse.json(globalThis.__alertsStore || []);
+  if (!globalThis.__alertsStore) {
+    globalThis.__alertsStore = [];
+  }
+  return NextResponse.json({ success: true, alerts: globalThis.__alertsStore });
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    
-    const newAlert = {
-      id: Date.now().toString(),
-      guardName: body.guardName || body.guard || 'Officer',
-      location: body.location || body.checkpointName || 'Main Facility',
-      checkpointName: body.checkpointName || body.location || 'Unknown Checkpoint',
-      notes: body.notes || 'Normal Patrol Scan',
-      isIncident: !!body.isIncident,
-      mediaUrl: body.mediaUrl || '',
-      lat: body.lat ?? body.latitude ?? 6.44508,
-      lng: body.lng ?? body.longitude ?? 3.41434,
-      createdAt: new Date().toISOString(),
-    };
-
     if (!globalThis.__alertsStore) {
       globalThis.__alertsStore = [];
     }
 
-    globalThis.__alertsStore.unshift(newAlert);
+    const newAlert = {
+      id: 'alert_' + Date.now() + '_' + Math.random().toString(36.substring(2, 7)),
+      guardName: body.guardName || 'Officer',
+      location: body.location || 'Tom Salem Head Office',
+      checkpointName: body.checkpointName || 'Front Gate',
+      notes: body.notes || 'Normal Patrol Scan',
+      isIncident: !!body.isIncident,
+      mediaUrl: body.mediaUrl || '',
+      lat: body.lat ?? 6.44508,
+      lng: body.lng ?? 3.41434,
+      createdAt: new Date().toISOString(),
+    };
 
+    globalThis.__alertsStore.unshift(newAlert);
     return NextResponse.json({ success: true, alert: newAlert }, { status: 201 });
   } catch (error) {
     console.error('API Error:', error);
