@@ -120,6 +120,18 @@ export default function AdminDashboard() {
     }, 2000);
   };
 
+  const handleDeleteLocation = (locationToDelete: string) => {
+    const updated = locations.filter((loc) => loc !== locationToDelete);
+    setLocations(updated);
+    if (selectedLocationForCheckpoint === locationToDelete) {
+      setSelectedLocationForCheckpoint(updated[0] || '');
+    }
+    setActionStatus(`Location "${locationToDelete}" removed.`);
+    setTimeout(() => {
+      setActionStatus('');
+    }, 2000);
+  };
+
   const handleCreateCheckpoint = (e: React.FormEvent) => {
     e.preventDefault();
     setActionStatus(`Checkpoint "${newCheckpointName}" created under "${selectedLocationForCheckpoint}" & QR generated!`);
@@ -323,26 +335,55 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Tab 1: Create Location */}
+            {/* Tab 1: Create Location & Active Locations List */}
             {activeManagerTab === 'location' && (
-              <form onSubmit={handleCreateLocation} className="space-y-4 text-xs">
-                <div>
-                  <label className="block text-slate-400 uppercase font-semibold mb-1">Facility Location Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. North Warehouse Facility"
-                    value={newLocationName}
-                    onChange={(e) => setNewLocationName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
+              <div className="space-y-4 text-xs">
+                <form onSubmit={handleCreateLocation} className="space-y-3">
+                  <div>
+                    <label className="block text-slate-400 uppercase font-semibold mb-1">Facility Location Name</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. North Warehouse Facility"
+                        value={newLocationName}
+                        onChange={(e) => setNewLocationName(e.target.value)}
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                      />
+                      <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-semibold whitespace-nowrap">Save Location</button>
+                    </div>
+                  </div>
+                </form>
+
                 {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
-                <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => setShowLocationManagerModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Close</button>
-                  <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-semibold">Save Location</button>
+
+                {/* Active Locations List */}
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <span className="block text-slate-400 uppercase font-semibold text-[10px]">Active Locations ({locations.length})</span>
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                    {locations.length === 0 ? (
+                      <div className="text-slate-500 text-center py-4 bg-slate-950 rounded-xl border border-slate-800/60">No active locations found.</div>
+                    ) : (
+                      locations.map((loc, idx) => (
+                        <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between text-slate-200">
+                          <span className="font-medium">{loc}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLocation(loc)}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-900/50 px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-              </form>
+
+                <div className="flex justify-end pt-2">
+                  <button type="button" onClick={() => setShowLocationManagerModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Close</button>
+                </div>
+              </div>
             )}
 
             {/* Tab 2: Add Checkpoint & Assign Location Dropdown */}
