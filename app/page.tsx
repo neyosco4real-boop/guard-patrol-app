@@ -6,6 +6,7 @@ export default function PatrolApp() {
   const [guardName, setGuardName] = useState('');
   const [locationSite, setLocationSite] = useState('');
   const [checkpoint, setCheckpoint] = useState('');
+  const [gpsCoordinates, setGpsCoordinates] = useState('Acquiring GPS...');
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('Completed');
   const [loading, setLoading] = useState(false);
@@ -17,6 +18,25 @@ export default function PatrolApp() {
 
   const [incidentPhoto, setIncidentPhoto] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Automatically fetch GPS on mount so it's visible on the UI
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGpsCoordinates('Not Supported');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude.toFixed(5);
+        const lon = position.coords.longitude.toFixed(5);
+        setGpsCoordinates(`${lat}, ${lon}`);
+      },
+      (error) => {
+        setGpsCoordinates('Permission Denied / Unavailable');
+      },
+      { timeout: 15000, enableHighAccuracy: true }
+    );
+  }, []);
 
   const startScanner = async () => {
     setScanning(true);
@@ -114,24 +134,6 @@ export default function PatrolApp() {
     }
   };
 
-  const getCoordinates = (): Promise<string> => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve('N/A');
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const lat = position.coords.latitude.toFixed(5);
-          const lon = position.coords.longitude.toFixed(5);
-          resolve(`${lat}, ${lon}`);
-        },
-        () => resolve('N/A'),
-        { timeout: 10000, enableHighAccuracy: true }
-      );
-    });
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guardName || !locationSite) {
@@ -141,7 +143,6 @@ export default function PatrolApp() {
 
     setLoading(true);
     try {
-      const gpsCoords = await getCoordinates();
       const fullNotes = `${notes}${incidentPhoto ? ' [Incident Photo Attached]' : ''}`;
       
       const res = await fetch('/api/scans', {
@@ -151,7 +152,7 @@ export default function PatrolApp() {
           guard_name: guardName,
           location: locationSite,
           checkpoint: checkpoint || 'Main Entrance',
-          gps_coordinates: gpsCoords,
+          gps_coordinates: gpsCoordinates,
           incident_report: fullNotes || 'No issue',
           status: status
         })
@@ -160,7 +161,7 @@ export default function PatrolApp() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
 
-      alert('Telemetry transmitted successfully with live GPS!');
+      alert('Telemetry transmitted successfully!');
       setCheckpoint('');
       setNotes('');
       setIncidentPhoto(null);
@@ -236,6 +237,16 @@ export default function PatrolApp() {
           </div>
 
           <div>
+            <label className="block text-xs uppercase font-semibold text-slate-400 mb-1">GPS Coordinates (Live)</label>
+            <input 
+              type="text" 
+              value={gpsCoordinates} 
+              readOnly
+              className="w-full bg-slate-950 border border-slate-800 text-teal-400 font-mono rounded-xl p-3 text-sm focus:outline-none cursor-not-allowed"
+            />
+          </div>
+
+          <div>
             <div className="flex justify-between items-center mb-1">
               <label className="block text-xs uppercase font-semibold text-slate-400">Incident Report / Notes</label>
               <button 
@@ -249,7 +260,7 @@ export default function PatrolApp() {
                 type="file" 
                 accept="image/*" 
                 capture="environment"
-                ref={photoInputRef} 
+                ref= {photoInputRef} 
                 onChange={handlePhotoCapture} 
                 className="hidden" 
               />
