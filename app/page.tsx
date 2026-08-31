@@ -10,13 +10,18 @@ export default function GuardScannerPage() {
   const [isIncident, setIsIncident] = useState(false);
   const [mediaUrl, setMediaUrl] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  
   const [scanning, setScanning] = useState(false);
+  const [capturingEvidence, setCapturingEvidence] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const evidenceVideoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const evidenceStreamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<any>(null);
 
   // Get GPS coordinates on mount
@@ -57,7 +62,6 @@ export default function GuardScannerPage() {
         setCheckpointName(parsedCp);
         stopScanner();
       } else if (rawData.trim()) {
-        // Fallback if generic text or custom QR format
         setLocation('Main Facility');
         setCheckpointName(rawData.trim());
         stopScanner();
@@ -80,7 +84,6 @@ export default function GuardScannerPage() {
         await videoRef.current.play();
       }
 
-      // Continuously scan frames if BarcodeDetector is supported
       if ('BarcodeDetector' in window) {
         //@ts-ignore
         const barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
@@ -93,7 +96,7 @@ export default function GuardScannerPage() {
                 parseQRCodeData(scannedText);
               }
             } catch (err) {
-              // Detection frame skip error handling
+              // Frame skip
             }
           }
         }, 500);
@@ -115,6 +118,44 @@ export default function GuardScannerPage() {
       streamRef.current = null;
     }
     setScanning(false);
+  };
+
+  // Incident Live Camera Evidence Capture
+  const startEvidenceCamera = async () => {
+    setCapturingEvidence(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      evidenceStreamRef.current = stream;
+      if (evidenceVideoRef.current) {
+        evidenceVideoRef.current.srcObject = stream;
+        await evidenceVideoRef.current.play();
+      }
+    } catch (err) {
+      console.error('Evidence camera error:', err);
+      setErrorMsg('Unable to access camera for incident evidence capture.');
+      setCapturingEvidence(false);
+    }
+  };
+
+  const captureEvidencePhoto = () => {
+    if (evidenceVideoRef.current && canvasRef.current) {
+      const video = evidenceVideoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        setMediaUrl(dataUrl);
+      }
+    }
+    // Stop stream
+    if (evidenceStreamRef.current) {
+      evidenceStreamRef.current.getTracks().forEach((track) => track.stop());
+      evidenceStreamRef.current = null;
+    }
+    setCapturingEvidence(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -195,7 +236,7 @@ export default function GuardScannerPage() {
           </div>
         )}
 
-        {/* Live Camera Viewfinder */}
+        {/* Live Camera Viewfinder for QR Scan */}
         {scanning ? (
           <div className="flex flex-col gap-3 bg-slate-950 p-3 rounded-2xl border border-cyan-500/50">
             <div className="relative w-full h-72 bg-black rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
@@ -225,7 +266,7 @@ export default function GuardScannerPage() {
         {/* Patrol Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           
-          {/* Guard Name - Blank by default, manual input */}
+          {/* Guard Name */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">Guard Name</label>
             <input
@@ -238,7 +279,7 @@ export default function GuardScannerPage() {
             />
           </div>
 
-          {/* Parent Location - Blank before scan, auto-filled by QR */}
+          {/* Parent Location */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">Parent Location</label>
             <input
@@ -250,7 +291,7 @@ export default function GuardScannerPage() {
             />
           </div>
 
-          {/* Scanned Checkpoint - Blank before scan, auto-filled by QR */}
+          {/* Scanned Checkpoint */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">Scanned Checkpoint</label>
             <input
@@ -280,13 +321,63 @@ export default function GuardScannerPage() {
               type="checkbox"
               id="incidentCheck"
               checked={isIncident}
-              onChange={(e) => setIsIncident(e.target.checked)}
+              onChange={(e) => {
+                setIsIncident(e.target.checked);
+                if (e.target.checked && !mediaUrl) {
+                  startEvidenceCamera();
+                }
+              }}
               className="w-4 h-4 rounded border-slate-700 text-cyan-400 focus:ring-0 cursor-pointer"
             />
             <label htmlFor="incidentCheck" className="text-xs font-bold text-red-400 cursor-pointer select-none">
               Mark as Incident / Emergency Report
             </label>
           </div>
+
+          {/* Live Incident Camera Evidence Capture Section */}
+          {isIncident && (
+            <div className="flex flex-col gap-3 bg-slate-950 p-4 rounded-2xl border border-red-500/40">
+              <span className="text-xs font-bold text-red-400 uppercase tracking-wider">🚨 Incident Photo Evidence</span>
+
+              {capturingEvidence ? (
+                <div className="flex flex-col gap-3">
+                  <div className="relative w-full h-60 bg-black rounded-xl overflow-hidden flex items-center justify-center">
+                    <video ref={evidenceVideoRef} className="w-full h-full object-cover" muted playsInline />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={captureEvidencePhoto}
+                    className="w-full bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs py-3 rounded-xl cursor-pointer shadow"
+                  >
+                    📸 Snap Evidence Photo
+                  </button>
+                </div>
+              ) : mediaUrl ? (
+                <div className="flex flex-col gap-3">
+                  <div className="relative h-44 bg-black rounded-xl overflow-hidden border border-slate-800">
+                    <img src={mediaUrl} alt="Incident Evidence" className="w-full h-full object-cover" />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={startEvidenceCamera}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold py-2.5 rounded-xl border border-slate-800 cursor-pointer"
+                  >
+                    🔄 Retake Evidence Photo
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startEvidenceCamera}
+                  className="w-full bg-red-950/60 hover:bg-red-900 text-red-300 font-bold text-xs py-3 rounded-xl border border-red-500/40 cursor-pointer"
+                >
+                  📷 Open Live Camera for Incident Photo
+                </button>
+              )}
+            </div>
+          )}
+
+          <canvas ref={canvasRef} className="hidden" />
 
           {/* Submit Button */}
           <button
