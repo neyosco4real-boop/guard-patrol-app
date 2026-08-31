@@ -20,52 +20,39 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { location_name, checkpoint_name, qr_url } = body;
 
-    // The database has a NOT NULL constraint on a column named "name".
-    // Let's include 'name' alongside 'location_name', 'checkpoint_name', and 'qr_url' (or variants)
-    const possiblePayloads = [
-      { 
-        location_name, 
-        checkpoint_name, 
-        name: checkpoint_name, 
-        qr_url 
-      },
-      { 
-        location: location_name, 
-        checkpoint: checkpoint_name, 
-        name: checkpoint_name, 
-        qr_code: qr_url 
-      },
-      { 
-        location_name, 
-        name: checkpoint_name, 
-        qr_url 
-      },
-      { 
-        location: location_name, 
-        name: checkpoint_name, 
-        qr_url 
-      }
-    ];
+    // The database column 'name' is NOT NULL and is failing because previous payload mappings missed it.
+    // Let's explicitly provide name, location, checkpoint, location_name, checkpoint_name, and qr codes to cover all bases.
+    const payload = {
+      name: checkpoint_name || location_name || 'Checkpoint',
+      location: location_name,
+      checkpoint: checkpoint_name,
+      location_name,
+      checkpoint_name,
+      qr_url,
+      qr_code: qr_url
+    };
 
-    let data = null;
-    let lastError = null;
+    let { data, error } = await supabase
+      .from('checkpoints')
+      .insert([payload])
+      .select();
 
-    for (const payload of possiblePayloads) {
-      const { data: inserted, error } = await supabase
+    if (error) {
+      // If any extra unknown columns cause errors, try inserting with minimal required columns plus 'name'
+      const minimalPayload = {
+        name: checkpoint_name || 'Checkpoint',
+        location: location_name,
+        checkpoint: checkpoint_name
+      };
+
+      const res2 = await supabase
         .from('checkpoints')
-        .insert([payload])
+        .insert([minimalPayload])
         .select();
 
-      if (!error && inserted) {
-        data = inserted;
-        lastError = null;
-        break;
-      } else {
-        lastError = error;
-      }
+      if (res2.error) throw res2.error;
+      data = res2.data;
     }
-
-    if (lastError) throw lastError;
 
     return NextResponse.json({ success: true, checkpoint: data?.[0] });
   } catch (err: any) {
