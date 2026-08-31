@@ -15,7 +15,24 @@ export async function GET() {
       .limit(50);
 
     if (error) throw error;
-    return NextResponse.json({ success: true, logs: data || [] });
+    
+    // Normalize data for admin view
+    const formattedLogs = (data || []).map((log: any) => {
+      let loc = log.location || '';
+      let cp = log.checkpoint || '';
+      if (loc.includes(' | ')) {
+        const parts = loc.split(' | ');
+        loc = parts[0];
+        if (!cp) cp = parts[1];
+      }
+      return {
+        ...log,
+        location: loc,
+        checkpoint: cp || 'General Scan'
+      };
+    });
+
+    return NextResponse.json({ success: true, logs: formattedLogs });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -26,24 +43,41 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { guard_name, location, checkpoint, gps_coordinates, incident_report, status } = body;
 
-    if (!guard_name || !location || !checkpoint) {
+    if (!guard_name || !location) {
       return NextResponse.json({ success: false, error: 'Missing required patrol fields' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const combinedLocation = checkpoint ? `${location} | ${checkpoint}` : location;
+
+    const insertPayload: any = {
+      guard_name,
+      location: combinedLocation,
+      gps_coordinates: gps_coordinates || 'N/A',
+      incident_report: incident_report || 'None',
+      status: status || 'Completed',
+      created_at: new Date().toISOString()
+    };
+
+    // Try inserting with checkpoint column if it exists, otherwise fallback to combined location
+    let { data, error } = await supabase
       .from('patrol_logs')
       .insert([
         {
-          guard_name,
-          location,
-          checkpoint,
-          gps_coordinates: gps_coordinates || 'N/A',
-          incident_report: incident_report || 'None',
-          status: status || 'Completed',
-          created_at: new Date().toISOString()
+          ...insertPayload,
+          checkpoint: checkpoint || ''
         }
       ])
       .select();
+
+    if (error && error.message.includes('checkpoint')) {
+      // Fallback if checkpoint column does not exist in Supabase table
+      const retry = await supabase
+        .from('patrol_logs')
+        .insert([insertPayload])
+        .select();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) throw error;
     return NextResponse.json({ success: true, log: data?.[0] });
