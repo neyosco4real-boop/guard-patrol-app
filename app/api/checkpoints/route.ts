@@ -20,39 +20,23 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { location_name, checkpoint_name, qr_url } = body;
 
-    // The database column 'name' is NOT NULL and is failing because previous payload mappings missed it.
-    // Let's explicitly provide name, location, checkpoint, location_name, checkpoint_name, and qr codes to cover all bases.
+    // Populate every known column variant simultaneously to guarantee schema compatibility
     const payload = {
-      name: checkpoint_name || location_name || 'Checkpoint',
-      location: location_name,
+      name: checkpoint_name,
       checkpoint: checkpoint_name,
-      location_name,
-      checkpoint_name,
-      qr_url,
+      checkpoint_name: checkpoint_name,
+      location: location_name,
+      location_name: location_name,
+      qr_url: qr_url,
       qr_code: qr_url
     };
 
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from('checkpoints')
       .insert([payload])
       .select();
 
-    if (error) {
-      // If any extra unknown columns cause errors, try inserting with minimal required columns plus 'name'
-      const minimalPayload = {
-        name: checkpoint_name || 'Checkpoint',
-        location: location_name,
-        checkpoint: checkpoint_name
-      };
-
-      const res2 = await supabase
-        .from('checkpoints')
-        .insert([minimalPayload])
-        .select();
-
-      if (res2.error) throw res2.error;
-      data = res2.data;
-    }
+    if (error) throw error;
 
     return NextResponse.json({ success: true, checkpoint: data?.[0] });
   } catch (err: any) {
