@@ -77,21 +77,59 @@ function ScanContent() {
             });
 
             if (code) {
-              // Successfully decoded QR code!
-              const scannedText = code.data;
+              const scannedText = code.data.trim();
               try {
-                // Try parsing as URL search params or JSON if structured, otherwise use as checkpoint/location
-                if (scannedText.includes('loc=') || scannedText.includes('cp=')) {
+                // Parse JSON format
+                if (scannedText.startsWith('{')) {
+                  const parsed = JSON.parse(scannedText);
+                  if (parsed.location || parsed.loc) setLocationName(parsed.location || parsed.loc);
+                  if (parsed.checkpoint || parsed.cp || parsed.name) setCheckpointName(parsed.checkpoint || parsed.cp || parsed.name);
+                } 
+                // Parse URL query parameter format
+                else if (scannedText.includes('loc=') || scannedText.includes('cp=')) {
                   const urlParams = new URLSearchParams(scannedText.includes('?') ? scannedText.split('?')[1] : scannedText);
                   const loc = urlParams.get('loc');
                   const cp = urlParams.get('cp');
                   if (loc) setLocationName(loc);
                   if (cp) setCheckpointName(cp);
-                } else {
+                } 
+                // Parse pipe-separated format e.g. "Multichoice HQ | Front Gate" or "Location: Multichoice HQ | Checkpoint: Front Gate"
+                else if (scannedText.includes('|')) {
+                  const parts = scannedText.split('|');
+                  let foundLoc = '';
+                  let foundCp = '';
+                  parts.forEach(part => {
+                    const trimmed = part.trim();
+                    const lower = trimmed.toLowerCase();
+                    if (lower.startsWith('loc') || lower.includes('site') || lower.includes('location')) {
+                      foundLoc = trimmed.includes(':') ? trimmed.split(':').slice(1).join(':').trim() : trimmed;
+                    } else if (lower.startsWith('cp') || lower.includes('checkpoint') || lower.includes('gate')) {
+                      foundCp = trimmed.includes(':') ? trimmed.split(':').slice(1).join(':').trim() : trimmed;
+                    }
+                  });
+                  // If explicit labels weren't found, assign positionally
+                  if (!foundLoc && parts[0]) foundLoc = parts[0].replace(/location:/i, '').trim();
+                  if (!foundCp && parts[1]) foundCp = parts[1].replace(/checkpoint:/i, '').trim();
+
+                  if (foundLoc) setLocationName(foundLoc);
+                  if (foundCp) setCheckpointName(foundCp);
+                } 
+                // Parse single label colon format e.g. "Checkpoint: Front Gate"
+                else if (scannedText.includes(':')) {
+                  const [key, ...valParts] = scannedText.split(':');
+                  const val = valParts.join(':').trim();
+                  if (key.toLowerCase().includes('loc')) {
+                    setLocationName(val);
+                  } else {
+                    setCheckpointName(val);
+                  }
+                } 
+                // Default fallback
+                else {
                   setCheckpointName(scannedText);
                   if (!locationName) setLocationName('Main Site');
                 }
-              } catch {
+              } catch (e) {
                 setCheckpointName(scannedText);
               }
 
@@ -196,11 +234,11 @@ function ScanContent() {
     try {
       const payload = {
         guard_name: guardName.trim(),
-        location: locationName,
-        location_name: locationName,
-        checkpoint: checkpointName,
-        checkpoint_name: checkpointName,
-        name: checkpointName,
+        location: locationName || 'Main Site',
+        location_name: locationName || 'Main Site',
+        checkpoint: checkpointName || 'General Checkpoint',
+        checkpoint_name: checkpointName || 'General Checkpoint',
+        name: checkpointName || 'General Checkpoint',
         latitude: currentLat.toString(),
         longitude: currentLng.toString(),
         gps_coordinates: gpsStr,
