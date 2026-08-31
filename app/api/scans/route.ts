@@ -34,10 +34,11 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   try {
+    // Delete all records safely by checking that id is not null
     const { error } = await supabase
       .from('patrol_logs')
       .delete()
-      .neq('id', 0); // Deletes all records in patrol_logs
+      .not('id', 'is', null);
 
     if (error) throw error;
     return NextResponse.json({ success: true });
