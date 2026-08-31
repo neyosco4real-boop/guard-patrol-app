@@ -93,7 +93,7 @@ function ScanContent() {
                   if (loc) setLocationName(loc);
                   if (cp) setCheckpointName(cp);
                 } 
-                // Parse pipe-separated format e.g. "Multichoice HQ | Front Gate" or "Location: Multichoice HQ | Checkpoint: Front Gate"
+                // Parse pipe-separated format e.g. "Multichoice HQ | Front Gate"
                 else if (scannedText.includes('|')) {
                   const parts = scannedText.split('|');
                   let foundLoc = '';
@@ -107,7 +107,6 @@ function ScanContent() {
                       foundCp = trimmed.includes(':') ? trimmed.split(':').slice(1).join(':').trim() : trimmed;
                     }
                   });
-                  // If explicit labels weren't found, assign positionally
                   if (!foundLoc && parts[0]) foundLoc = parts[0].replace(/location:/i, '').trim();
                   if (!foundCp && parts[1]) foundCp = parts[1].replace(/checkpoint:/i, '').trim();
 
@@ -222,28 +221,18 @@ function ScanContent() {
     const distanceMeters = calculateDistanceMeters(targetLat, targetLng, currentLat, currentLng);
     const isOutsideGeofence = distanceMeters > 50;
 
-    const geofenceStatus = isOutsideGeofence ? 'UNVERIFIED SCAN (>50m)' : 'Within Radius (<=50m)';
-    const patrolStatus = isOutsideGeofence ? 'Alert Triggered' : 'Completed';
-
     if (isOutsideGeofence) {
       setErrorMsg(`⚠️ GEOFENCE ALERT: You are ${Math.round(distanceMeters)}m away from the checkpoint! Maximum allowed radius is 50m. Log flagged as Unverified.`);
     }
 
-    const gpsStr = `${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`;
-
     try {
+      // Minimal robust payload matching standard columns
       const payload = {
         guard_name: guardName.trim(),
         location: locationName || 'Main Site',
-        location_name: locationName || 'Main Site',
         checkpoint: checkpointName || 'General Checkpoint',
-        checkpoint_name: checkpointName || 'General Checkpoint',
-        name: checkpointName || 'General Checkpoint',
         latitude: currentLat.toString(),
         longitude: currentLng.toString(),
-        gps_coordinates: gpsStr,
-        geofence: geofenceStatus,
-        status: patrolStatus,
         notes: notes ? `${notes} [Distance: ${Math.round(distanceMeters)}m]` : `Distance: ${Math.round(distanceMeters)}m`
       };
 
