@@ -47,7 +47,7 @@ export default function PatrolApp() {
     setScanning(false);
   };
 
-  // Scan frame for QR code
+  // Scan frame for QR code and intelligently parse location/checkpoint
   useEffect(() => {
     let animationFrameId: number;
     const scanTick = () => {
@@ -63,16 +63,38 @@ export default function PatrolApp() {
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const code = jsQR(imageData.data, imageData.width, imageData.height);
             if (code) {
-              // Parse QR data (e.g., "Multichoice | Gate 2")
-              const parts = code.data.split(' | ');
-              if (parts.length >= 2) {
-                setLocationSite(parts[0]);
-                setCheckpoint(parts[1]);
-              } else {
-                setCheckpoint(code.data);
+              const rawData = code.data;
+              let parsedLoc = '';
+              let parsedCp = '';
+
+              // Handle pipe-separated formats (e.g., Location:Multichoice|Checkpoint:Front Gate or Multichoice | Front Gate)
+              if (rawData.includes('|')) {
+                const parts = rawData.split('|');
+                for (const part of parts) {
+                  const lower = part.toLowerCase();
+                  if (lower.includes('location')) {
+                    parsedLoc = part.split(':')[1]?.trim() || part.trim();
+                  } else if (lower.includes('checkpoint')) {
+                    parsedCp = part.split(':')[1]?.trim() || part.trim();
+                  }
+                }
+                // Fallback if labels weren't explicitly used
+                if (!parsedLoc && !parsedCp && parts.length >= 2) {
+                  parsedLoc = parts[0].replace(/location[:\s]*/i, '').trim();
+                  parsedCp = parts[1].replace(/checkpoint[:\s]*/i, '').trim();
+                }
               }
+
+              if (parsedLoc) setLocationSite(parsedLoc);
+              if (parsedCp) setCheckpoint(parsedCp);
+              
+              if (!parsedLoc && !parsedCp) {
+                // If it's a single string without pipes
+                setCheckpoint(rawData.replace(/checkpoint[:\s]*/i, '').trim());
+              }
+
               stopScanner();
-              alert(`Checkpoint Scanned: ${code.data}`);
+              alert(`Scanned successfully: ${rawData}`);
             }
           }
         }
