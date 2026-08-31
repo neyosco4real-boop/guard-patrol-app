@@ -19,7 +19,6 @@ export default function PatrolApp() {
   const [incidentPhoto, setIncidentPhoto] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Automatically fetch GPS on mount so it's visible on the UI
   useEffect(() => {
     if (!navigator.geolocation) {
       setGpsCoordinates('Not Supported');
@@ -63,8 +62,10 @@ export default function PatrolApp() {
     setScanning(false);
   };
 
+  // Throttled scan loop (~4 scans per second) to reduce scanner speed and CPU usage
   useEffect(() => {
-    let animationFrameId: number;
+    let timeoutId: NodeJS.Timeout;
+
     const scanTick = () => {
       if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
         const video = videoRef.current;
@@ -107,20 +108,21 @@ export default function PatrolApp() {
 
               stopScanner();
               alert(`Scanned successfully: ${rawData}`);
+              return; // Exit loop on successful scan
             }
           }
         }
       }
       if (scanning) {
-        animationFrameId = requestAnimationFrame(scanTick);
+        timeoutId = setTimeout(scanTick, 250);
       }
     };
 
     if (scanning) {
-      animationFrameId = requestAnimationFrame(scanTick);
+      scanTick();
     }
 
-    return () => cancelAnimationFrame(animationFrameId);
+    return () => clearTimeout(timeoutId);
   }, [scanning]);
 
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -260,7 +262,7 @@ export default function PatrolApp() {
                 type="file" 
                 accept="image/*" 
                 capture="environment"
-                ref= {photoInputRef} 
+                ref={photoInputRef} 
                 onChange={handlePhotoCapture} 
                 className="hidden" 
               />
