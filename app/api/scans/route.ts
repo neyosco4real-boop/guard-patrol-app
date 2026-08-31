@@ -16,12 +16,39 @@ export async function GET() {
 
     if (error) throw error;
     
-    const formattedLogs = (data || []).map((log: any) => ({
-      ...log,
-      checkpoint: 'General Scan',
-      gps_coordinates: 'N/A',
-      incident_report: log.location || 'None'
-    }));
+    const formattedLogs = (data || []).map((log: any) => {
+      const rawLoc = log.location || '';
+      let location = rawLoc;
+      let checkpoint = 'General Scan';
+      let status = 'Completed';
+      let incident_report = 'None';
+
+      // Parse the packed string format: "Location | CP: ... | Status: ... | Notes: ..."
+      if (rawLoc.includes(' | ')) {
+        const parts = rawLoc.split(' | ');
+        location = parts[0]?.trim() || rawLoc;
+        
+        for (let i = 1; i < parts.length; i++) {
+          const part = parts[i];
+          if (part.startsWith('CP:')) {
+            checkpoint = part.replace('CP:', '').trim();
+          } else if (part.startsWith('Status:')) {
+            status = part.replace('Status:', '').trim();
+          } else if (part.startsWith('Notes:')) {
+            incident_report = part.replace('Notes:', '').trim();
+          }
+        }
+      }
+
+      return {
+        ...log,
+        location,
+        checkpoint,
+        status,
+        incident_report,
+        gps_coordinates: log.gps_coordinates || 'N/A'
+      };
+    });
 
     return NextResponse.json({ success: true, logs: formattedLogs });
   } catch (err: any) {
@@ -38,7 +65,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Missing required patrol fields' }, { status: 400 });
     }
 
-    // Pack all details into the standard 'location' column to avoid missing-column errors in Supabase
     const packedLocation = `${location} | CP: ${checkpoint || 'N/A'} | Status: ${status || 'Completed'} | Notes: ${incident_report || 'None'}`;
 
     const minimalPayload = {
