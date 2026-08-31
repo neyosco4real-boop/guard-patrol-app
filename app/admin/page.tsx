@@ -31,6 +31,14 @@ export default function AdminDashboard() {
   const [selectedCheckpointForQR, setSelectedCheckpointForQR] = useState('Gate 1 - North Perimeter');
   const [actionStatus, setActionStatus] = useState('');
 
+  // Dynamic Locations list state
+  const [locations, setLocations] = useState<string[]>([
+    'North Warehouse Facility',
+    'Main Gate Office',
+    'Admin Block'
+  ]);
+  const [selectedLocationForCheckpoint, setSelectedLocationForCheckpoint] = useState('North Warehouse Facility');
+
   useEffect(() => {
     fetchLogs();
 
@@ -100,7 +108,12 @@ export default function AdminDashboard() {
 
   const handleCreateLocation = (e: React.FormEvent) => {
     e.preventDefault();
-    setActionStatus(`Location "${newLocationName}" created successfully!`);
+    const trimmed = newLocationName.trim();
+    if (trimmed && !locations.includes(trimmed)) {
+      setLocations((prev) => [...prev, trimmed]);
+      setSelectedLocationForCheckpoint(trimmed);
+    }
+    setActionStatus(`Location "${trimmed}" created successfully!`);
     setNewLocationName('');
     setTimeout(() => {
       setActionStatus('');
@@ -109,11 +122,11 @@ export default function AdminDashboard() {
 
   const handleCreateCheckpoint = (e: React.FormEvent) => {
     e.preventDefault();
-    setActionStatus(`Checkpoint "${newCheckpointName}" created and QR code generated!`);
+    setActionStatus(`Checkpoint "${newCheckpointName}" created under "${selectedLocationForCheckpoint}" & QR generated!`);
     setNewCheckpointName('');
     setTimeout(() => {
       setActionStatus('');
-    }, 2000);
+    }, 2500);
   };
 
   const handleSaveGeofence = (e: React.FormEvent) => {
@@ -332,9 +345,21 @@ export default function AdminDashboard() {
               </form>
             )}
 
-            {/* Tab 2: Add Checkpoint & Save to Generate QR */}
+            {/* Tab 2: Add Checkpoint & Assign Location Dropdown */}
             {activeManagerTab === 'checkpoint' && (
               <form onSubmit={handleCreateCheckpoint} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-400 uppercase font-semibold mb-1">Select Location</label>
+                  <select
+                    value={selectedLocationForCheckpoint}
+                    onChange={(e) => setSelectedLocationForCheckpoint(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
+                  >
+                    {locations.map((loc, idx) => (
+                      <option key={idx} value={loc}>{loc}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-slate-400 uppercase font-semibold mb-1">Checkpoint Title</label>
                   <input
@@ -345,7 +370,7 @@ export default function AdminDashboard() {
                     onChange={(e) => setNewCheckpointName(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">Saving will automatically generate a scannable checkpoint QR code tag.</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Saving will automatically link this checkpoint and generate its scannable QR tag.</p>
                 </div>
                 {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
                 <div className="flex justify-end gap-2 pt-2">
@@ -384,7 +409,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Geofence Monitoring Modal (Triggered by Top Right Geofence Button) */}
+      {/* Geofence Monitoring Modal */}
       {showGeofenceModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative space-y-5">
