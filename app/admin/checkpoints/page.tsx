@@ -88,18 +88,28 @@ export default function CheckpointManagementPage() {
 
   return (
     <main className="min-h-screen bg-[#070913] text-white p-6 md:p-12 font-sans flex flex-col items-center">
-      <div className="max-w-4xl w-full flex flex-col gap-8">
+      <div className="max-w-5xl w-full flex flex-col gap-8">
         
+        {/* Header */}
         <div className="flex justify-between items-center bg-[#0b0f19] border border-slate-800 p-6 rounded-3xl shadow-2xl">
           <div>
-            <h1 className="text-xl font-extrabold text-white">Checkpoint & Location Management</h1>
-            <p className="text-xs text-slate-400">Create locations, add 10+ checkpoints, and generate individual QR codes instantly.</p>
+            <h1 className="text-xl font-extrabold text-white">Checkpoint & QR Deployment Hub</h1>
+            <p className="text-xs text-slate-400">Generate high-resolution QR codes sized specifically for on-site physical printing.</p>
           </div>
-          <a href="/admin" className="text-xs font-bold text-cyan-400 bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-xl hover:bg-slate-800">
-            ← Back to Command
-          </a>
+          <div className="flex gap-3">
+            <button
+              onClick={() => window.print()}
+              className="text-xs font-bold text-slate-950 bg-cyan-400 hover:bg-cyan-300 px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg"
+            >
+              🖨️ Print All QRs
+            </button>
+            <a href="/admin" className="text-xs font-bold text-cyan-400 bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-xl hover:bg-slate-800">
+              ← Back
+            </a>
+          </div>
         </div>
 
+        {/* Register Location Form */}
         <form onSubmit={handleCreateLocation} className="bg-[#0b0f19] border border-slate-800 p-6 rounded-3xl flex flex-col gap-4 shadow-xl">
           <h2 className="text-xs font-extrabold uppercase tracking-wider text-cyan-400">+ Register New Location Site</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -113,7 +123,7 @@ export default function CheckpointManagementPage() {
             />
             <input
               type="text"
-              placeholder="Address / Description (e.g. Lagos, Nigeria)..."
+              placeholder="Address / Description (e.g. Victoria Island, Lagos)..."
               value={newLocationAddress}
               onChange={(e) => setNewLocationAddress(e.target.value)}
               className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-cyan-400"
@@ -124,6 +134,7 @@ export default function CheckpointManagementPage() {
           </button>
         </form>
 
+        {/* Locations List */}
         {loading ? (
           <p className="text-xs text-slate-500 text-center py-12">Loading locations and checkpoints...</p>
         ) : locations.length === 0 ? (
@@ -161,22 +172,31 @@ export default function CheckpointManagementPage() {
                   </button>
                 </div>
 
+                {/* Large Print-Ready QR Cards Grid */}
                 {loc.checkpoints && loc.checkpoints.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pt-4">
                     {loc.checkpoints.map((cp: any) => (
-                      <div key={cp.id} className="bg-slate-950 border border-slate-900 p-4 rounded-2xl flex flex-col items-center text-center gap-3">
-                        <span className="text-xs font-bold text-white">📍 {cp.name}</span>
-                        <div className="bg-white p-3 rounded-xl shadow-inner">
+                      <div key={cp.id} className="bg-white text-slate-950 border-2 border-slate-300 p-6 rounded-3xl flex flex-col items-center text-center gap-3 shadow-2xl print:shadow-none print:border-black">
+                        <div className="w-full border-b border-slate-200 pb-2">
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block">{loc.name}</span>
+                          <span className="text-sm font-black text-slate-900">📍 {cp.name}</span>
+                        </div>
+                        
+                        {/* High Resolution Large QR Code (300x300 for crisp printing) */}
+                        <div className="bg-white p-2 rounded-xl">
                           <img
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=Location:${encodeURIComponent(loc.name)}|Checkpoint:${encodeURIComponent(cp.name)}`}
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=Location:${encodeURIComponent(loc.name)}|Checkpoint:${encodeURIComponent(cp.name)}`}
                             alt={`QR for ${cp.name}`}
-                            className="w-24 h-24 object-contain"
+                            className="w-44 h-44 object-contain mx-auto"
                           />
                         </div>
+
+                        <p className="text-[9px] text-slate-400 font-mono">Scan via Guard Patrol PWA</p>
+
                         <button
                           type="button"
                           onClick={() => handleDeleteCheckpoint(cp.id)}
-                          className="text-[10px] text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 px-3 py-1 rounded-lg transition-all cursor-pointer w-full"
+                          className="text-[10px] text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer w-full font-bold print:hidden"
                         >
                           Delete Checkpoint
                         </button>
