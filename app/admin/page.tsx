@@ -14,6 +14,11 @@ interface PatrolLog {
   created_at: string;
 }
 
+interface LocationWithCheckpoints {
+  name: string;
+  checkpoints: string[];
+}
+
 export default function AdminDashboard() {
   const [logs, setLogs] = useState<PatrolLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,11 +36,11 @@ export default function AdminDashboard() {
   const [selectedCheckpointForQR, setSelectedCheckpointForQR] = useState('Gate 1 - North Perimeter');
   const [actionStatus, setActionStatus] = useState('');
 
-  // Dynamic Locations list state
-  const [locations, setLocations] = useState<string[]>([
-    'North Warehouse Facility',
-    'Main Gate Office',
-    'Admin Block'
+  // Dynamic Locations and Checkpoints structure state
+  const [locationsData, setLocationsData] = useState<LocationWithCheckpoints[]>([
+    { name: 'North Warehouse Facility', checkpoints: ['Gate 1 - North Perimeter', 'Warehouse Loading Dock'] },
+    { name: 'Main Gate Office', checkpoints: ['Gate 2 - Main Entrance'] },
+    { name: 'Admin Block', checkpoints: ['Admin Block Rear Exit'] }
   ]);
   const [selectedLocationForCheckpoint, setSelectedLocationForCheckpoint] = useState('North Warehouse Facility');
 
@@ -109,24 +114,44 @@ export default function AdminDashboard() {
   const handleCreateLocation = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newLocationName.trim();
-    if (trimmed && !locations.includes(trimmed)) {
-      setLocations((prev) => [...prev, trimmed]);
+    if (trimmed && !locationsData.some(loc => loc.name.toLowerCase() === trimmed.toLowerCase())) {
+      setLocationsData((prev) => [...prev, { name: trimmed, checkpoints: [] }]);
       setSelectedLocationForCheckpoint(trimmed);
+      setActionStatus(`Location "${trimmed}" created successfully!`);
+    } else {
+      setActionStatus(`Location already exists or is invalid.`);
     }
-    setActionStatus(`Location "${trimmed}" created successfully!`);
     setNewLocationName('');
     setTimeout(() => {
       setActionStatus('');
     }, 2000);
   };
 
-  const handleDeleteLocation = (locationToDelete: string) => {
-    const updated = locations.filter((loc) => loc !== locationToDelete);
-    setLocations(updated);
-    if (selectedLocationForCheckpoint === locationToDelete) {
-      setSelectedLocationForCheckpoint(updated[0] || '');
+  const handleDeleteLocation = (locationNameToDelete: string) => {
+    const updated = locationsData.filter((loc) => loc.name !== locationNameToDelete);
+    setLocationsData(updated);
+    if (selectedLocationForCheckpoint === locationNameToDelete) {
+      setSelectedLocationForCheckpoint(updated[0]?.name || '');
     }
-    setActionStatus(`Location "${locationToDelete}" removed.`);
+    setActionStatus(`Location "${locationNameToDelete}" removed.`);
+    setTimeout(() => {
+      setActionStatus('');
+    }, 2000);
+  };
+
+  const handleDeleteCheckpoint = (locationName: string, checkpointToDelete: string) => {
+    setLocationsData((prev) =>
+      prev.map((loc) => {
+        if (loc.name === locationName) {
+          return {
+            ...loc,
+            checkpoints: loc.checkpoints.filter((cp) => cp !== checkpointToDelete),
+          };
+        }
+        return loc;
+      })
+    );
+    setActionStatus(`Checkpoint "${checkpointToDelete}" deleted.`);
     setTimeout(() => {
       setActionStatus('');
     }, 2000);
@@ -134,7 +159,25 @@ export default function AdminDashboard() {
 
   const handleCreateCheckpoint = (e: React.FormEvent) => {
     e.preventDefault();
-    setActionStatus(`Checkpoint "${newCheckpointName}" created under "${selectedLocationForCheckpoint}" & QR generated!`);
+    const trimmedCheckpoint = newCheckpointName.trim();
+    if (!trimmedCheckpoint) return;
+
+    setLocationsData((prev) =>
+      prev.map((loc) => {
+        if (loc.name === selectedLocationForCheckpoint) {
+          if (!loc.checkpoints.includes(trimmedCheckpoint)) {
+            return {
+              ...loc,
+              checkpoints: [...loc.checkpoints, trimmedCheckpoint],
+            };
+          }
+        }
+        return loc;
+      })
+    );
+
+    setSelectedCheckpointForQR(trimmedCheckpoint);
+    setActionStatus(`Checkpoint "${trimmedCheckpoint}" created under "${selectedLocationForCheckpoint}" & QR generated!`);
     setNewCheckpointName('');
     setTimeout(() => {
       setActionStatus('');
@@ -163,6 +206,9 @@ export default function AdminDashboard() {
       log.notes?.toLowerCase().includes(term)
     );
   });
+
+  // Collect all checkpoints for QR dropdown
+  const allCheckpoints = locationsData.flatMap(loc => loc.checkpoints);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
@@ -301,7 +347,7 @@ export default function AdminDashboard() {
       {/* Unified Location Manager Modal */}
       {showLocationManagerModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <span className="text-lg">🏢</span>
@@ -335,7 +381,7 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Tab 1: Create Location & Active Locations List */}
+            {/* Tab 1: Create Location & Active Locations List with Checkpoints */}
             {activeManagerTab === 'location' && (
               <div className="space-y-4 text-xs">
                 <form onSubmit={handleCreateLocation} className="space-y-3">
@@ -357,23 +403,43 @@ export default function AdminDashboard() {
 
                 {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
 
-                {/* Active Locations List */}
+                {/* Active Locations & Checkpoints Hierarchy List */}
                 <div className="space-y-2 pt-2 border-t border-slate-800">
-                  <span className="block text-slate-400 uppercase font-semibold text-[10px]">Active Locations ({locations.length})</span>
-                  <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
-                    {locations.length === 0 ? (
+                  <span className="block text-slate-400 uppercase font-semibold text-[10px]">Active Locations & Checkpoints ({locationsData.length})</span>
+                  <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+                    {locationsData.length === 0 ? (
                       <div className="text-slate-500 text-center py-4 bg-slate-950 rounded-xl border border-slate-800/60">No active locations found.</div>
                     ) : (
-                      locations.map((loc, idx) => (
-                        <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between text-slate-200">
-                          <span className="font-medium">{loc}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteLocation(loc)}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-900/50 px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-colors"
-                          >
-                            Delete
-                          </button>
+                      locationsData.map((loc, idx) => (
+                        <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-white text-sm">{loc.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteLocation(loc.name)}
+                              className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-900/50 px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-colors"
+                            >
+                              Delete Location
+                            </button>
+                          </div>
+                          <div className="pl-3 border-l-2 border-slate-800 space-y-1">
+                            {loc.checkpoints.length === 0 ? (
+                              <div className="text-[11px] text-slate-500 italic">No checkpoints created under this location yet.</div>
+                            ) : (
+                              loc.checkpoints.map((cp, cIdx) => (
+                                <div key={cIdx} className="flex items-center justify-between text-[11px] text-slate-300 py-0.5">
+                                  <span className="font-mono text-emerald-400">• {cp}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCheckpoint(loc.name, cp)}
+                                    className="text-rose-400 hover:text-rose-300 text-[10px] font-medium"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
                         </div>
                       ))
                     )}
@@ -396,8 +462,8 @@ export default function AdminDashboard() {
                     onChange={(e) => setSelectedLocationForCheckpoint(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
                   >
-                    {locations.map((loc, idx) => (
-                      <option key={idx} value={loc}>{loc}</option>
+                    {locationsData.map((loc, idx) => (
+                      <option key={idx} value={loc.name}>{loc.name}</option>
                     ))}
                   </select>
                 </div>
@@ -411,7 +477,7 @@ export default function AdminDashboard() {
                     onChange={(e) => setNewCheckpointName(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">Saving will automatically link this checkpoint and generate its scannable QR tag.</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Saving will immediately create this checkpoint under the selected location and generate its scannable QR tag.</p>
                 </div>
                 {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
                 <div className="flex justify-end gap-2 pt-2">
@@ -430,14 +496,17 @@ export default function AdminDashboard() {
                   onChange={(e) => setSelectedCheckpointForQR(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono focus:outline-none"
                 >
-                  <option>Gate 1 - North Perimeter</option>
-                  <option>Gate 2 - Main Entrance</option>
-                  <option>Warehouse Loading Dock</option>
-                  <option>Admin Block Rear Exit</option>
+                  {allCheckpoints.length === 0 ? (
+                    <option disabled>No checkpoints available</option>
+                  ) : (
+                    allCheckpoints.map((cp, idx) => (
+                      <option key={idx} value={cp}>{cp}</option>
+                    ))
+                  )}
                 </select>
                 <div className="bg-white p-6 rounded-xl inline-block shadow-lg my-1">
                   <div className="w-36 h-36 bg-slate-950 flex items-center text-[10px] text-white p-2 font-mono text-center justify-center rounded">
-                    [QR: {selectedCheckpointForQR}]
+                    [QR: {selectedCheckpointForQR || 'None'}]
                   </div>
                 </div>
                 <div className="pt-2 flex gap-2">
