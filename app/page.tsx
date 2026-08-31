@@ -10,17 +10,14 @@ export default function PatrolApp() {
   const [status, setStatus] = useState('Completed');
   const [loading, setLoading] = useState(false);
 
-  // Camera Scanner States
   const [scanning, setScanning] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
 
-  // Incident Photo States
   const [incidentPhoto, setIncidentPhoto] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Start QR Camera Scanner
   const startScanner = async () => {
     setScanning(true);
     try {
@@ -38,7 +35,6 @@ export default function PatrolApp() {
     }
   };
 
-  // Stop QR Camera Scanner
   const stopScanner = () => {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
@@ -47,7 +43,6 @@ export default function PatrolApp() {
     setScanning(false);
   };
 
-  // Scan frame for QR code and intelligently parse location/checkpoint
   useEffect(() => {
     let animationFrameId: number;
     const scanTick = () => {
@@ -67,7 +62,6 @@ export default function PatrolApp() {
               let parsedLoc = '';
               let parsedCp = '';
 
-              // Handle pipe-separated formats (e.g., Location:Multichoice|Checkpoint:Front Gate or Multichoice | Front Gate)
               if (rawData.includes('|')) {
                 const parts = rawData.split('|');
                 for (const part of parts) {
@@ -78,7 +72,6 @@ export default function PatrolApp() {
                     parsedCp = part.split(':')[1]?.trim() || part.trim();
                   }
                 }
-                // Fallback if labels weren't explicitly used
                 if (!parsedLoc && !parsedCp && parts.length >= 2) {
                   parsedLoc = parts[0].replace(/location[:\s]*/i, '').trim();
                   parsedCp = parts[1].replace(/checkpoint[:\s]*/i, '').trim();
@@ -89,7 +82,6 @@ export default function PatrolApp() {
               if (parsedCp) setCheckpoint(parsedCp);
               
               if (!parsedLoc && !parsedCp) {
-                // If it's a single string without pipes
                 setCheckpoint(rawData.replace(/checkpoint[:\s]*/i, '').trim());
               }
 
@@ -111,7 +103,6 @@ export default function PatrolApp() {
     return () => cancelAnimationFrame(animationFrameId);
   }, [scanning]);
 
-  // Handle Incident Photo capture
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -166,7 +157,6 @@ export default function PatrolApp() {
         <h1 className="text-xl font-bold mb-1">🛡️ Guard Patrol Scanner</h1>
         <p className="text-sm text-slate-400 mb-6">Scan physical checkpoint QRs and capture incident media.</p>
         
-        {/* QR Scanner Modal / View */}
         {scanning ? (
           <div className="mb-6 bg-slate-950 p-4 rounded-xl border border-teal-500/50 text-center">
             <video ref={videoRef} className="w-full h-48 object-cover rounded-lg mb-3" muted playsInline />

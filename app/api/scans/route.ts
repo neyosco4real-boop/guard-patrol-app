@@ -16,16 +16,12 @@ export async function GET() {
 
     if (error) throw error;
     
-    const formattedLogs = (data || []).map((log: any) => {
-      let loc = log.location || '';
-      return {
-        ...log,
-        location: loc,
-        checkpoint: 'General Scan',
-        gps_coordinates: 'N/A',
-        incident_report: log.incident_report || 'None'
-      };
-    });
+    const formattedLogs = (data || []).map((log: any) => ({
+      ...log,
+      checkpoint: 'General Scan',
+      gps_coordinates: 'N/A',
+      incident_report: log.location || 'None'
+    }));
 
     return NextResponse.json({ success: true, logs: formattedLogs });
   } catch (err: any) {
@@ -42,21 +38,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Missing required patrol fields' }, { status: 400 });
     }
 
-    // Combine all metadata into existing safe text columns to prevent schema errors
-    const fullLocation = checkpoint ? `${location} (Checkpoint: ${checkpoint})` : location;
-    const fullReport = `GPS: ${gps_coordinates || 'N/A'} | Notes: ${incident_report || 'None'}`;
+    // Pack all details into the standard 'location' column to avoid missing-column errors in Supabase
+    const packedLocation = `${location} | CP: ${checkpoint || 'N/A'} | Status: ${status || 'Completed'} | Notes: ${incident_report || 'None'}`;
 
-    const safePayload = {
+    const minimalPayload = {
       guard_name,
-      location: fullLocation,
-      incident_report: fullReport,
-      status: status || 'Completed',
+      location: packedLocation,
       created_at: new Date().toISOString()
     };
 
     const { data, error } = await supabase
       .from('patrol_logs')
-      .insert([safePayload])
+      .insert([minimalPayload])
       .select();
 
     if (error) throw error;
