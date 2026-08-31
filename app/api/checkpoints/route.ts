@@ -8,34 +8,20 @@ const supabase = createClient(
 
 export async function GET() {
   try {
-    // Fetch locations and checkpoints
-    const { data: locations, error: locError } = await supabase.from('locations').select('*').order('created_at', { ascending: false });
-    const { data: checkpoints, error: cpError } = await supabase.from('checkpoints').select('*').order('created_at', { ascending: false });
+    const { data: checkpoints, error } = await supabase.from('checkpoints').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
 
-    if (locError && cpError) throw locError;
-
-    // If locations table isn't created, structure everything from checkpoints table
-    if (locError || !locations || locations.length === 0) {
-      const groupedMap: { [key: string]: any } = {};
-      (checkpoints || []).forEach((cp) => {
-        const locName = cp.location || 'Tom Salem Head Office';
-        if (!groupedMap[locName]) {
-          groupedMap[locName] = { id: locName, name: locName, address: '', checkpoints: [] };
-        }
-        groupedMap[locName].checkpoints.push(cp);
-      });
-      return NextResponse.json({ success: true, locations: Object.values(groupedMap) });
-    }
-
-    // Attach checkpoints to their respective locations
-    const formattedLocations = locations.map((loc) => {
-      const locCheckpoints = (checkpoints || []).filter(
-        (cp) => cp.location_id === loc.id || cp.location === loc.name
-      );
-      return { ...loc, checkpoints: locCheckpoints };
+    // Group checkpoints dynamically by location name
+    const groupedMap: { [key: string]: any } = {};
+    (checkpoints || []).forEach((cp) => {
+      const locName = cp.location || 'Tom Salem Head Office';
+      if (!groupedMap[locName]) {
+        groupedMap[locName] = { id: locName, name: locName, address: '', checkpoints: [] };
+      }
+      groupedMap[locName].checkpoints.push(cp);
     });
 
-    return NextResponse.json({ success: true, locations: formattedLocations });
+    return NextResponse.json({ success: true, locations: Object.values(groupedMap) });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -43,21 +29,18 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const { locationId, location, name, qrPayload } = await req.json();
+    const { location, name } = await req.json();
     if (!name) {
       return NextResponse.json({ success: false, error: 'Checkpoint name is required' }, { status: 400 });
     }
 
-    const payload = qrPayload || `Location:${location || 'Tom Salem Head Office'}|Checkpoint:${name}`;
-
+    // Insert only standard columns that always exist in the checkpoints table
     const { data, error } = await supabase
       .from('checkpoints')
       .insert([
         {
-          location_id: locationId || null,
           location: location || 'Tom Salem Head Office',
-          name: name,
-          qr_payload: payload
+          name: name
         }
       ])
       .select();
