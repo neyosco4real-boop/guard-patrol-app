@@ -20,35 +20,60 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { location_name, checkpoint_name, qr_url } = body;
 
-    // Based on schema cache errors, the actual columns in Supabase are 'location_name' and 'checkpoint_name' (or 'name')
-    // Let's try inserting with exact known columns: location_name, checkpoint_name, qr_url
-    let { data, error } = await supabase
+    // Dynamically inspect existing table columns from a sample row
+    const { data: sampleRows } = await supabase
       .from('checkpoints')
-      .insert([{ location_name, checkpoint_name, qr_url }])
-      .select();
+      .select('*')
+      .limit(1);
 
-    if (error) {
-      // Fallback variations if needed
-      let res2 = await supabase
-        .from('checkpoints')
-        .insert([{ location_name, name: checkpoint_name, qr_url }])
-        .select();
+    let insertPayload: Record<string, any> = {};
 
-      if (res2.error) {
-        let res3 = await supabase
-          .from('checkpoints')
-          .insert([{ location: location_name, checkpoint_name, qr_code: qr_url }])
-          .select();
-        
-        if (res3.error) {
-          throw error; // throw original or final error
+    if (sampleRows && sampleRows.length > 0) {
+      const existingKeys = Object.keys(sampleRows[0]);
+      
+      if (existingKeys.includes('location_name')) insertPayload['location_name'] = location_name;
+      else if (existingKeys.includes('location')) insertPayload['location'] = location_name;
+      else if (existingKeys.includes('site_name')) insertPayload['site_name'] = location_name;
+
+      if (existingKeys.includes('checkpoint_name')) insertPayload['checkpoint_name'] = checkpoint_name;
+      else if (existingKeys.includes('checkpoint')) insertPayload['checkpoint'] = checkpoint_name;
+      else if (existingKeys.includes('name')) insertPayload['name'] = checkpoint_name;
+
+      if (existingKeys.includes('qr_url')) insertPayload['qr_url'] = qr_url;
+      else if (existingKeys.includes('qr_code')) insertPayload['qr_code'] = qr_url;
+      else if (existingKeys.includes('url')) insertPayload['url'] = qr_url;
+    }
+
+    let data, error;
+
+    if (Object.keys(insertPayload).length > 0) {
+      const res = await supabase.from('checkpoints').insert([insertPayload]).select();
+      data = res.data;
+      error = res.error;
+    }
+
+    if (!data || error) {
+      const attempts = [
+        { location_name, checkpoint_name, qr_url },
+        { location: location_name, checkpoint: checkpoint_name, qr_url },
+        { location_name, name: checkpoint_name, qr_url },
+        { location: location_name, checkpoint: checkpoint_name, qr_code: qr_url },
+        { location: location_name, checkpoint: checkpoint_name, qr_code: qr_url }
+      ];
+
+      for (const attempt of attempts) {
+        const res = await supabase.from('checkpoints').insert([attempt]).select();
+        if (!res.error) {
+          data = res.data;
+          error = null;
+          break;
+        } else {
+          error = res.error;
         }
-        data = res3.data;
-      } else {
-        data = res2.data;
       }
     }
 
+    if (error) throw error;
     return NextResponse.json({ success: true, checkpoint: data?.[0] });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
