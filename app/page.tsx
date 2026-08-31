@@ -5,6 +5,7 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 
 export default function ScanPage() {
   const [guardName, setGuardName] = useState('');
+  const [locationName, setLocationName] = useState('Main Facility');
   const [checkpointName, setCheckpointName] = useState('Front Gate');
   const [notes, setNotes] = useState('Normal Patrol Scan');
   const [isIncident, setIsIncident] = useState(false);
@@ -36,8 +37,14 @@ export default function ScanPage() {
       const rawValue = result[0].rawValue;
       try {
         const parsed = JSON.parse(rawValue);
-        const name = parsed.checkpoint_name || parsed.location || parsed.name || rawValue;
-        setCheckpointName(name);
+        if (parsed.checkpoint_name || parsed.checkpointName) {
+          setCheckpointName(parsed.checkpoint_name || parsed.checkpointName);
+        } else {
+          setCheckpointName(rawValue);
+        }
+        if (parsed.location_name || parsed.locationName || parsed.location) {
+          setLocationName(parsed.location_name || parsed.locationName || parsed.location);
+        }
       } catch {
         setCheckpointName(rawValue);
       }
@@ -56,7 +63,7 @@ export default function ScanPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guardName.trim()) {
       alert('Please enter your Guard Name.');
@@ -67,47 +74,33 @@ export default function ScanPage() {
     try {
       localStorage.setItem('tom_salem_guard_name', guardName.trim());
 
-      const currentLat = lat ?? 6.44508;
-      const currentLng = lng ?? 3.41434;
-
-      const newAlert = {
-        id: Date.now().toString(),
+      const payload = {
         guardName: guardName.trim(),
-        location: 'Tom Salem Head Office',
+        location: locationName.trim() || 'Main Facility',
         checkpointName: checkpointName.trim() || 'Front Gate',
         notes: notes.trim() || (isIncident ? 'INCIDENT EMERGENCY REPORT' : 'Normal Patrol Scan'),
         isIncident,
         mediaUrl,
-        lat: currentLat,
-        lng: currentLng,
-        createdAt: new Date().toISOString(),
+        lat: lat ?? 6.44508,
+        lng: lng ?? 3.41434,
       };
 
-      let alerts = [];
-      const cached = localStorage.getItem('tom_salem_patrol_alerts');
-      if (cached) {
-        try {
-          alerts = JSON.parse(cached);
-          if (!Array.isArray(alerts)) alerts = [];
-        } catch {
-          alerts = [];
-        }
-      }
+      const res = await fetch('/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-      const updated = [newAlert, ...alerts];
-      localStorage.setItem('tom_salem_patrol_alerts', JSON.stringify(updated));
-      window.dispatchEvent(new Event('storage'));
-      window.dispatchEvent(new Event('patrol_update'));
+      if (!res.ok) throw new Error('Failed to submit log to API');
 
       setSuccessMsg(true);
-      setCheckpointName('Front Gate');
       setNotes('Normal Patrol Scan');
       setIsIncident(false);
       setMediaUrl('');
       setTimeout(() => setSuccessMsg(false), 4000);
     } catch (error) {
       console.error('Submit error:', error);
-      alert('Error submitting log.');
+      alert('Error submitting log to API live feed.');
     } finally {
       setLoading(false);
     }
@@ -143,6 +136,7 @@ export default function ScanPage() {
               type="button"
               onClick={() => {
                 setCheckpointName('Front Gate');
+                setLocationName('Main Facility');
                 setShowScanner(false);
               }}
               className="mt-4 w-full bg-cyan-500 text-slate-950 font-bold py-3 rounded-xl text-xs uppercase cursor-pointer"
@@ -155,13 +149,13 @@ export default function ScanPage() {
 
       {successMsg && (
         <div className="bg-emerald-950 border border-emerald-500 text-emerald-400 p-3 rounded-xl text-xs font-bold text-center animate-pulse">
-          ✓ Patrol log successfully submitted and synced to live feed!
+          ✓ Patrol log successfully sent to Admin Live Feed!
         </div>
       )}
 
       <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 text-center shadow-lg">
         <h1 className="text-xl font-bold tracking-wide text-white">GUARD PATROL PWA</h1>
-        <p className="text-xs text-slate-400 mt-1">Tom Salem Head Office Terminal</p>
+        <p className="text-xs text-slate-400 mt-1">Multi-Location Patrol Terminal</p>
         <div className="mt-3 inline-flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-full">
           <span>📍 {lat !== null && lng !== null ? `GPS Active (${lat.toFixed(5)}, ${lng.toFixed(5)})` : '📍 GPS Active (6.44508, 3.41434)'}</span>
         </div>
@@ -182,7 +176,7 @@ export default function ScanPage() {
             type="text"
             value={guardName}
             onChange={(e) => setGuardName(e.target.value)}
-            placeholder="e.g. Officer Joe"
+            placeholder="e.g. Officer James"
             className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
             required
           />
@@ -192,9 +186,11 @@ export default function ScanPage() {
           <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Parent Location</label>
           <input
             type="text"
-            value="Tom Salem Head Office"
-            disabled
-            className="w-full bg-slate-950/60 border border-white/10 rounded-xl px-4 py-3 text-slate-400 text-sm cursor-not-allowed"
+            value={locationName}
+            onChange={(e) => setLocationName(e.target.value)}
+            placeholder="e.g. Branch Office / Facility Name"
+            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+            required
           />
         </div>
 
@@ -208,7 +204,7 @@ export default function ScanPage() {
             className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
             required
           />
-          <p className="text-xs text-emerald-400 mt-1.5">✓ Assigned to Location: Tom Salem Head Office</p>
+          <p className="text-xs text-emerald-400 mt-1.5">✓ Assigned to Location: {locationName}</p>
         </div>
 
         <div>
