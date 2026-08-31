@@ -3,6 +3,7 @@
 import React, { useEffect, useState, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { calculateDistanceMeters } from '@/utils/geofence';
 
 function ScanContent() {
   const searchParams = useSearchParams();
@@ -25,6 +26,11 @@ function ScanContent() {
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Target base coordinates for site checkpoints (e.g., benchmarked site center)
+  // For demo/testing, we use a default reference point or parsed coordinates
+  const targetLat = 6.44511;
+  const targetLng = 3.41430;
 
   useEffect(() => {
     const loc = searchParams.get('loc') || '';
@@ -112,7 +118,21 @@ function ScanContent() {
     setErrorMsg('');
     setSuccessMsg('');
 
-    const gpsStr = lat && lng ? `${lat}, ${lng}` : '6.44511, 3.41430';
+    const currentLat = parseFloat(lat || '6.44511');
+    const currentLng = parseFloat(lng || '3.41430');
+
+    // Calculate distance from target geofence point
+    const distanceMeters = calculateDistanceMeters(targetLat, targetLng, currentLat, currentLng);
+    const isOutsideGeofence = distanceMeters > 50;
+
+    const geofenceStatus = isOutsideGeofence ? 'UNVERIFIED SCAN (>50m)' : 'Within Radius (<=50m)';
+    const patrolStatus = isOutsideGeofence ? 'Alert Triggered' : 'Completed';
+
+    if (isOutsideGeofence) {
+      setErrorMsg(`⚠️ GEOFENCE ALERT: You are ${Math.round(distanceMeters)}m away from the checkpoint! Maximum allowed radius is 50m. Log flagged as Unverified.`);
+    }
+
+    const gpsStr = `${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`;
 
     try {
       const payload = {
@@ -122,18 +142,20 @@ function ScanContent() {
         checkpoint: checkpointName,
         checkpoint_name: checkpointName,
         name: checkpointName,
-        latitude: lat || '6.44511',
-        longitude: lng || '3.41430',
+        latitude: currentLat.toString(),
+        longitude: currentLng.toString(),
         gps_coordinates: gpsStr,
-        geofence: 'Within Radius',
-        status: 'Completed',
-        notes: notes ? `${notes} [Photo Attached]` : (incidentPhoto ? 'Incident Photo Captured' : 'None')
+        geofence: geofenceStatus,
+        status: patrolStatus,
+        notes: notes ? `${notes} [Distance: ${Math.round(distanceMeters)}m]` : `Distance: ${Math.round(distanceMeters)}m`
       };
 
       const { error } = await supabase.from('patrol_logs').insert([payload]);
       if (error) throw error;
 
-      setSuccessMsg('Patrol telemetry successfully recorded and verified.');
+      if (!isOutsideGeofence) {
+        setSuccessMsg('Patrol telemetry successfully recorded and verified within 50m radius.');
+      }
       setNotes('');
       setIncidentPhoto(null);
     } catch (err: any) {
@@ -149,12 +171,12 @@ function ScanContent() {
         <div className="text-center pb-4 mb-4 border-b border-slate-800">
           <span className="text-2xl">🛡️</span>
           <h1 className="text-lg font-bold text-white mt-1">Guard Patrol Scanner</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Scan physical checkpoint QRs and capture live GPS telemetry.</p>
+          <p className="text-xs text-slate-400 mt-0.5">Strict 50m Geofence Perimeter Security & GPS Telemetry.</p>
         </div>
 
         {errorMsg && (
-          <div className="bg-red-950/50 border border-red-800 text-red-300 text-xs p-3 rounded-lg mb-4">
-            Error: {errorMsg}
+          <div className="bg-red-950/80 border border-red-800 text-red-200 text-xs p-3 rounded-lg mb-4 leading-relaxed font-medium">
+            {errorMsg}
           </div>
         )}
 
@@ -273,7 +295,7 @@ function ScanContent() {
             <input
               type="text"
               readOnly
-              value={lat && lng ? `${lat}, ${lng}` : 'Acquiring GPS...'}
+              value={lat && lng ? `${lat}, ${lng} (50m Geofence Active)` : 'Acquiring GPS...'}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-emerald-400 font-mono focus:outline-none"
             />
           </div>
