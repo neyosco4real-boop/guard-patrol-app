@@ -54,7 +54,6 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Close export dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
@@ -113,63 +112,215 @@ export default function AdminPage() {
     document.body.removeChild(link);
   };
 
-  const exportToHTMLView = () => {
+  const downloadHTMLReport = () => {
     setShowExportMenu(false);
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tom Salem Security Operations - Patrol Telemetry Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 30px;
+            background-color: #f7f9fa;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        .header {
+            border-bottom: 3px solid #0f172a;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .logo-title h1 {
+            font-size: 22px;
+            font-weight: 900;
+            color: #0f172a;
+            margin: 0 0 5px 0;
+            letter-spacing: 0.5px;
+        }
+        .logo-title p {
+            font-size: 12px;
+            color: #64748b;
+            margin: 0;
+            font-weight: 600;
+        }
+        .report-meta {
+            text-align: right;
+            font-size: 11px;
+            color: #475569;
+            line-height: 1.5;
+        }
+        .summary-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .summary-box h2 {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #0f172a;
+            margin: 0 0 15px 0;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        .metric-card {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .metric-card span {
+            display: block;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .metric-card strong {
+            font-size: 18px;
+            color: #0f172a;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 11px;
+        }
+        th {
+            background-color: #0f172a;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        .badge-success {
+            color: #16a34a;
+            font-weight: bold;
+            background: #dcfce7;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+        .badge-incident {
+            color: #dc2626;
+            font-weight: bold;
+            background: #fee2e2;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+        .footer {
+            margin-top: 40px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+            text-align: center;
+            font-size: 10px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-title">
+                <h1>TOM SALEM SECURITY OPERATIONS</h1>
+                <p>COMMAND CENTER TELEMETRY & PATROL AUDIT</p>
+            </div>
+            <div class="report-meta">
+                <strong>Generated:</strong> ${new Date().toLocaleString()}<br>
+                <strong>Classification:</strong> Confidential / Security Operations<br>
+                <strong>Total Logs:</strong> ${alerts.length}
+            </div>
+        </div>
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Tom Salem Security Operations - Certified Patrol Report</title>
-          <style>
-            body { font-family: monospace, sans-serif; background: #fff; color: #111; padding: 20px; }
-            h1 { font-size: 20px; margin-bottom: 5px; }
-            p { font-size: 12px; color: #555; margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
-            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-            th { background: #f4f4f4; }
-            .incident { color: #d9534f; font-weight: bold; }
-            .success { color: #5cb85c; font-weight: bold; }
-            @media print { body { padding: 0; } }
-          </style>
-        </head>
-        <body>
-          <h1>TOM SALEM SECURITY OPERATIONS</h1>
-          <p>Certified Patrol Telemetry & Incident Report | Generated: ${new Date().toLocaleString()}</p>
-          <table>
+        <div class="summary-box">
+            <h2>Executive Summary</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <span>Total Patrol Scans</span>
+                    <strong>${alerts.length}</strong>
+                </div>
+                <div class="metric-card">
+                    <span>Successful Verifications</span>
+                    <strong>${alerts.filter(a => !a.isIncident).length}</strong>
+                </div>
+                <div class="metric-card">
+                    <span>Reported Incidents</span>
+                    <strong style="color: #dc2626;">${alerts.filter(a => a.isIncident).length}</strong>
+                </div>
+            </div>
+        </div>
+
+        <h2 style="font-size: 14px; color: #0f172a; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Detailed Patrol Logs</h2>
+        <table>
             <thead>
-              <tr>
-                <th>Date/Time</th>
-                <th>Guard Name</th>
-                <th>Location</th>
-                <th>Checkpoint</th>
-                <th>GPS Coordinates</th>
-                <th>Status</th>
-                <th>Incident Report</th>
-              </tr>
+                <tr>
+                    <th>Date / Time</th>
+                    <th>Guard Name</th>
+                    <th>Location / Checkpoint</th>
+                    <th>GPS Coordinates</th>
+                    <th>Status</th>
+                    <th>Incident Report / Notes</th>
+                </tr>
             </thead>
             <tbody>
-              ${alerts.map(a => `
-                <tr>
-                  <td>${new Date(a.createdAt).toLocaleString()}</td>
-                  <td><b>${a.guardName}</b></td>
-                  <td>${a.location}</td>
-                  <td>${a.checkpointName}</td>
-                  <td>${a.lat}, ${a.lng}</td>
-                  <td class="${a.isIncident ? 'incident' : 'success'}">${a.isIncident ? 'Incident' : 'Successful Scan'}</td>
-                  <td>${a.notes || 'Normal Patrol Scan'}</td>
-                </tr>
-              `).join('')}
+                ${alerts.map(a => `
+                    <tr>
+                        <td>${new Date(a.createdAt).toLocaleString()}</td>
+                        <td><strong>${a.guardName}</strong></td>
+                        <td>${a.location} &rsaquo; ${a.checkpointName}</td>
+                        <td style="font-family: monospace;">${a.lat}, ${a.lng}</td>
+                        <td>
+                            <span class="${a.isIncident ? 'badge-incident' : 'badge-success'}">
+                                ${a.isIncident ? 'Incident' : 'Success'}
+                            </span>
+                        </td>
+                        <td>${a.notes || 'Normal Patrol Scan'}</td>
+                    </tr>
+                `).join('')}
             </tbody>
-          </table>
-          <script>window.print();</script>
-        </body>
-      </html>
-    `;
-    printWindow.document.write(html);
-    printWindow.document.close();
+        </table>
+
+        <div class="footer">
+            &copy; ${new Date().getFullYear()} Tom Salem Security Operations. All rights reserved. Automated Telemetry Command Report.
+        </div>
+    </div>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `TomSalem_Patrol_Report_${new Date().toISOString().slice(0, 10)}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -201,7 +352,7 @@ export default function AdminPage() {
             </button>
 
             {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-52 bg-[#0b0f19] border border-slate-800 rounded-2xl shadow-2xl py-2 z-50 flex flex-col">
+              <div className="absolute right-0 mt-2 w-56 bg-[#0b0f19] border border-slate-800 rounded-2xl shadow-2xl py-2 z-50 flex flex-col">
                 <button
                   type="button"
                   onClick={exportToCSV}
@@ -211,10 +362,10 @@ export default function AdminPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={exportToHTMLView}
+                  onClick={downloadHTMLReport}
                   className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800/80 hover:text-cyan-400 flex items-center gap-2 cursor-pointer border-t border-slate-900"
                 >
-                  🖨️ View Print / HTML Report
+                  📥 Download HTML Report
                 </button>
               </div>
             )}
