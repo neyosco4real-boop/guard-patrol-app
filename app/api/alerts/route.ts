@@ -15,9 +15,9 @@ export async function POST(request: Request) {
     }
 
     const newAlert = {
-      id: 'alert_' + Date.now() + '_' + Math.random().toString(36.substring(2, 7)),
+      id: 'alert_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       guardName: body.guardName || 'Officer',
-      location: body.location || 'Tom Salem Head Office',
+      location: body.location || 'Main Facility',
       checkpointName: body.checkpointName || 'Front Gate',
       notes: body.notes || 'Normal Patrol Scan',
       isIncident: !!body.isIncident,
