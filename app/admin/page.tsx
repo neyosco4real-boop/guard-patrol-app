@@ -34,6 +34,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchLogs();
 
+    // Real-time auto-refresh feed subscription
     const channel = supabase
       .channel('public:patrol_logs')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'patrol_logs' }, (payload) => {
@@ -76,7 +77,7 @@ export default function AdminDashboard() {
   };
 
   const exportToCSV = () => {
-    const headers = ['Time', 'Guard Name', 'Location', 'Checkpoint', 'Latitude', 'Longitude', 'Notes'];
+    const headers = ['Time', 'Guard Name', 'Location', 'Checkpoint', 'Latitude', 'Longitude', 'Incident Report'];
     const rows = logs.map(l => [
       l.created_at,
       `"${l.guard_name}"`,
@@ -124,6 +125,10 @@ export default function AdminDashboard() {
     }, 1500);
   };
 
+  const clearFeed = () => {
+    setLogs([]);
+  };
+
   const filteredLogs = logs.filter((log) => {
     const term = searchTerm.toLowerCase();
     return (
@@ -144,8 +149,8 @@ export default function AdminDashboard() {
             <div className="flex items-center gap-2.5 mb-1">
               <span className="text-2xl">🛡️</span>
               <h1 className="text-xl font-bold text-white tracking-tight">Security Guard Patrol Dashboard</h1>
-              <span className="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] px-2.5 py-0.5 rounded-full font-semibold">
-                Live Feed Active
+              <span className="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] px-2.5 py-0.5 rounded-full font-semibold animate-pulse">
+                Auto-Refresh Live Feed Active
               </span>
             </div>
             <p className="text-xs text-slate-400">Real-time guard telemetry, location manager, and geofence monitoring.</p>
@@ -175,18 +180,26 @@ export default function AdminDashboard() {
 
         {/* Live Patrol Feed Section (Centered & Prominent) */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <span className="text-lg">📋</span>
               <h2 className="text-sm font-bold text-white uppercase tracking-wider">Live Patrol Logs Feed</h2>
             </div>
-            <input
-              type="text"
-              placeholder="Search logs..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-64"
-            />
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <input
+                type="text"
+                placeholder="Search logs..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-full md:w-64"
+              />
+              <button
+                onClick={clearFeed}
+                className="bg-slate-900 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-800 hover:border-rose-900/60 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap"
+              >
+                Clear Feed
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -205,7 +218,7 @@ export default function AdminDashboard() {
                       <th className="p-4">Guard Name</th>
                       <th className="p-4">Location & Checkpoint</th>
                       <th className="p-4">GPS Coordinates</th>
-                      <th className="p-4">Notes / Photo</th>
+                      <th className="p-4">Incident Report & Attachment</th>
                       <th className="p-4 text-right">Action</th>
                     </tr>
                   </thead>
@@ -469,7 +482,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80">
-                <span className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Notes & Observations</span>
+                <span className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Incident Report & Observations</span>
                 <p className="text-slate-200 whitespace-pre-wrap leading-relaxed">{cleanNotesText(selectedLog.notes)}</p>
               </div>
 
