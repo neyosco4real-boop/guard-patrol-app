@@ -4,6 +4,7 @@ import React, { useEffect, useState, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { calculateDistanceMeters } from '@/utils/geofence';
+import jsQR from 'jsqr';
 
 function ScanContent() {
   const searchParams = useSearchParams();
@@ -21,6 +22,7 @@ function ScanContent() {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const incidentVideoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
@@ -28,7 +30,6 @@ function ScanContent() {
   const [errorMsg, setErrorMsg] = useState('');
 
   // Target base coordinates for site checkpoints (e.g., benchmarked site center)
-  // For demo/testing, we use a default reference point or parsed coordinates
   const targetLat = 6.44511;
   const targetLng = 3.41430;
 
@@ -55,6 +56,64 @@ function ScanContent() {
       }
     };
   }, [searchParams]);
+
+  // QR Scanning Loop using requestAnimationFrame and jsQR
+  useEffect(() => {
+    let animationFrameId: number;
+
+    const scanFrame = () => {
+      if (scanningQR && videoRef.current && canvasRef.current) {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert',
+            });
+
+            if (code) {
+              // Successfully decoded QR code!
+              const scannedText = code.data;
+              try {
+                // Try parsing as URL search params or JSON if structured, otherwise use as checkpoint/location
+                if (scannedText.includes('loc=') || scannedText.includes('cp=')) {
+                  const urlParams = new URLSearchParams(scannedText.includes('?') ? scannedText.split('?')[1] : scannedText);
+                  const loc = urlParams.get('loc');
+                  const cp = urlParams.get('cp');
+                  if (loc) setLocationName(loc);
+                  if (cp) setCheckpointName(cp);
+                } else {
+                  setCheckpointName(scannedText);
+                  if (!locationName) setLocationName('Main Site');
+                }
+              } catch {
+                setCheckpointName(scannedText);
+              }
+
+              stopCamera();
+              return;
+            }
+          }
+        }
+      }
+      if (scanningQR) {
+        animationFrameId = requestAnimationFrame(scanFrame);
+      }
+    };
+
+    if (scanningQR) {
+      animationFrameId = requestAnimationFrame(scanFrame);
+    }
+
+    return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    };
+  }, [scanningQR, locationName]);
 
   const startCamera = async (type: 'qr' | 'incident') => {
     try {
@@ -171,7 +230,7 @@ function ScanContent() {
         <div className="text-center pb-4 mb-4 border-b border-slate-800">
           <span className="text-2xl">🛡️</span>
           <h1 className="text-lg font-bold text-white mt-1">Guard Patrol Scanner</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Strict 50m Geofence Perimeter Security & GPS Telemetry.</p>
+          <p className="text-xs text-slate-400 mt-0.5">Strict 50m Geofence Perimeter Security & Live QR Decoding.</p>
         </div>
 
         {errorMsg && (
@@ -190,9 +249,12 @@ function ScanContent() {
         {scanningQR && (
           <div className="mb-6 bg-slate-950 border border-emerald-500/50 rounded-xl p-4 text-center">
             <h3 className="text-xs font-semibold text-emerald-400 uppercase mb-2">Align Checkpoint QR Code in Frame</h3>
-            <div className="relative w-full h-64 bg-black rounded-lg overflow-hidden mb-3">
-              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-              <div className="absolute inset-0 border-2 border-emerald-500/40 m-8 rounded-lg pointer-events-none animate-pulse"></div>
+            <div className="relative w-full h-64 bg-black rounded-lg overflow-hidden mb-3 flex items-center justify-center">
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <canvas ref={canvasRef} className="hidden" />
+              <div className="absolute inset-0 border-2 border-emerald-500/50 m-8 rounded-lg pointer-events-none animate-pulse flex items-center justify-center">
+                <span className="bg-black/60 text-emerald-300 text-[10px] px-2 py-1 rounded">Scanning QR...</span>
+              </div>
             </div>
             <div className="flex gap-2">
               <button
@@ -202,16 +264,16 @@ function ScanContent() {
                   setCheckpointName('Front Gate');
                   stopCamera();
                 }}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold py-2 rounded-lg"
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium py-2 rounded-lg"
               >
-                Simulate QR Detect
+                Simulate Scan
               </button>
               <button
                 type="button"
                 onClick={stopCamera}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 px-4 rounded-lg"
+                className="bg-red-900/40 hover:bg-red-900/60 text-red-300 text-xs py-2 px-4 rounded-lg"
               >
-                Close
+                Cancel
               </button>
             </div>
           </div>
@@ -222,7 +284,7 @@ function ScanContent() {
           <div className="mb-6 bg-slate-950 border border-amber-500/50 rounded-xl p-4 text-center">
             <h3 className="text-xs font-semibold text-amber-400 uppercase mb-2">Live Incident Camera Capture</h3>
             <div className="relative w-full h-64 bg-black rounded-lg overflow-hidden mb-3">
-              <video ref={incidentVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+              <video ref={incidentVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
             </div>
             <div className="flex gap-2">
               <button
