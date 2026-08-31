@@ -12,8 +12,17 @@ interface PatrolLog {
   incident_report: string;
 }
 
+interface CheckpointItem {
+  id: string | number;
+  created_at: string;
+  location_name: string;
+  checkpoint_name: string;
+  qr_url: string;
+}
+
 export default function AdminTelemetryPage() {
   const [logs, setLogs] = useState<PatrolLog[]>([]);
+  const [checkpoints, setCheckpoints] = useState<CheckpointItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'feed' | 'checkpoints'>('feed');
@@ -21,25 +30,29 @@ export default function AdminTelemetryPage() {
   // Checkpoint Generator State
   const [siteName, setSiteName] = useState('');
   const [checkpointName, setCheckpointName] = useState('');
-  const [generatedQRUrl, setGeneratedQRUrl] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const fetchLogs = async () => {
+  const fetchData = async () => {
     try {
-      const res = await fetch('/api/scans');
-      const data = await res.json();
-      if (data.success) {
-        setLogs(data.logs || []);
-      }
+      const [scansRes, cpRes] = await Promise.all([
+        fetch('/api/scans'),
+        fetch('/api/checkpoints')
+      ]);
+      const scansData = await scansRes.json();
+      const cpData = await cpRes.json();
+
+      if (scansData.success) setLogs(scansData.logs || []);
+      if (cpData.success) setCheckpoints(cpData.checkpoints || []);
     } catch (err) {
-      console.error('Failed to fetch telemetry logs', err);
+      console.error('Failed to fetch admin data', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 10000);
+    fetchData();
+    const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -49,12 +62,48 @@ export default function AdminTelemetryPage() {
     log.checkpoint?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleGenerateQR = (e: React.FormEvent) => {
+  const handleCreateCheckpoint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!siteName || !checkpointName) return;
-    const payload = `Location: ${siteName} | Checkpoint: ${checkpointName}`;
-    const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payload)}`;
-    setGeneratedQRUrl(qrApi);
+
+    setSubmitting(true);
+    try {
+      const payloadStr = `Location: ${siteName} | Checkpoint: ${checkpointName}`;
+      const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payloadStr)}`;
+
+      const res = await fetch('/api/checkpoints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location_name: siteName,
+          checkpoint_name: checkpointName,
+          qr_url: qrApi
+        })
+      });
+
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      setSiteName('');
+      setCheckpointName('');
+      fetchData();
+    } catch (err: any) {
+      alert('Error creating checkpoint: ' + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteCheckpoint = async (id: string | number) => {
+    if (!confirm('Are you sure you want to delete this checkpoint?')) return;
+    try {
+      const res = await fetch(`/api/checkpoints?id=${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      fetchData();
+    } catch (err: any) {
+      alert('Error deleting checkpoint: ' + err.message);
+    }
   };
 
   return (
@@ -123,7 +172,7 @@ export default function AdminTelemetryPage() {
               className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-teal-500 w-full max-w-sm transition-all"
             />
             <button 
-              onClick={() => { setLoading(true); fetchLogs(); }}
+              onClick={() => { setLoading(true); fetchData(); }}
               className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-400 font-medium px-4 py-2.5 rounded-xl text-sm transition-all flex items-center gap-2 shadow-lg shrink-0"
             >
               <span>🔄 Refresh Feed</span>
@@ -206,60 +255,79 @@ export default function AdminTelemetryPage() {
           </div>
         </>
       ) : (
-        /* Checkpoint & QR Generator Section */
-        <div className="max-w-3xl mx-auto bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl backdrop-blur-md">
-          <h2 className="text-xl font-bold mb-2">🏷️ Checkpoint & QR Code Generator</h2>
-          <p className="text-sm text-slate-400 mb-6">Create verifiable physical checkpoint QR tags for security patrol deployment.</p>
-          
-          <form onSubmit={handleGenerateQR} className="space-y-4 mb-8">
-            <div>
-              <label className="block text-xs uppercase font-semibold text-slate-400 mb-1">Location Site Name</label>
-              <input 
-                type="text" 
-                value={siteName} 
-                onChange={(e) => setSiteName(e.target.value)} 
-                placeholder="e.g. Multichoice HQ"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-500"
-                required 
-              />
-            </div>
-            <div>
-              <label className="block text-xs uppercase font-semibold text-slate-400 mb-1">Checkpoint / Gate Name</label>
-              <input 
-                type="text" 
-                value={checkpointName} 
-                onChange={(e) => setCheckpointName(e.target.value)} 
-                placeholder="e.g. Front Gate / Server Room"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-500"
-                required 
-              />
-            </div>
-            <button 
-              type="submit"
-              className="w-full bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold py-3.5 rounded-xl transition-all shadow-lg"
-            >
-              Generate Checkpoint QR Tag
-            </button>
-          </form>
-
-          {generatedQRUrl && (
-            <div className="bg-slate-950 border border-teal-500/40 p-6 rounded-2xl flex flex-col items-center text-center">
-              <p className="text-xs uppercase font-mono text-teal-400 mb-4">Ready for Print & Deployment</p>
-              <div className="bg-white p-4 rounded-xl shadow-lg mb-4">
-                <img src={generatedQRUrl} alt="Checkpoint QR Code" className="w-48 h-48" />
+        /* Checkpoint & QR Manager Section */
+        <div className="max-w-5xl mx-auto space-y-8">
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl backdrop-blur-md">
+            <h2 className="text-xl font-bold mb-2">🏷️ Generate New Checkpoint QR Tag</h2>
+            <p className="text-sm text-slate-400 mb-6">Create and save verifiable physical checkpoint QR tags into the database.</p>
+            
+            <form onSubmit={handleCreateCheckpoint} className="space-y-4">
+              <div>
+                <label className="block text-xs uppercase font-semibold text-slate-400 mb-1">Location Site Name</label>
+                <input 
+                  type="text" 
+                  value={siteName} 
+                  onChange={(e) => setSiteName(e.target.value)} 
+                  placeholder="e.g. Multichoice HQ"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-500"
+                  required 
+                />
               </div>
-              <p className="text-sm font-semibold text-white mb-1">{siteName}</p>
-              <p className="text-xs text-slate-400 font-mono mb-4">Checkpoint: {checkpointName}</p>
-              <a 
-                href={generatedQRUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-400 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+              <div>
+                <label className="block text-xs uppercase font-semibold text-slate-400 mb-1">Checkpoint / Gate Name</label>
+                <input 
+                  type="text" 
+                  value={checkpointName} 
+                  onChange={(e) => setCheckpointName(e.target.value)} 
+                  placeholder="e.g. Front Gate / Server Room"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-500"
+                  required 
+                />
+              </div>
+              <button 
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold py-3.5 rounded-xl transition-all shadow-lg disabled:opacity-50"
               >
-                📥 Download QR Image
-              </a>
-            </div>
-          )}
+                {submitting ? 'Saving Checkpoint...' : 'Save & Generate QR Tag'}
+              </button>
+            </form>
+          </div>
+
+          {/* Saved Checkpoints List Grid */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl backdrop-blur-md">
+            <h2 className="text-xl font-bold mb-4">🗂️ Deployed Checkpoint Database ({checkpoints.length})</h2>
+            
+            {checkpoints.length === 0 ? (
+              <p className="text-slate-500 text-sm">No checkpoints created yet.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {checkpoints.map((cp) => (
+                  <div key={cp.id} className="bg-slate-950 border border-slate-800 p-5 rounded-2xl flex flex-col items-center text-center relative group">
+                    <button 
+                      onClick={() => handleDeleteCheckpoint(cp.id)}
+                      className="absolute top-3 right-3 text-slate-500 hover:text-red-400 text-xs font-mono bg-slate-900 px-2 py-1 rounded-lg border border-slate-800"
+                    >
+                      Delete
+                    </button>
+                    <div className="bg-white p-3 rounded-xl shadow-md mb-3 mt-4">
+                      <img src={cp.qr_url} alt="QR" className="w-36 h-36" />
+                    </div>
+                    <p className="text-sm font-semibold text-white">{cp.location_name}</p>
+                    <p className="text-xs text-teal-400 font-mono mb-4">{cp.checkpoint_name}</p>
+                    <a 
+                      href={cp.qr_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="w-full bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold py-2 rounded-xl transition-all"
+                    >
+                      📥 Download QR
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </main>
