@@ -20,14 +20,13 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { location_name, checkpoint_name, qr_url } = body;
 
-    // Try inserting with location and checkpoint columns (matching standard schema), fallback/adapt if needed
+    // Try both standard column configurations to match any database schema variation
     let { data, error } = await supabase
       .from('checkpoints')
-      .insert([{ location, checkpoint: checkpoint_name, qr_url }])
+      .insert([{ location: location_name, checkpoint: checkpoint_name, qr_url }])
       .select();
 
     if (error) {
-      // If table uses location_name / checkpoint_name
       const res2 = await supabase
         .from('checkpoints')
         .insert([{ location_name, checkpoint_name, qr_url }])
