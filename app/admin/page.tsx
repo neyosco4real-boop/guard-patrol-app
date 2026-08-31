@@ -23,10 +23,12 @@ export default function AdminDashboard() {
   // Management modals state
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showCheckpointModal, setShowCheckpointModal] = useState(false);
+  const [showGeofenceModal, setShowGeofenceModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   
   const [newLocationName, setNewLocationName] = useState('');
   const [newCheckpointName, setNewCheckpointName] = useState('');
+  const [geofenceRadius, setGeofenceRadius] = useState('50');
   const [selectedCheckpointForQR, setSelectedCheckpointForQR] = useState('Gate 1 - North Perimeter');
   const [actionStatus, setActionStatus] = useState('');
 
@@ -116,6 +118,15 @@ export default function AdminDashboard() {
     }, 1500);
   };
 
+  const handleSaveGeofence = (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionStatus(`Geofence radius updated to ${geofenceRadius} meters!`);
+    setTimeout(() => {
+      setShowGeofenceModal(false);
+      setActionStatus('');
+    }, 1500);
+  };
+
   const filteredLogs = logs.filter((log) => {
     const term = searchTerm.toLowerCase();
     return (
@@ -140,7 +151,7 @@ export default function AdminDashboard() {
                 Live Feed Active
               </span>
             </div>
-            <p className="text-xs text-slate-400">Manage locations, checkpoints, QR codes, and monitor live guard telemetry.</p>
+            <p className="text-xs text-slate-400">Manage locations, checkpoints, geofences, QR codes, and monitor live guard telemetry.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -157,8 +168,14 @@ export default function AdminDashboard() {
               + Create Checkpoint
             </button>
             <button
-              onClick={() => setShowQRModal(true)}
+              onClick={() => setShowGeofenceModal(true)}
               className="bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-800 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors"
+            >
+              📍 Geofence
+            </button>
+            <button
+              onClick={() => setShowQRModal(true)}
+              className="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors"
             >
               🖨️ QR Code
             </button>
@@ -179,7 +196,7 @@ export default function AdminDashboard() {
               <h2 className="text-sm font-bold text-white uppercase tracking-wider">Geofence Monitoring</h2>
             </div>
             <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-0.5 rounded">
-              50m Radius Active
+              {geofenceRadius}m Radius Active
             </span>
           </div>
 
@@ -211,7 +228,7 @@ export default function AdminDashboard() {
 
             <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
               <span>Perimeter Target: <strong className="text-slate-200">Facility Perimeter</strong></span>
-              <span className="text-emerald-400 font-mono">Status: All active guards within 50m geofence</span>
+              <span className="text-emerald-400 font-mono">Status: All active guards within {geofenceRadius}m geofence</span>
             </div>
           </div>
         </div>
@@ -273,7 +290,7 @@ export default function AdminDashboard() {
                           <td className="p-4 font-mono text-[11px] text-slate-300">
                             <div>{log.latitude}, {log.longitude}</div>
                             <span className="inline-block mt-1 bg-emerald-950 text-emerald-400 border border-emerald-800 text-[9px] px-2 py-0.5 rounded font-semibold">
-                              ✓ Verified (≤50m)
+                              ✓ Verified (≤{geofenceRadius}m)
                             </span>
                           </td>
                           <td className="p-4 max-w-xs truncate text-slate-300">
@@ -357,6 +374,38 @@ export default function AdminDashboard() {
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowCheckpointModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Cancel</button>
                 <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-semibold">Save Checkpoint</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Geofence Settings */}
+      {showGeofenceModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+              <h3 className="text-sm font-bold text-white">Configure Geofence Perimeter</h3>
+              <button onClick={() => setShowGeofenceModal(false)} className="text-slate-400 hover:text-white text-base">✕</button>
+            </div>
+            <form onSubmit={handleSaveGeofence} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-400 uppercase font-semibold mb-1">Radius (Meters)</label>
+                <input
+                  type="number"
+                  required
+                  min="5"
+                  max="500"
+                  value={geofenceRadius}
+                  onChange={(e) => setGeofenceRadius(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Guards scanning outside this radius will be flagged as unverified.</p>
+              </div>
+              {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowGeofenceModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-semibold">Save Radius</button>
               </div>
             </form>
           </div>
