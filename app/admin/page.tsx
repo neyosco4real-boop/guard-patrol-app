@@ -81,7 +81,7 @@ export default function AdminPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 max-w-6xl mx-auto flex flex-col gap-6 font-sans">
+    <main className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 max-w-5xl mx-auto flex flex-col gap-6 font-sans">
       {/* Top Navigation & Header */}
       <div className="bg-slate-900 border border-white/10 p-5 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
         <div>
@@ -157,45 +157,69 @@ export default function AdminPage() {
               <p className="text-xs text-slate-500 mt-1">Submissions from mobile guard scanners will appear here in real-time.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-4">
               {alerts.map((alert) => (
                 <div
                   key={alert.id}
-                  className={`p-5 rounded-2xl border flex flex-col gap-4 ${
+                  className={`p-6 rounded-2xl border flex flex-col gap-4 ${
                     alert.isIncident
                       ? 'bg-red-950/30 border-red-500/60 shadow-red-950/50 shadow-lg'
                       : 'bg-slate-900 border-white/10'
                   }`}
                 >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-500/30 uppercase">
-                        📍 {alert.location}
-                      </span>
-                      <h3 className="text-base font-bold text-white mt-2">Checkpoint: {alert.checkpointName}</h3>
-                    </div>
-                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${alert.isIncident ? 'bg-red-500 text-slate-950 animate-pulse' : 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'}`}>
-                      {alert.isIncident ? '🚨 INCIDENT' : '✓ Verified'}
+                  <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                    <span className="text-xs font-extrabold px-3 py-1 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-500/30 uppercase tracking-wider">
+                      📍 {alert.location}
+                    </span>
+                    <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${alert.isIncident ? 'bg-red-500 text-slate-950 animate-pulse' : 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'}`}>
+                      {alert.isIncident ? '🚨 INCIDENT EMERGENCY' : '✓ Verified Normal'}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-300 bg-slate-950/60 p-3 rounded-xl border border-white/5">
-                    <p><span className="text-slate-500">Officer:</span> <strong className="text-white">{alert.guardName}</strong></p>
-                    <p><span className="text-slate-500">Time:</span> <strong className="text-white">{new Date(alert.createdAt).toLocaleTimeString()}</strong></p>
-                    <p className="col-span-2"><span className="text-slate-500">GPS:</span> <strong className="text-cyan-400">{alert.lat}, {alert.lng}</strong></p>
+                  {/* Vertical Stacked Report Details */}
+                  <div className="flex flex-col gap-2.5 text-xs bg-slate-950/70 p-4 rounded-xl border border-white/5">
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400 font-semibold">Date/Time:</span>
+                      <strong className="text-white">{new Date(alert.createdAt).toLocaleString()}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400 font-semibold">Guard Name:</span>
+                      <strong className="text-cyan-300">{alert.guardName}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400 font-semibold">Location:</span>
+                      <strong className="text-white">{alert.location}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400 font-semibold">Checkpoint:</span>
+                      <strong className="text-white">{alert.checkpointName}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400 font-semibold">GPS Coordinates:</span>
+                      <strong className="text-cyan-400 font-mono">{alert.lat}, {alert.lng}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400 font-semibold">Geofence:</span>
+                      <strong className="text-emerald-400">Within Perimeter (Active)</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-slate-400 font-semibold">Status:</span>
+                      <strong className={alert.isIncident ? 'text-red-400' : 'text-emerald-400'}>
+                        {alert.isIncident ? 'Incident Reported' : 'Successful Scan'}
+                      </strong>
+                    </div>
+                    <div className="flex flex-col pt-2 gap-1">
+                      <span className="text-slate-400 font-semibold uppercase tracking-wider">Incident Report / Notes:</span>
+                      <p className="text-slate-200 bg-slate-900 p-3 rounded-lg border border-white/5 font-sans">
+                        {alert.notes || 'No notes provided.'}
+                      </p>
+                    </div>
                   </div>
 
-                  {alert.notes && (
-                    <p className="text-xs text-slate-200 bg-slate-950 p-3 rounded-xl border border-white/5">
-                      <span className="text-slate-500 block mb-1 uppercase font-semibold">Notes:</span>
-                      {alert.notes}
-                    </p>
-                  )}
-
                   {alert.mediaUrl && (
-                    <div>
-                      <span className="text-xs text-slate-500 block mb-1 uppercase font-semibold">Incident Photo:</span>
-                      <img src={alert.mediaUrl} alt="Incident capture" className="w-full h-40 object-cover rounded-xl border border-white/10" />
+                    <div className="mt-2">
+                      <span className="text-xs text-slate-400 block mb-2 uppercase font-semibold">Attached Evidence Capture:</span>
+                      <img src={alert.mediaUrl} alt="Incident capture" className="w-full max-h-64 object-cover rounded-xl border border-white/10 shadow-md" />
                     </div>
                   )}
                 </div>
