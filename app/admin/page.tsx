@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface Alert {
   id: string;
@@ -20,6 +20,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'live' | 'checkpoints' | 'qr'>('live');
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  
   const [locations, setLocations] = useState<string[]>(['Chicken Republic', 'Tom Salem Head Office', 'Main Branch']);
   const [newLocation, setNewLocation] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('Chicken Republic');
@@ -29,6 +31,8 @@ export default function AdminPage() {
     'Tom Salem Head Office': ['Reception', 'Server Room', 'Parking Lot'],
     'Main Branch': ['Gate 1', 'Vault Room', 'Perimeter Fence']
   });
+
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   const fetchAlerts = async () => {
     try {
@@ -48,6 +52,17 @@ export default function AdminPage() {
     fetchAlerts();
     const interval = setInterval(fetchAlerts, 3000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const addLocation = (e: React.FormEvent) => {
@@ -74,8 +89,8 @@ export default function AdminPage() {
     setNewCheckpoint('');
   };
 
-  // Export functions
   const exportToCSV = () => {
+    setShowExportMenu(false);
     const headers = ['Date/Time', 'Guard Name', 'Location', 'Checkpoint', 'GPS Coordinates', 'Geofence', 'Status', 'Incident Report'];
     const rows = alerts.map((a) => [
       `"${new Date(a.createdAt).toLocaleString()}"`,
@@ -99,6 +114,7 @@ export default function AdminPage() {
   };
 
   const exportToHTMLView = () => {
+    setShowExportMenu(false);
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
@@ -171,35 +187,54 @@ export default function AdminPage() {
           </p>
         </div>
 
-        <div className="flex items-center flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={exportToCSV}
-            className="bg-slate-900 hover:bg-slate-800 text-cyan-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-800 flex items-center gap-2 cursor-pointer shadow"
-          >
-            📊 Export Excel (CSV)
-          </button>
-          <button
-            type="button"
-            onClick={exportToHTMLView}
-            className="bg-slate-900 hover:bg-slate-800 text-cyan-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-800 flex items-center gap-2 cursor-pointer shadow"
-          >
-            🖨️ View Print / HTML Report
-          </button>
+        {/* Action Controls */}
+        <div className="flex items-center flex-wrap gap-2.5">
+          
+          {/* Export Dropdown */}
+          <div className="relative" ref={exportMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="bg-slate-900 hover:bg-slate-800 text-cyan-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-800 flex items-center gap-2 cursor-pointer shadow"
+            >
+              📤 Export ▾
+            </button>
+
+            {showExportMenu && (
+              <div className="absolute right-0 mt-2 w-52 bg-[#0b0f19] border border-slate-800 rounded-2xl shadow-2xl py-2 z-50 flex flex-col">
+                <button
+                  type="button"
+                  onClick={exportToCSV}
+                  className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800/80 hover:text-cyan-400 flex items-center gap-2 cursor-pointer"
+                >
+                  📊 Export Excel (CSV)
+                </button>
+                <button
+                  type="button"
+                  onClick={exportToHTMLView}
+                  className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-800/80 hover:text-cyan-400 flex items-center gap-2 cursor-pointer border-t border-slate-900"
+                >
+                  🖨️ View Print / HTML Report
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={() => setActiveTab('qr')}
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-all cursor-pointer shadow-lg ${
-              activeTab === 'qr' ? 'bg-cyan-400 text-slate-950 font-black' : 'bg-gradient-to-r from-cyan-500 to-cyan-400 text-slate-950 hover:brightness-110'
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-all cursor-pointer shadow ${
+              activeTab === 'qr' ? 'bg-cyan-400 text-slate-950 font-black' : 'bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-800'
             }`}
           >
             📷 QR Generator
           </button>
+
           <button
             type="button"
             onClick={() => setActiveTab('checkpoints')}
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-all cursor-pointer border ${
-              activeTab === 'checkpoints' ? 'bg-slate-800 border-cyan-500 text-cyan-400' : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-800'
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-all cursor-pointer border ${
+              activeTab === 'checkpoints' ? 'bg-slate-800 border-cyan-500 text-cyan-400' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
             }`}
           >
             🏢 Manage Checkpoints
