@@ -69,7 +69,8 @@ export default function AdminTelemetryPage() {
     setSubmitting(true);
     try {
       const payloadStr = `Location: ${siteName} | Checkpoint: ${checkpointName}`;
-      const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payloadStr)}`;
+      // Using QuickChart QR API for ultra-reliable dark-mode and light-mode rendering
+      const qrApi = `https://quickchart.io/qr?text=${encodeURIComponent(payloadStr)}&size=300&dark=000000&light=ffffff`;
 
       const res = await fetch('/api/checkpoints', {
         method: 'POST',
@@ -310,8 +311,8 @@ export default function AdminTelemetryPage() {
                     >
                       Delete
                     </button>
-                    <div className="bg-white p-3 rounded-xl shadow-md mb-3 mt-4">
-                      <img src={cp.qr_url} alt="QR" className="w-36 h-36" />
+                    <div className="bg-white p-3 rounded-xl shadow-md mb-3 mt-4 flex items-center justify-center w-40 h-40">
+                      <img src={cp.qr_url} alt="QR Code" className="w-full h-full object-contain" />
                     </div>
                     <p className="text-sm font-semibold text-white">{cp.location_name}</p>
                     <p className="text-xs text-teal-400 font-mono mb-4">{cp.checkpoint_name}</p>
