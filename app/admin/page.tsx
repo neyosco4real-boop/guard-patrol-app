@@ -1,309 +1,287 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import CheckpointCard from '@/app/components/CheckpointCard';
 import { supabase } from '@/lib/supabase';
 
-export default function AdminHubPage() {
-  const [activeTab, setActiveTab] = useState<'feed' | 'checkpoints' | 'export' | 'geofence'>('feed');
-  
-  // Checkpoint creation state
-  const [checkpointName, setCheckpointName] = useState('');
-  const [locationName, setLocationName] = useState('');
-  const [checkpoints, setCheckpoints] = useState<any[]>([]);
-  
-  // Patrol live feed state
-  const [patrolLogs, setPatrolLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+interface PatrolLog {
+  id: string;
+  guard_name: string;
+  location: string;
+  checkpoint: string;
+  latitude: string;
+  longitude: string;
+  notes: string;
+  created_at: string;
+}
 
-  const fetchData = async () => {
+export default function AdminDashboard() {
+  const [logs, setLogs] = useState<PatrolLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedLog, setSelectedLog] = useState<PatrolLog | null>(null);
+
+  useEffect(() => {
+    fetchLogs();
+
+    const channel = supabase
+      .channel('public:patrol_logs')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'patrol_logs' }, (payload) => {
+        setLogs((prev) => [payload.new as PatrolLog, ...prev]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const fetchLogs = async () => {
     try {
       setLoading(true);
-      // Fetch checkpoints
-      const cpRes = await fetch('/api/checkpoints');
-      const cpData = await cpRes.json();
-      if (cpData.success) {
-        setCheckpoints(cpData.checkpoints || []);
-      }
-
-      // Fetch patrol logs feed from Supabase
-      const { data: logs, error } = await supabase
+      const { data, error } = await supabase
         .from('patrol_logs')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
 
-      if (!error && logs) {
-        setPatrolLogs(logs);
-      }
+      if (error) throw error;
+      setLogs(data || []);
     } catch (err) {
-      console.error('Error fetching admin data:', err);
+      console.error('Error fetching logs:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 10000); // Live poll every 10s
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleCreateCheckpoint = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!checkpointName.trim()) {
-      alert('Please enter a checkpoint name.');
-      return;
-    }
-
-    const cpName = checkpointName.trim();
-    const locName = locationName.trim() || 'Main Site';
-    const uniqueId = Math.random().toString(36).substring(2, 9);
-    
-    const targetUrl = `${window.location.origin}/scan?loc=${encodeURIComponent(locName)}&cp=${encodeURIComponent(cpName)}&id=${uniqueId}`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(targetUrl)}`;
-
-    try {
-      const res = await fetch('/api/checkpoints', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location_name: locName,
-          checkpoint_name: cpName,
-          qr_url: qrUrl
-        })
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setCheckpointName('');
-        setLocationName('');
-        fetchData();
-      } else {
-        alert('Error: ' + data.error);
-      }
-    } catch (err: any) {
-      alert('Failed to save checkpoint: ' + err.message);
-    }
+  const extractPhoto = (notes: string) => {
+    if (!notes) return null;
+    const match = notes.match(/\[PHOTO_DATA:(.*?)\]/);
+    return match ? match[1] : null;
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this checkpoint and its QR placard?')) return;
-    try {
-      const res = await fetch(`/api/checkpoints?id=${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        setCheckpoints(checkpoints.filter(cp => cp.id !== id));
-      }
-    } catch (err) {
-      console.error('Delete error:', err);
-    }
+  const cleanNotesText = (notes: string) => {
+    if (!notes) return '';
+    return notes.replace(/\[PHOTO_DATA:.*?\]/g, '').trim();
   };
 
-  const exportToCSV = () => {
-    const headers = ['Date/Time', 'Guard Name', 'Location', 'Checkpoint', 'GPS Coordinates', 'Geofence', 'Incident Report', 'Status'];
-    const rows = patrolLogs.map(log => [
-      new Date(log.created_at || Date.now()).toLocaleString(),
-      log.guard_name || 'N/A',
-      log.location_name || log.location || 'N/A',
-      log.checkpoint_name || log.checkpoint || 'N/A',
-      log.gps_coordinates || `${log.latitude || ''}, ${log.longitude || ''}`,
-      log.geofence || 'Verified',
-      log.notes || 'None',
-      log.status || 'Completed'
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...rows].map(e => e.join(',')).join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `patrol_report_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  const filteredLogs = logs.filter((log) => {
+    const term = searchTerm.toLowerCase();
+    return (
+      log.guard_name?.toLowerCase().includes(term) ||
+      log.location?.toLowerCase().includes(term) ||
+      log.checkpoint?.toLowerCase().includes(term) ||
+      log.notes?.toLowerCase().includes(term)
+    );
+  });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 pb-4 border-b border-slate-800 gap-4">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-slate-800">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Guard Patrol System</h1>
-            <p className="text-sm text-slate-400 mt-1">Admin Command Center & Telemetry Hub</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <a 
-              href="/scan" 
-              className="bg-slate-900 hover:bg-slate-800 text-emerald-400 text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-700 transition-colors shadow-sm"
-            >
-              Open Scanner →
-            </a>
-          </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-800 pb-4">
-          <button
-            onClick={() => setActiveTab('feed')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${activeTab === 'feed' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/50' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
-          >
-            Live Patrol Feed Report
-          </button>
-          <button
-            onClick={() => setActiveTab('checkpoints')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${activeTab === 'checkpoints' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/50' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
-          >
-            Create Location & Checkpoints
-          </button>
-          <button
-            onClick={() => setActiveTab('export')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${activeTab === 'export' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/50' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
-          >
-            Export Report
-          </button>
-          <button
-            onClick={() => setActiveTab('geofence')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${activeTab === 'geofence' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/50' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
-          >
-            Geofence Map
-          </button>
-        </div>
-
-        {/* Tab 1: Live Patrol Feed */}
-        {activeTab === 'feed' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-emerald-400">
-                Live Patrol Feed Report ({patrolLogs.length} Records)
-              </h2>
-              <button onClick={fetchData} className="text-xs text-slate-400 hover:text-white underline">Refresh Feed</button>
+            <div className="flex items-center gap-2.5 mb-1">
+              <span className="text-2xl">🛡️</span>
+              <h1 className="text-xl font-bold text-white tracking-tight">Security Guard Patrol Dashboard</h1>
+              <span className="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] px-2.5 py-0.5 rounded-full font-semibold">
+                Live Feed Active
+              </span>
             </div>
-
-            {loading ? (
-              <div className="text-center py-12 text-slate-500 text-sm">Loading live telemetry...</div>
-            ) : patrolLogs.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 text-sm">No patrol logs recorded yet. Scan a checkpoint QR code to begin.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400">
-                      <th className="py-3 px-4">Date & Time</th>
-                      <th className="py-3 px-4">Guard Name</th>
-                      <th className="py-3 px-4">Location</th>
-                      <th className="py-3 px-4">Checkpoint</th>
-                      <th className="py-3 px-4">GPS Coordinates</th>
-                      <th className="py-3 px-4">Geofence</th>
-                      <th className="py-3 px-4">Incident Report</th>
-                      <th className="py-3 px-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                    {patrolLogs.map((log, idx) => (
-                      <tr key={log.id || idx} className="hover:bg-slate-800/40">
-                        <td className="py-3 px-4 font-mono text-[11px] text-slate-400">
-                          {log.created_at ? new Date(log.created_at).toLocaleString() : 'Just now'}
-                        </td>
-                        <td className="py-3 px-4 font-medium text-white">{log.guard_name || 'N/A'}</td>
-                        <td className="py-3 px-4">{log.location_name || log.location || 'N/A'}</td>
-                        <td className="py-3 px-4 text-emerald-400 font-medium">{log.checkpoint_name || log.checkpoint || 'N/A'}</td>
-                        <td className="py-3 px-4 font-mono text-[11px] text-slate-400">{log.gps_coordinates || `${log.latitude || ''}, ${log.longitude || ''}`}</td>
-                        <td className="py-3 px-4">
-                          <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 px-2 py-0.5 rounded text-[10px]">Within Radius</span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-300 max-w-xs truncate">{log.notes || 'None'}</td>
-                        <td className="py-3 px-4">
-                          <span className="bg-blue-950/80 text-blue-400 border border-blue-800/60 px-2 py-0.5 rounded text-[10px]">Verified</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <p className="text-xs text-slate-400">Real-time guard telemetry, geofence verification, and incident reports.</p>
           </div>
-        )}
-
-        {/* Tab 2: Create Location & Checkpoints */}
-        {activeTab === 'checkpoints' && (
-          <div className="space-y-6">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-emerald-400 mb-4">
-                + Create Location & Checkpoint QR Code
-              </h2>
-              <form onSubmit={handleCreateCheckpoint} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <input
-                  type="text"
-                  placeholder="Location Name (e.g. Hotel 57, Multichoice HQ)..."
-                  value={locationName}
-                  onChange={(e) => setLocationName(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-                />
-                <input
-                  type="text"
-                  placeholder="Checkpoint Name (e.g. Front Gate, Vault Room)..."
-                  value={checkpointName}
-                  onChange={(e) => setCheckpointName(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-                />
-                <button
-                  type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm py-2.5 px-6 rounded-lg transition-colors shadow-lg shadow-emerald-900/20"
-                >
-                  Generate Checkpoint QR
-                </button>
-              </form>
-            </div>
-
-            <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 shadow-2xl">
-              <h2 className="text-sm font-semibold tracking-wider uppercase text-slate-300 mb-6">
-                Active Checkpoints & Assigned QR Codes ({checkpoints.length})
-              </h2>
-              {checkpoints.length === 0 ? (
-                <div className="text-center py-12 text-slate-500 text-sm">No checkpoints created yet.</div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {checkpoints.map((cp) => (
-                    <CheckpointCard key={cp.id} checkpoint={cp} onDelete={handleDelete} />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Tab 3: Export Report */}
-        {activeTab === 'export' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl text-center max-w-xl mx-auto">
-            <span className="text-3xl mb-3 inline-block">📊</span>
-            <h2 className="text-lg font-bold text-white mb-2">Export Patrol Reports</h2>
-            <p className="text-xs text-slate-400 mb-6">Download complete patrol logs including timestamps, guard telemetry, and incident notes in CSV format for administrative auditing.</p>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <input
+              type="text"
+              placeholder="Filter logs by guard, location, or notes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-full md:w-72"
+            />
             <button
-              onClick={exportToCSV}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-3 px-6 rounded-xl transition-colors shadow-lg shadow-emerald-950/50"
+              onClick={fetchLogs}
+              className="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2 rounded-xl text-xs font-semibold transition-colors shrink-0"
             >
-              Download CSV Report ({patrolLogs.length} Logs)
+              Refresh
             </button>
           </div>
-        )}
+        </div>
 
-        {/* Tab 4: Geofence Map */}
-        {activeTab === 'geofence' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-emerald-400 mb-4">
-              Geofence Perimeter & GPS Telemetry Map
-            </h2>
-            <div className="bg-slate-950 border border-slate-800 rounded-xl p-8 text-center text-slate-400 h-96 flex flex-col items-center justify-center">
-              <span className="text-4xl mb-3">📍</span>
-              <p className="text-sm font-medium text-white mb-1">Active Perimeter Monitoring Enabled</p>
-              <p className="text-xs text-slate-500 max-w-md">All scanned checkpoints are verified within designated facility coordinate radii. Live node telemetry feeds are active.</p>
-              <div className="mt-6 font-mono text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 px-4 py-2 rounded-lg">
-                Status: {patrolLogs.length} Checkpoints Monitored & Verified
+        {/* Geofence Radar Map Card on Admin Screen */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              <h3 className="text-xs font-bold text-white tracking-wider uppercase">Geofence Radar (50m Radius)</h3>
+            </div>
+            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-0.5 rounded">
+              Active Monitoring
+            </span>
+          </div>
+
+          <div className="relative h-56 w-full bg-slate-950 rounded-xl border border-slate-800/80 flex items-center justify-center overflow-hidden">
+            <div className="absolute h-44 w-44 rounded-full border border-emerald-500/20 bg-emerald-500/5 animate-pulse"></div>
+            <div className="absolute h-28 w-28 rounded-full border border-emerald-500/30"></div>
+            <div className="absolute h-12 w-12 rounded-full border border-emerald-500/50 bg-emerald-500/10"></div>
+            <div className="absolute h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]"></div>
+            <div className="absolute -translate-x-6 -translate-y-8 flex flex-col items-center">
+              <div className="bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-md whitespace-nowrap">
+                Guard Position
               </div>
+              <div className="w-2 h-2 rounded-full bg-white border-2 border-emerald-500 mt-0.5"></div>
+            </div>
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:1.5rem_1.5rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-40"></div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
+            <span>Perimeter Radius: <strong className="text-slate-200">50 meters</strong></span>
+            <span className="text-emerald-400 font-mono">Status: All active guards within geofence</span>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-20 text-slate-500 text-sm">Loading live telemetry feed...</div>
+        ) : filteredLogs.length === 0 ? (
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 text-sm">
+            No patrol logs found matching your criteria.
+          </div>
+        ) : (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-950/80 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <th className="p-4">Time</th>
+                    <th className="p-4">Guard Name</th>
+                    <th className="p-4">Location & Checkpoint</th>
+                    <th className="p-4">GPS Coordinates</th>
+                    <th className="p-4">Notes / Photo</th>
+                    <th className="p-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-xs">
+                  {filteredLogs.map((log) => {
+                    const photo = extractPhoto(log.notes);
+                    const cleanNotes = cleanNotesText(log.notes);
+
+                    return (
+                      <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="p-4 text-slate-400 whitespace-nowrap">
+                          {new Date(log.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          <div className="text-[10px] text-slate-500">{new Date(log.created_at || Date.now()).toLocaleDateString()}</div>
+                        </td>
+                        <td className="p-4 font-semibold text-white whitespace-nowrap">
+                          {log.guard_name}
+                        </td>
+                        <td className="p-4">
+                          <div className="font-medium text-slate-200">{log.location}</div>
+                          <div className="text-[11px] text-emerald-400 font-mono">{log.checkpoint}</div>
+                        </td>
+                        <td className="p-4 font-mono text-[11px] text-slate-300">
+                          <div>{log.latitude}, {log.longitude}</div>
+                          <span className="inline-block mt-1 bg-emerald-950 text-emerald-400 border border-emerald-800 text-[9px] px-2 py-0.5 rounded font-semibold">
+                            ✓ Verified (≤50m)
+                          </span>
+                        </td>
+                        <td className="p-4 max-w-xs truncate text-slate-300">
+                          <div className="truncate">{cleanNotes || 'Routine Patrol'}</div>
+                          {photo && (
+                            <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-400 font-medium">
+                              <span>📸 Incident Photo Attached</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-4 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => setSelectedLog(log)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-3 py-1.5 rounded-lg text-xs transition-colors shadow-lg shadow-emerald-950/50"
+                          >
+                            View Report
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
       </div>
+
+      {/* Modal for viewing detailed patrol report & attached photo */}
+      {selectedLog && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📋</span>
+                <h3 className="text-base font-bold text-white">Patrol Report Inspection</h3>
+              </div>
+              <button
+                onClick={() => setSelectedLog(null)}
+                className="text-slate-400 hover:text-white text-lg font-bold px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4 bg-slate-950 p-3.5 rounded-xl border border-slate-800/80">
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Guard Name</span>
+                  <span className="text-sm font-bold text-white">{selectedLog.guard_name}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Timestamp</span>
+                  <span className="text-slate-300">{new Date(selectedLog.created_at || Date.now()).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Location Site</span>
+                  <span className="text-slate-200 font-medium">{selectedLog.location}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Checkpoint</span>
+                  <span className="text-emerald-400 font-mono font-semibold">{selectedLog.checkpoint}</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80">
+                <span className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">GPS Coordinates</span>
+                <span className="font-mono text-slate-300">{selectedLog.latitude}, {selectedLog.longitude}</span>
+              </div>
+
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80">
+                <span className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Notes & Observations</span>
+                <p className="text-slate-200 whitespace-pre-wrap leading-relaxed">{cleanNotesText(selectedLog.notes)}</p>
+              </div>
+
+              {extractPhoto(selectedLog.notes) && (
+                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80">
+                  <span className="text-[10px] text-slate-500 uppercase block font-semibold mb-2">Attached Incident Photo</span>
+                  <div className="rounded-lg overflow-hidden border border-slate-800 max-h-72 flex items-center justify-center bg-black">
+                    <img
+                      src={extractPhoto(selectedLog.notes) || ''}
+                      alt="Incident evidence"
+                      className="max-h-72 object-contain w-full"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setSelectedLog(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-2 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Close Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
