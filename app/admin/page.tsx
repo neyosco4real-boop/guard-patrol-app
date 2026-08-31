@@ -62,6 +62,18 @@ export default function AdminTelemetryPage() {
     log.checkpoint?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleClearFeed = async () => {
+    if (!confirm('Are you sure you want to clear all live telemetry feeds?')) return;
+    try {
+      const res = await fetch('/api/scans', { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      fetchData();
+    } catch (err: any) {
+      alert('Error clearing feed: ' + err.message);
+    }
+  };
+
   const handleCreateCheckpoint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!siteName || !checkpointName) return;
@@ -69,7 +81,6 @@ export default function AdminTelemetryPage() {
     setSubmitting(true);
     try {
       const payloadStr = `Location: ${siteName} | Checkpoint: ${checkpointName}`;
-      // Using QuickChart QR API for ultra-reliable dark-mode and light-mode rendering
       const qrApi = `https://quickchart.io/qr?text=${encodeURIComponent(payloadStr)}&size=300&dark=000000&light=ffffff`;
 
       const res = await fetch('/api/checkpoints', {
@@ -88,6 +99,7 @@ export default function AdminTelemetryPage() {
       setSiteName('');
       setCheckpointName('');
       fetchData();
+      setActiveTab('checkpoints');
     } catch (err: any) {
       alert('Error creating checkpoint: ' + err.message);
     } finally {
@@ -163,8 +175,8 @@ export default function AdminTelemetryPage() {
             </div>
           </div>
 
-          {/* Search & Refresh Bar */}
-          <div className="max-w-7xl mx-auto flex justify-between items-center mb-6">
+          {/* Search, Clear & Refresh Bar */}
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
             <input 
               type="text" 
               placeholder="Search guard or location..."
@@ -172,12 +184,20 @@ export default function AdminTelemetryPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-teal-500 w-full max-w-sm transition-all"
             />
-            <button 
-              onClick={() => { setLoading(true); fetchData(); }}
-              className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-400 font-medium px-4 py-2.5 rounded-xl text-sm transition-all flex items-center gap-2 shadow-lg shrink-0"
-            >
-              <span>🔄 Refresh Feed</span>
-            </button>
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              <button 
+                onClick={handleClearFeed}
+                className="bg-red-950/60 hover:bg-red-900/60 border border-red-500/40 text-red-300 font-medium px-4 py-2.5 rounded-xl text-sm transition-all flex items-center gap-2 shadow-lg"
+              >
+                <span>🗑️ Clear All Feeds</span>
+              </button>
+              <button 
+                onClick={() => { setLoading(true); fetchData(); }}
+                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-teal-400 font-medium px-4 py-2.5 rounded-xl text-sm transition-all flex items-center gap-2 shadow-lg shrink-0"
+              >
+                <span>🔄 Refresh Feed</span>
+              </button>
+            </div>
           </div>
 
           {/* Main Table Container */}
