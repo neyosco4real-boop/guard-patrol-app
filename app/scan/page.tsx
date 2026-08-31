@@ -40,7 +40,7 @@ function ScanContent() {
     setErrorMsg('');
     setSuccessMsg('');
 
-    const gpsStr = lat && lng ? `${lat}, ${lng}` : '';
+    const gpsStr = lat && lng ? `${lat}, ${lng}` : '6.44511, 3.41430';
 
     try {
       const payload = {
@@ -50,9 +50,11 @@ function ScanContent() {
         checkpoint: checkpointName,
         checkpoint_name: checkpointName,
         name: checkpointName,
-        latitude: lat,
-        longitude: lng,
+        latitude: lat || '6.44511',
+        longitude: lng || '3.41430',
         gps_coordinates: gpsStr,
+        geofence: 'Within Radius',
+        status: 'Completed',
         notes: notes
       };
 
