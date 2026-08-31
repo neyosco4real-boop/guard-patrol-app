@@ -19,6 +19,7 @@ export default function AdminPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'live' | 'checkpoints' | 'qr'>('live');
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [locations, setLocations] = useState<string[]>(['Chicken Republic', 'Tom Salem Head Office', 'Main Branch']);
   const [newLocation, setNewLocation] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('Chicken Republic');
@@ -74,7 +75,7 @@ export default function AdminPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#070913] text-white p-6 md:p-10 font-sans flex flex-col gap-8">
+    <main className="min-h-screen bg-[#070913] text-white p-6 md:p-10 font-sans flex flex-col gap-8 relative">
       {/* Header section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-col gap-2">
@@ -158,7 +159,8 @@ export default function AdminPage() {
                     alerts.map((alert) => (
                       <tr
                         key={alert.id}
-                        className={`hover:bg-slate-900/40 transition-colors cursor-pointer ${
+                        onClick={() => setSelectedAlert(alert)}
+                        className={`hover:bg-slate-800/60 transition-colors cursor-pointer ${
                           alert.isIncident ? 'bg-red-950/10' : ''
                         }`}
                       >
@@ -182,9 +184,7 @@ export default function AdminPage() {
                         </td>
                         <td className="py-4 px-4 whitespace-nowrap">
                           {alert.mediaUrl ? (
-                            <a href={alert.mediaUrl} target="_blank" rel="noreferrer" className="text-cyan-400 underline font-semibold hover:text-cyan-300">
-                              View Photo
-                            </a>
+                            <span className="text-cyan-400 underline font-semibold">View Photo</span>
                           ) : (
                             <span className="text-slate-500">None</span>
                           )}
@@ -320,6 +320,92 @@ export default function AdminPage() {
               <p className="text-sm font-bold text-white">Facility: {selectedLocation}</p>
               <p className="text-xs text-slate-400 mt-1">Scan using mobile patrol PWA camera to log checkpoint instantly.</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Incident Report & Evidence Card Modal */}
+      {selectedAlert && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0b0f19] border border-slate-800 rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl flex flex-col gap-6 relative animate-in fade-in zoom-in duration-200">
+            
+            <div className="flex justify-between items-start border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    selectedAlert.isIncident ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  }`}>
+                    {selectedAlert.isIncident ? 'Incident Reported' : 'Successful Scan'}
+                  </span>
+                  <span className="text-xs text-slate-400 font-mono">{new Date(selectedAlert.createdAt).toLocaleString()}</span>
+                </div>
+                <h3 className="text-xl font-extrabold text-white">Patrol Incident Report</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedAlert(null)}
+                className="bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold cursor-pointer border border-slate-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-900 flex flex-col gap-1">
+                <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Guard Name</span>
+                <span className="font-semibold text-cyan-400 text-sm">{selectedAlert.guardName}</span>
+              </div>
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-900 flex flex-col gap-1">
+                <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Location & Checkpoint</span>
+                <span className="font-semibold text-slate-200 truncate">{selectedAlert.location} / {selectedAlert.checkpointName}</span>
+              </div>
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-900 flex flex-col gap-1">
+                <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">GPS Coordinates</span>
+                <span className="font-mono text-cyan-300">{selectedAlert.lat}, {selectedAlert.lng}</span>
+              </div>
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-900 flex flex-col gap-1">
+                <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Geofence Status</span>
+                <span className="text-emerald-400 font-medium">Within Perimeter</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Incident Report / Notes</label>
+              <div className="bg-slate-950 border border-slate-900 p-4 rounded-xl text-sm text-slate-200 font-medium leading-relaxed">
+                {selectedAlert.notes || 'Normal Patrol Scan - No issues noted.'}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Attached Photo Evidence</label>
+              {selectedAlert.mediaUrl ? (
+                <div className="flex flex-col gap-3">
+                  <div className="relative h-48 bg-black rounded-xl overflow-hidden border border-slate-800">
+                    <img src={selectedAlert.mediaUrl} alt="Evidence" className="w-full h-full object-cover" />
+                  </div>
+                  <a
+                    href={selectedAlert.mediaUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-cyan-400 text-xs font-bold py-3 rounded-xl border border-slate-800 text-center transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    📥 Download Photo Evidence
+                  </a>
+                </div>
+              ) : (
+                <div className="bg-slate-950 border border-slate-900 p-4 rounded-xl text-xs text-slate-500 text-center font-medium">
+                  No photo evidence attached to this patrol verification.
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSelectedAlert(null)}
+              className="w-full bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-extrabold text-xs py-3.5 rounded-xl uppercase tracking-wider transition-all cursor-pointer shadow-lg"
+            >
+              Close Report Card
+            </button>
           </div>
         </div>
       )}
