@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 
 function ScanContent() {
   const searchParams = useSearchParams();
-  const [guardName, setGuardName] = useState('James John');
+  const [guardName, setGuardName] = useState('');
   const [locationName, setLocationName] = useState('');
   const [checkpointName, setCheckpointName] = useState('');
   const [lat, setLat] = useState('');
@@ -103,6 +103,11 @@ function ScanContent() {
 
   const handleSubmitPatrol = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!guardName.trim()) {
+      setErrorMsg('Please enter your guard name before submitting.');
+      return;
+    }
+
     setSubmitting(true);
     setErrorMsg('');
     setSuccessMsg('');
@@ -111,7 +116,7 @@ function ScanContent() {
 
     try {
       const payload = {
-        guard_name: guardName,
+        guard_name: guardName.trim(),
         location: locationName,
         location_name: locationName,
         checkpoint: checkpointName,
@@ -171,7 +176,6 @@ function ScanContent() {
               <button
                 type="button"
                 onClick={() => {
-                  // Simulate successful scan detection from query parameter parsing or camera target
                   setLocationName('Multichoice HQ');
                   setCheckpointName('Front Gate');
                   stopCamera();
@@ -231,12 +235,14 @@ function ScanContent() {
 
         <form onSubmit={handleSubmitPatrol} className="space-y-4">
           <div>
-            <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Guard Name</label>
+            <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Guard Name *</label>
             <input
               type="text"
+              required
+              placeholder="Enter your full name..."
               value={guardName}
               onChange={(e) => setGuardName(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
             />
           </div>
 
