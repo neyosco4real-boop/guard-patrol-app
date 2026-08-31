@@ -49,13 +49,6 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const clearAlerts = async () => {
-    if (confirm('Are you sure you want to clear all live patrol feeds?')) {
-      await fetch('/api/alerts', { method: 'DELETE' });
-      setAlerts([]);
-    }
-  };
-
   const addLocation = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLocation.trim()) return;
@@ -81,168 +74,134 @@ export default function AdminPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 max-w-5xl mx-auto flex flex-col gap-6 font-sans">
-      {/* Top Navigation & Header */}
-      <div className="bg-slate-900 border border-white/10 p-5 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
-        <div>
-          <h1 className="text-xl font-black tracking-wide text-cyan-400 flex items-center gap-2">
-            🛡️ TOM SALEM GUARD PATROL ADMIN
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Enterprise multi-location telemetry, checkpoint management & QR generator
+    <main className="min-h-screen bg-[#070913] text-white p-6 md:p-10 font-sans flex flex-col gap-8">
+      {/* Header section matching reference */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex flex-col gap-2">
+          <div className="inline-flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1 rounded-full text-xs text-slate-300 w-fit">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Tom Salem Security Operations
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">Guard Patrol Live Command</h1>
+          <p className="text-xs text-slate-400">
+            Real-time monitoring dashboard tracking checkpoint verifications, GPS logs, and incident photo evidence.
           </p>
         </div>
-        <div className="flex bg-slate-950 p-1.5 rounded-xl border border-white/10 gap-1 w-full md:w-auto overflow-x-auto">
+
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setActiveTab('live')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'live' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+            onClick={() => setActiveTab('qr')}
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-all cursor-pointer shadow-lg ${
+              activeTab === 'qr' ? 'bg-cyan-400 text-slate-950 font-black' : 'bg-gradient-to-r from-cyan-500 to-cyan-400 text-slate-950 hover:brightness-110'
             }`}
           >
-            📡 Live Patrol Feed ({alerts.length})
+            📷 QR Generator
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('checkpoints')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'checkpoints' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-all cursor-pointer border ${
+              activeTab === 'checkpoints' ? 'bg-slate-800 border-cyan-500 text-cyan-400' : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-800'
             }`}
           >
-            🏢 Checkpoint Management
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('qr')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'qr' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            📱 QR Code Generator
+            🏢 Manage Checkpoints
           </button>
         </div>
       </div>
 
-      {/* Tab 1: Live Patrol Feed */}
+      {/* Tab 1: Live Command Table View */}
       {activeTab === 'live' && (
-        <div className="flex flex-col gap-6">
-          <div className="flex justify-between items-center bg-slate-900 border border-white/10 p-4 rounded-2xl shadow-lg">
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">Live Telemetry Submissions</h2>
-              <p className="text-xs text-slate-500">Auto-refreshing every 3 seconds from active scanner PWA nodes</p>
+              <h2 className="text-sm font-bold uppercase tracking-widest text-slate-200">RECENT PATROL ACTIVITY</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Click any patrol row to view full incident report and download attached photo evidence.</p>
             </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={fetchAlerts}
-                className="bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-cyan-500/35 cursor-pointer"
-              >
-                🔄 Refresh
-              </button>
-              <button
-                type="button"
-                onClick={clearAlerts}
-                className="bg-red-950/60 hover:bg-red-900 text-red-400 text-xs font-bold px-4 py-2.5 rounded-xl border border-red-500/35 cursor-pointer"
-              >
-                Clear Feeds
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={fetchAlerts}
+              className="bg-slate-900 hover:bg-slate-800 text-cyan-400 text-xs font-bold px-4 py-2 rounded-xl border border-slate-800 flex items-center gap-2 cursor-pointer shadow"
+            >
+              🔄 Refresh Feed
+            </button>
           </div>
 
-          {loading ? (
-            <p className="text-xs text-slate-500 text-center py-12">Loading telemetry feed...</p>
-          ) : alerts.length === 0 ? (
-            <div className="text-center py-16 bg-slate-900/40 border border-dashed border-white/10 rounded-2xl">
-              <p className="text-sm text-slate-400 font-semibold">No patrol logs received yet.</p>
-              <p className="text-xs text-slate-500 mt-1">Submissions from mobile guard scanners will appear here in real-time.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {alerts.map((alert) => (
-                <div
-                  key={alert.id}
-                  className={`p-6 rounded-2xl border flex flex-col gap-4 ${
-                    alert.isIncident
-                      ? 'bg-red-950/30 border-red-500/60 shadow-red-950/50 shadow-lg'
-                      : 'bg-slate-900 border-white/10'
-                  }`}
-                >
-                  <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                    <span className="text-xs font-extrabold px-3 py-1 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-500/30 uppercase tracking-wider">
-                      📍 {alert.location}
-                    </span>
-                    <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${alert.isIncident ? 'bg-red-500 text-slate-950 animate-pulse' : 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'}`}>
-                      {alert.isIncident ? '🚨 INCIDENT EMERGENCY' : '✓ Verified Normal'}
-                    </span>
-                  </div>
-
-                  {/* Vertical Stacked Report Details */}
-                  <div className="flex flex-col gap-2.5 text-xs bg-slate-950/70 p-4 rounded-xl border border-white/5">
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400 font-semibold">Date/Time:</span>
-                      <strong className="text-white">{new Date(alert.createdAt).toLocaleString()}</strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400 font-semibold">Guard Name:</span>
-                      <strong className="text-cyan-300">{alert.guardName}</strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400 font-semibold">Location:</span>
-                      <strong className="text-white">{alert.location}</strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400 font-semibold">Checkpoint:</span>
-                      <strong className="text-white">{alert.checkpointName}</strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400 font-semibold">GPS Coordinates:</span>
-                      <strong className="text-cyan-400 font-mono">{alert.lat}, {alert.lng}</strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400 font-semibold">Geofence:</span>
-                      <strong className="text-emerald-400">Within Perimeter (Active)</strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-white/5">
-                      <span className="text-slate-400 font-semibold">Status:</span>
-                      <strong className={alert.isIncident ? 'text-red-400' : 'text-emerald-400'}>
-                        {alert.isIncident ? 'Incident Reported' : 'Successful Scan'}
-                      </strong>
-                    </div>
-                    <div className="flex flex-col pt-2 gap-1">
-                      <span className="text-slate-400 font-semibold uppercase tracking-wider">Incident Report / Notes:</span>
-                      <p className="text-slate-200 bg-slate-900 p-3 rounded-lg border border-white/5 font-sans">
-                        {alert.notes || 'No notes provided.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {alert.mediaUrl && (
-                    <div className="mt-2">
-                      <span className="text-xs text-slate-400 block mb-2 uppercase font-semibold">Attached Evidence Capture:</span>
-                      <img src={alert.mediaUrl} alt="Incident capture" className="w-full max-h-64 object-cover rounded-xl border border-white/10 shadow-md" />
-                    </div>
+          <div className="bg-[#0b0f19] border border-slate-900 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800/80 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-950/40">
+                    <th className="py-4 px-6">Guard</th>
+                    <th className="py-4 px-6">Checkpoint</th>
+                    <th className="py-4 px-6">Notes / Incident</th>
+                    <th className="py-4 px-6">Evidence</th>
+                    <th className="py-4 px-6">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-900/60 text-xs">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-slate-500">Loading live telemetry...</td>
+                    </tr>
+                  ) : alerts.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-16 text-center text-slate-500">
+                        No patrol logs received yet. Submissions from mobile scanners will appear here.
+                      </td>
+                    </tr>
+                  ) : (
+                    alerts.map((alert) => (
+                      <tr
+                        key={alert.id}
+                        className={`hover:bg-slate-900/40 transition-colors cursor-pointer ${
+                          alert.isIncident ? 'bg-red-950/10' : ''
+                        }`}
+                      >
+                        <td className="py-4 px-6 font-semibold text-cyan-400">{alert.guardName}</td>
+                        <td className="py-4 px-6 font-medium text-slate-200">{alert.checkpointName}</td>
+                        <td className={`py-4 px-6 font-medium ${alert.isIncident ? 'text-red-400 font-bold' : 'text-slate-300'}`}>
+                          {alert.notes || 'Normal Patrol Scan'}
+                        </td>
+                        <td className="py-4 px-6">
+                          {alert.mediaUrl ? (
+                            <a href={alert.mediaUrl} target="_blank" rel="noreferrer" className="text-cyan-400 underline font-semibold hover:text-cyan-300">
+                              View Photo
+                            </a>
+                          ) : (
+                            <span className="text-slate-500">None</span>
+                          )}
+                        </td>
+                        <td className="py-4 px-6 text-slate-400 font-mono">
+                          {new Date(alert.createdAt).toLocaleTimeString()}
+                        </td>
+                      </tr>
+                    ))
                   )}
-                </div>
-              ))}
+                </tbody>
+              </table>
             </div>
-          )}
+          </div>
         </div>
       )}
 
       {/* Tab 2: Checkpoint Management */}
       {activeTab === 'checkpoints' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-slate-900 border border-white/10 p-6 rounded-2xl shadow-lg flex flex-col gap-5">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-cyan-400">Add Facility / Location</h2>
+          <div className="bg-[#0b0f19] border border-slate-800/80 p-6 rounded-2xl shadow-xl flex flex-col gap-5">
+            <div className="flex justify-between items-center">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-cyan-400">Add Facility / Location</h2>
+              <button onClick={() => setActiveTab('live')} className="text-xs text-slate-400 hover:text-white">← Back to Feed</button>
+            </div>
             <form onSubmit={addLocation} className="flex gap-2">
               <input
                 type="text"
                 placeholder="e.g. Lekki Branch"
                 value={newLocation}
                 onChange={(e) => setNewLocation(e.target.value)}
-                className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500"
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-400"
               />
-              <button type="submit" className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold px-5 py-3 rounded-xl cursor-pointer">
+              <button type="submit" className="bg-cyan-400 hover:bg-cyan-300 text-slate-950 text-xs font-bold px-5 py-3 rounded-xl cursor-pointer">
                 Add Location
               </button>
             </form>
@@ -250,14 +209,14 @@ export default function AdminPage() {
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mt-2">Active Locations</h3>
             <div className="flex flex-wrap gap-2">
               {locations.map((loc) => (
-                <span key={loc} className="bg-slate-950 border border-white/10 px-3 py-2 rounded-xl text-xs font-semibold text-slate-200">
+                <span key={loc} className="bg-slate-950 border border-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-200">
                   📍 {loc}
                 </span>
               ))}
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-white/10 p-6 rounded-2xl shadow-lg flex flex-col gap-5">
+          <div className="bg-[#0b0f19] border border-slate-800/80 p-6 rounded-2xl shadow-xl flex flex-col gap-5">
             <h2 className="text-sm font-bold uppercase tracking-wider text-cyan-400">Add Checkpoint to Location</h2>
             <form onSubmit={addCheckpoint} className="flex flex-col gap-4">
               <div>
@@ -265,7 +224,7 @@ export default function AdminPage() {
                 <select
                   value={selectedLocation}
                   onChange={(e) => setSelectedLocation(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-400"
                 >
                   {locations.map((loc) => (
                     <option key={loc} value={loc}>{loc}</option>
@@ -278,9 +237,9 @@ export default function AdminPage() {
                   placeholder="e.g. Rear Emergency Exit"
                   value={newCheckpoint}
                   onChange={(e) => setNewCheckpoint(e.target.value)}
-                  className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500"
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-400"
                 />
-                <button type="submit" className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold px-5 py-3 rounded-xl cursor-pointer">
+                <button type="submit" className="bg-cyan-400 hover:bg-cyan-300 text-slate-950 text-xs font-bold px-5 py-3 rounded-xl cursor-pointer">
                   Add Point
                 </button>
               </div>
@@ -289,7 +248,7 @@ export default function AdminPage() {
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mt-2">Checkpoints for {selectedLocation}</h3>
             <div className="space-y-2">
               {(checkpointsByLocation[selectedLocation] || []).map((cp) => (
-                <div key={cp} className="bg-slate-950 border border-white/10 px-4 py-2.5 rounded-xl text-xs font-medium text-slate-200 flex justify-between items-center">
+                <div key={cp} className="bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl text-xs font-medium text-slate-200 flex justify-between items-center">
                   <span>🏷️ {cp}</span>
                   <span className="text-emerald-400 font-bold">Active</span>
                 </div>
@@ -301,19 +260,22 @@ export default function AdminPage() {
 
       {/* Tab 3: QR Code Generator */}
       {activeTab === 'qr' && (
-        <div className="bg-slate-900 border border-white/10 p-6 rounded-2xl shadow-lg flex flex-col gap-6">
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-cyan-400">Checkpoint QR Code Generator</h2>
-            <p className="text-xs text-slate-400 mt-1">Generate printable QR tags containing facility and checkpoint metadata for guard scanners.</p>
+        <div className="bg-[#0b0f19] border border-slate-800/80 p-6 md:p-8 rounded-2xl shadow-xl flex flex-col gap-6 max-w-3xl mx-auto w-full">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-cyan-400">Checkpoint QR Code Generator</h2>
+              <p className="text-xs text-slate-400 mt-1">Generate printable QR tags containing facility and checkpoint metadata.</p>
+            </div>
+            <button onClick={() => setActiveTab('live')} className="text-xs text-slate-400 hover:text-white">← Back to Feed</button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-slate-400 block mb-1 font-semibold">Location</label>
               <select
                 value={selectedLocation}
                 onChange={(e) => setSelectedLocation(e.target.value)}
-                className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-400"
               >
                 {locations.map((loc) => (
                   <option key={loc} value={loc}>{loc}</option>
@@ -323,26 +285,16 @@ export default function AdminPage() {
             <div>
               <label className="text-xs text-slate-400 block mb-1 font-semibold">Checkpoint</label>
               <select
-                id="qrCheckpointSelect"
-                className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-400"
               >
-                {(checkpointsByLocation[selectedLocation] || ['Front Gate', 'Perimeter']).map((cp) => (
+                {(checkpointsByLocation[selectedLocation] || ['Front Gate']).map((cp) => (
                   <option key={cp} value={cp}>{cp}</option>
                 ))}
               </select>
             </div>
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={() => alert('QR Code printable asset generated successfully!')}
-                className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-extrabold py-3 rounded-xl cursor-pointer shadow-md"
-              >
-                🖨️ Generate Printable QR
-              </button>
-            </div>
           </div>
 
-          <div className="border border-dashed border-white/10 p-8 rounded-2xl flex flex-col items-center justify-center gap-4 bg-slate-950">
+          <div className="border border-dashed border-slate-800 p-8 rounded-2xl flex flex-col items-center justify-center gap-4 bg-slate-950">
             <div className="bg-white p-4 rounded-xl shadow-inner">
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=Location:${encodeURIComponent(selectedLocation)}|Checkpoint:StandardGate`}
@@ -351,7 +303,7 @@ export default function AdminPage() {
               />
             </div>
             <div className="text-center">
-              <p className="text-sm font-bold text-white">Location: {selectedLocation}</p>
+              <p className="text-sm font-bold text-white">Facility: {selectedLocation}</p>
               <p className="text-xs text-slate-400 mt-1">Scan using mobile patrol PWA camera to log checkpoint instantly.</p>
             </div>
           </div>
