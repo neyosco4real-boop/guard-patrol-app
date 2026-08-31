@@ -20,30 +20,34 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { location_name, checkpoint_name, qr_url } = body;
 
-    // Use the exact correct schema columns: location_name, checkpoint_name, qr_url
-    let { data, error } = await supabase
-      .from('checkpoints')
-      .insert([{ 
-        location_name, 
-        checkpoint_name, 
-        qr_url 
-      }])
-      .select();
+    // Try common permutations until one succeeds against your Supabase schema
+    const payloads = [
+      { location_name, checkpoint_name, qr_url },
+      { location: location_name, checkpoint: checkpoint_name, qr_url },
+      { location_name, checkpoint: checkpoint_name, qr_code: qr_url },
+      { location: location_name, name: checkpoint_name, qr_url },
+      { site_name: location_name, checkpoint_name, qr_url }
+    ];
 
-    if (error) {
-      // Fallback in case qr_url column is named qr_code
-      const res2 = await supabase
+    let data = null;
+    let lastError = null;
+
+    for (const payload of payloads) {
+      const { data: inserted, error } = await supabase
         .from('checkpoints')
-        .insert([{ 
-          location_name, 
-          checkpoint_name, 
-          qr_code: qr_url 
-        }])
+        .insert([payload])
         .select();
 
-      if (res2.error) throw res2.error;
-      data = res2.data;
+      if (!error && inserted) {
+        data = inserted;
+        lastError = null;
+        break;
+      } else {
+        lastError = error;
+      }
     }
+
+    if (lastError) throw lastError;
 
     return NextResponse.json({ success: true, checkpoint: data?.[0] });
   } catch (err: any) {
