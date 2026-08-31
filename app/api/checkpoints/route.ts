@@ -8,20 +8,42 @@ const supabase = createClient(
 
 export async function GET() {
   try {
-    const { data: checkpoints, error } = await supabase.from('checkpoints').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
+    // Fetch locations and checkpoints independently
+    const { data: locationsData, error: locError } = await supabase.from('locations').select('*').order('created_at', { ascending: false });
+    const { data: checkpointsData, error: cpError } = await supabase.from('checkpoints').select('*').order('created_at', { ascending: false });
 
-    // Group checkpoints dynamically by location name
-    const groupedMap: { [key: string]: any } = {};
-    (checkpoints || []).forEach((cp) => {
-      const locName = cp.location || 'Tom Salem Head Office';
-      if (!groupedMap[locName]) {
-        groupedMap[locName] = { id: locName, name: locName, address: '', checkpoints: [] };
-      }
-      groupedMap[locName].checkpoints.push(cp);
-    });
+    // Build a map of locations
+    const locationMap: { [key: string]: any } = {};
 
-    return NextResponse.json({ success: true, locations: Object.values(groupedMap) });
+    // 1. Populate from locations table if available
+    if (!locError && locationsData) {
+      locationsData.forEach((loc) => {
+        locationMap[loc.name] = {
+          id: loc.id,
+          name: loc.name,
+          address: loc.address || '',
+          checkpoints: []
+        };
+      });
+    }
+
+    // 2. Populate checkpoints and ensure their parent location exists in the map
+    if (!cpError && checkpointsData) {
+      checkpointsData.forEach((cp) => {
+        const locName = cp.location || 'Tom Salem Head Office';
+        if (!locationMap[locName]) {
+          locationMap[locName] = {
+            id: locName,
+            name: locName,
+            address: 'Active Location Site',
+            checkpoints: []
+          };
+        }
+        locationMap[locName].checkpoints.push(cp);
+      });
+    }
+
+    return NextResponse.json({ success: true, locations: Object.values(locationMap) });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -34,12 +56,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Checkpoint name is required' }, { status: 400 });
     }
 
-    // Insert only standard columns that always exist in the checkpoints table
+    const targetLocation = location || 'Tom Salem Head Office';
+
+    // Ensure the location exists in the locations table as well
+    await supabase.from('locations').upsert([{ name: targetLocation, address: 'Registered Site' }], { onConflict: 'name' });
+
+    // Insert checkpoint
     const { data, error } = await supabase
       .from('checkpoints')
       .insert([
         {
-          location: location || 'Tom Salem Head Office',
+          location: targetLocation,
           name: name
         }
       ])
