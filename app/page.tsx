@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import jsQR from 'jsqr';
 
 export default function Home() {
   const [guardName, setGuardName] = useState('');
@@ -17,8 +18,9 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
-  // Start device camera for QR scanning simulation/capture
+  // Start device camera and begin scanning frames for QR codes
   const startQRScanner = async () => {
     setScanningQR(true);
     try {
@@ -26,6 +28,7 @@ export default function Home() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
+        requestAnimationFrame(tickQRScan);
       }
     } catch (err) {
       console.error('Camera error:', err);
@@ -35,6 +38,9 @@ export default function Home() {
   };
 
   const stopQRScanner = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach((track) => track.stop());
@@ -42,7 +48,58 @@ export default function Home() {
     setScanningQR(false);
   };
 
-  // Handle incident photo capture from normal camera
+  // Continuous frame analysis for QR codes
+  const tickQRScan = () => {
+    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current || document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imgData.data, imgData.width, imgData.height, {
+          inversionAttempts: 'dontInvert',
+        });
+
+        if (code) {
+          // Parsed format: Location:XYZ|Checkpoint:ABC
+          const qrText = code.data;
+          try {
+            if (qrText.includes('|')) {
+              const parts = qrText.split('|');
+              let locVal = '';
+              let cpVal = '';
+              parts.forEach((p) => {
+                if (p.startsWith('Location:')) locVal = decodeURIComponent(p.replace('Location:', ''));
+                if (p.startsWith('Checkpoint:')) cpVal = decodeURIComponent(p.replace('Checkpoint:', ''));
+              });
+              if (locVal) setLocation(locVal);
+              if (cpVal) setCheckpoint(cpVal);
+            } else {
+              setCheckpoint(qrText);
+            }
+          } catch (e) {
+            setCheckpoint(qrText);
+          }
+
+          stopQRScanner();
+          alert('QR Code successfully scanned and matched!');
+          return;
+        }
+      }
+    }
+    animationFrameRef.current = requestAnimationFrame(tickQRScan);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    };
+  }, []);
+
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -199,7 +256,6 @@ export default function Home() {
             </select>
           </div>
 
-          {/* Incident Report & Normal Camera Photo Capture */}
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center">
               <label className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Incident Report / Notes</label>
