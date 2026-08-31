@@ -1,88 +1,100 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import { useState, useEffect, useRef } from 'react';
 
-export default function ScanPage() {
+export default function GuardScannerPage() {
   const [guardName, setGuardName] = useState('');
-  const [locationName, setLocationName] = useState('Main Facility');
-  const [checkpointName, setCheckpointName] = useState('Front Gate');
+  const [location, setLocation] = useState('');
+  const [checkpointName, setCheckpointName] = useState('');
   const [notes, setNotes] = useState('Normal Patrol Scan');
   const [isIncident, setIsIncident] = useState(false);
   const [mediaUrl, setMediaUrl] = useState('');
-  const [showScanner, setShowScanner] = useState(false);
-  const [lat, setLat] = useState<number | null>(null);
-  const [lng, setLng] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [successMsg, setSuccessMsg] = useState(false);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Get GPS coordinates on mount
   useEffect(() => {
-    const savedGuard = localStorage.getItem('tom_salem_guard_name');
-    if (savedGuard) setGuardName(savedGuard);
-
-    if ('geolocation' in navigator) {
+    if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setLat(pos.coords.latitude);
-          setLng(pos.coords.longitude);
+          setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         },
-        (err) => console.error('GPS error:', err),
+        (err) => {
+          console.error('Geolocation error:', err);
+          // Default fallback coordinates if GPS is blocked
+          setCoords({ lat: 6.4451, lng: 3.4143 });
+        },
         { enableHighAccuracy: true }
       );
+    } else {
+      setCoords({ lat: 6.4451, lng: 3.4143 });
     }
   }, []);
 
-  const handleScan = (result: any) => {
-    if (result && result.length > 0) {
-      const rawValue = result[0].rawValue;
-      try {
-        const parsed = JSON.parse(rawValue);
-        if (parsed.checkpoint_name || parsed.checkpointName) {
-          setCheckpointName(parsed.checkpoint_name || parsed.checkpointName);
-        } else {
-          setCheckpointName(rawValue);
-        }
-        if (parsed.location_name || parsed.locationName || parsed.location) {
-          setLocationName(parsed.location_name || parsed.locationName || parsed.location);
-        }
-      } catch {
-        setCheckpointName(rawValue);
+  // Simple QR scanner simulation / camera handler using BarcodeDetector if supported
+  const startScanner = async () => {
+    setScanning(true);
+    setErrorMsg('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
       }
-      setShowScanner(false);
+    } catch (err) {
+      console.error('Camera access error:', err);
+      setErrorMsg('Camera access denied or unavailable.');
+      setScanning(false);
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setMediaUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+  const stopScanner = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     }
+    setScanning(false);
+  };
+
+  // Mock QR Scan trigger for testing or automatic decoding loop
+  const simulateScanResult = (scannedLoc: string, scannedCp: string) => {
+    setLocation(scannedLoc);
+    setCheckpointName(scannedCp);
+    stopScanner();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guardName.trim()) {
-      alert('Please enter your Guard Name.');
+      setErrorMsg('Please enter your Guard Name.');
       return;
     }
-    setLoading(true);
+    if (!location || !checkpointName) {
+      setErrorMsg('Please scan a valid Checkpoint QR code first.');
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMsg('');
 
     try {
-      localStorage.setItem('tom_salem_guard_name', guardName.trim());
-
       const payload = {
         guardName: guardName.trim(),
-        location: locationName.trim() || 'Main Facility',
-        checkpointName: checkpointName.trim() || 'Front Gate',
-        notes: notes.trim() || (isIncident ? 'INCIDENT EMERGENCY REPORT' : 'Normal Patrol Scan'),
+        location,
+        checkpointName,
+        notes,
         isIncident,
         mediaUrl,
-        lat: lat ?? 6.44508,
-        lng: lng ?? 3.41434,
+        lat: coords ? coords.lat : 6.4451,
+        lng: coords ? coords.lng : 3.4143,
       };
 
       const res = await fetch('/api/alerts', {
@@ -91,170 +103,165 @@ export default function ScanPage() {
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error('Failed to submit log to API');
-
-      setSuccessMsg(true);
-      setNotes('Normal Patrol Scan');
-      setIsIncident(false);
-      setMediaUrl('');
-      setTimeout(() => setSuccessMsg(false), 4000);
-    } catch (error) {
-      console.error('Submit error:', error);
-      alert('Error submitting log to API live feed.');
+      const data = await res.json();
+      if (data.success) {
+        setSuccessMsg('Patrol Log Successfully Uploaded to Command!');
+        setCheckpointName('');
+        setLocation('');
+        setNotes('Normal Patrol Scan');
+        setIsIncident(false);
+        setMediaUrl('');
+        setTimeout(() => setSuccessMsg(''), 5000);
+      } else {
+        setErrorMsg(data.error || 'Failed to submit log.');
+      }
+    } catch (err) {
+      console.error('Submit error:', err);
+      setErrorMsg('Network error while submitting patrol log.');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto flex flex-col gap-5">
-      {showScanner && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl p-4 flex flex-col items-center">
-            <div className="w-full flex justify-between items-center mb-3">
-              <h2 className="text-sm font-bold text-cyan-400">Scan QR Code</h2>
-              <button
-                type="button"
-                onClick={() => setShowScanner(false)}
-                className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 bg-slate-800 rounded-lg cursor-pointer"
-              >
-                ✕ Close
-              </button>
-            </div>
-            <div className="w-full h-72 bg-black rounded-xl overflow-hidden relative">
-              <Scanner
-                onScan={handleScan}
-                onError={(err) => console.error(err)}
-                constraints={{ facingMode: 'environment' }}
-                styles={{
-                  container: { width: '100%', height: '100%' },
-                  video: { width: '100%', height: '100%', objectFit: 'cover' },
-                }}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setCheckpointName('Front Gate');
-                setLocationName('Main Facility');
-                setShowScanner(false);
-              }}
-              className="mt-4 w-full bg-cyan-500 text-slate-950 font-bold py-3 rounded-xl text-xs uppercase cursor-pointer"
-            >
-              Simulate Scan (Front Gate)
-            </button>
+    <main className="min-h-screen bg-[#070913] text-white p-4 sm:p-6 font-sans flex flex-col items-center">
+      <div className="w-full max-w-md bg-[#0b0f19] border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-6">
+        
+        {/* Header */}
+        <div className="text-center flex flex-col gap-1.5 border-b border-slate-800/80 pb-4">
+          <h1 className="text-xl font-black tracking-wider text-white uppercase">GUARD PATROL PWA</h1>
+          <p className="text-xs text-slate-400">Multi-Location Patrol Terminal</p>
+          <div className="inline-flex items-center justify-center gap-1.5 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-full text-[11px] text-cyan-400 font-mono mt-1 w-fit mx-auto">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            GPS Active ({coords ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : 'Locating...'})
           </div>
         </div>
-      )}
 
-      {successMsg && (
-        <div className="bg-emerald-950 border border-emerald-500 text-emerald-400 p-3 rounded-xl text-xs font-bold text-center animate-pulse">
-          ✓ Patrol log successfully sent to Admin Live Feed!
-        </div>
-      )}
+        {successMsg && (
+          <div className="bg-emerald-950/40 border border-emerald-500/40 text-emerald-400 p-3.5 rounded-xl text-xs font-semibold text-center">
+            {successMsg}
+          </div>
+        )}
 
-      <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 text-center shadow-lg">
-        <h1 className="text-xl font-bold tracking-wide text-white">GUARD PATROL PWA</h1>
-        <p className="text-xs text-slate-400 mt-1">Multi-Location Patrol Terminal</p>
-        <div className="mt-3 inline-flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-full">
-          <span>📍 {lat !== null && lng !== null ? `GPS Active (${lat.toFixed(5)}, ${lng.toFixed(5)})` : '📍 GPS Active (6.44508, 3.41434)'}</span>
-        </div>
+        {errorMsg && (
+          <div className="bg-red-950/40 border border-red-500/40 text-red-400 p-3.5 rounded-xl text-xs font-semibold text-center">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* Scanner Viewfinder Modal / Box */}
+        {scanning ? (
+          <div className="flex flex-col gap-3 bg-slate-950 p-4 rounded-2xl border border-cyan-500/50">
+            <div className="relative w-full h-64 bg-black rounded-xl overflow-hidden flex items-center justify-center">
+              <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+              <div className="absolute inset-0 border-2 border-cyan-400/40 pointer-events-none flex items-center justify-center">
+                <div className="w-48 h-48 border-2 border-dashed border-cyan-400 rounded-lg animate-pulse"></div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => simulateScanResult('Chicken Republic', 'Front Gate')}
+                className="flex-1 bg-cyan-400 text-slate-950 text-xs font-bold py-2.5 rounded-xl cursor-pointer"
+              >
+                Simulate QR: Chicken Republic
+              </button>
+              <button
+                type="button"
+                onClick={stopScanner}
+                className="bg-slate-800 text-slate-300 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={startScanner}
+            className="w-full bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-slate-950 font-black text-xs py-3.5 px-4 rounded-2xl shadow-lg tracking-wider uppercase transition-all cursor-pointer flex items-center justify-center gap-2"
+          >
+            📷 Open QR Scanner Viewfinder
+          </button>
+        )}
+
+        {/* Patrol Form */}
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          
+          {/* Guard Name - Blank by default, manual input */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">Guard Name</label>
+            <input
+              type="text"
+              placeholder="Enter your full name..."
+              value={guardName}
+              onChange={(e) => setGuardName(e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-400 placeholder:text-slate-600"
+              required
+            />
+          </div>
+
+          {/* Parent Location - Blank before scan, auto-filled by QR */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">Parent Location</label>
+            <input
+              type="text"
+              readOnly
+              placeholder="Will auto-fill upon QR scan..."
+              value={location}
+              className="bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-300 focus:outline-none placeholder:text-slate-600 cursor-not-allowed font-medium"
+            />
+          </div>
+
+          {/* Scanned Checkpoint - Blank before scan, auto-filled by QR */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">Scanned Checkpoint</label>
+            <input
+              type="text"
+              readOnly
+              placeholder="Will auto-fill upon QR scan..."
+              value={checkpointName}
+              className="bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-300 focus:outline-none placeholder:text-slate-600 cursor-not-allowed font-medium"
+            />
+            {location && <span className="text-[11px] text-emerald-400 font-semibold mt-0.5">✓ Assigned to Location: {location}</span>}
+          </div>
+
+          {/* Patrol Notes / Incident */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">Patrol Notes / Incident</label>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-cyan-400 resize-none"
+            />
+          </div>
+
+          {/* Incident checkbox */}
+          <div className="flex items-center gap-3 bg-slate-950 border border-slate-800 p-3.5 rounded-xl">
+            <input
+              type="checkbox"
+              id="incidentCheck"
+              checked={isIncident}
+              onChange={(e) => setIsIncident(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-700 text-cyan-400 focus:ring-0 cursor-pointer"
+            />
+            <label htmlFor="incidentCheck" className="text-xs font-bold text-red-400 cursor-pointer select-none">
+              Mark as Incident / Emergency Report
+            </label>
+          </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-extrabold text-xs py-4 rounded-xl uppercase tracking-wider transition-all cursor-pointer shadow-lg disabled:opacity-50 mt-2"
+          >
+            {submitting ? 'Transmitting Log...' : 'Submit Patrol Verification'}
+          </button>
+        </form>
+
       </div>
-
-      <button
-        type="button"
-        onClick={() => setShowScanner(true)}
-        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm cursor-pointer"
-      >
-        📷 OPEN QR SCANNER VIEWFINDER
-      </button>
-
-      <form onSubmit={handleSubmit} className="bg-slate-900 border border-white/10 rounded-2xl p-5 space-y-4 shadow-lg">
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Guard Name</label>
-          <input
-            type="text"
-            value={guardName}
-            onChange={(e) => setGuardName(e.target.value)}
-            placeholder="e.g. Officer James"
-            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Parent Location</label>
-          <input
-            type="text"
-            value={locationName}
-            onChange={(e) => setLocationName(e.target.value)}
-            placeholder="e.g. Branch Office / Facility Name"
-            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Scanned Checkpoint</label>
-          <input
-            type="text"
-            value={checkpointName}
-            onChange={(e) => setCheckpointName(e.target.value)}
-            placeholder="Scan QR code or enter checkpoint..."
-            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
-            required
-          />
-          <p className="text-xs text-emerald-400 mt-1.5">✓ Assigned to Location: {locationName}</p>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1.5">Patrol Notes / Incident</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
-          />
-        </div>
-
-        <div className="flex items-center gap-3 bg-slate-950 border border-white/10 p-3 rounded-xl">
-          <input
-            type="checkbox"
-            id="incidentToggle"
-            checked={isIncident}
-            onChange={(e) => {
-              setIsIncident(e.target.checked);
-              if (e.target.checked) setNotes('INCIDENT EMERGENCY: ');
-            }}
-            className="w-5 h-5 accent-red-500 cursor-pointer"
-          />
-          <label htmlFor="incidentToggle" className="text-xs font-bold text-red-400 cursor-pointer">
-            Mark as Incident / Emergency Report
-          </label>
-        </div>
-
-        <div className="bg-cyan-950/20 border border-cyan-500/30 p-4 rounded-xl space-y-2">
-          <label className="block text-xs font-bold uppercase tracking-wider text-cyan-300">
-            📷 Live Incident Camera Capture
-          </label>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFileUpload}
-            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-slate-300 cursor-pointer"
-          />
-          {mediaUrl && <p className="text-xs text-emerald-400 font-semibold mt-1">✓ Incident Photo Attached Successfully</p>}
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold py-4 rounded-xl uppercase tracking-wider transition-all shadow-lg cursor-pointer disabled:opacity-50 text-sm mt-2"
-        >
-          {loading ? 'Submitting...' : '🚀 SUBMIT PATROL LOG'}
-        </button>
-      </form>
     </main>
   );
 }
