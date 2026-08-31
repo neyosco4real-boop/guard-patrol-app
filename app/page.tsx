@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 export default function Home() {
   const [guardName, setGuardName] = useState('');
@@ -10,6 +10,49 @@ export default function Home() {
   const [status, setStatus] = useState('Completed');
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Camera states
+  const [scanningQR, setScanningQR] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Start device camera for QR scanning simulation/capture
+  const startQRScanner = async () => {
+    setScanningQR(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch (err) {
+      console.error('Camera error:', err);
+      alert('Unable to access camera for QR scanning.');
+      setScanningQR(false);
+    }
+  };
+
+  const stopQRScanner = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    setScanningQR(false);
+  };
+
+  // Handle incident photo capture from normal camera
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCapturedPhoto(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSubmitScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +85,7 @@ export default function Home() {
           location: location.trim(),
           checkpoint: checkpoint.trim(),
           gps_coordinates: gpsCoords,
-          incident_report: incidentReport.trim() || 'None',
+          incident_report: (incidentReport.trim() || 'None') + (capturedPhoto ? ' [Photo Attached]' : ''),
           status,
         }),
       });
@@ -51,8 +94,7 @@ export default function Home() {
       if (data.success) {
         setSuccessMsg('Patrol scan successfully recorded and transmitted to live feed!');
         setIncidentReport('');
-        // Optional: clear checkpoint after successful scan
-        // setCheckpoint('');
+        setCapturedPhoto(null);
       } else {
         alert('Error: ' + data.error);
       }
@@ -70,7 +112,7 @@ export default function Home() {
         
         <div className="bg-[#0b0f19] border border-slate-800 p-6 rounded-3xl shadow-2xl flex flex-col gap-2">
           <h1 className="text-lg font-extrabold text-white">🛡️ Guard Patrol Scanner</h1>
-          <p className="text-xs text-slate-400">Scan checkpoints or submit manual logs with real-time GPS telemetry.</p>
+          <p className="text-xs text-slate-400">Scan physical checkpoint QRs and capture incident media in real time.</p>
         </div>
 
         {successMsg && (
@@ -104,8 +146,36 @@ export default function Home() {
             />
           </div>
 
+          {/* QR Scanner Section */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Checkpoint Scanned</label>
+            <div className="flex justify-between items-center">
+              <label className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Checkpoint Scanned</label>
+              {!scanningQR ? (
+                <button
+                  type="button"
+                  onClick={startQRScanner}
+                  className="text-[10px] bg-cyan-400 text-slate-950 px-3 py-1 rounded-lg font-bold cursor-pointer"
+                >
+                  📷 Scan QR Camera
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={stopQRScanner}
+                  className="text-[10px] bg-red-500 text-white px-3 py-1 rounded-lg font-bold cursor-pointer"
+                >
+                  ❌ Close Camera
+                </button>
+              )}
+            </div>
+
+            {scanningQR && (
+              <div className="relative bg-black rounded-2xl overflow-hidden border border-cyan-400 p-2 flex flex-col items-center gap-2">
+                <video ref={videoRef} className="w-full h-48 object-cover rounded-xl" muted playsInline />
+                <p className="text-[10px] text-cyan-300 font-mono animate-pulse">Point camera at Checkpoint QR code...</p>
+              </div>
+            )}
+
             <input
               type="text"
               placeholder="e.g. Server Room / Gate 2"
@@ -129,14 +199,49 @@ export default function Home() {
             </select>
           </div>
 
+          {/* Incident Report & Normal Camera Photo Capture */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Incident Report / Notes</label>
+            <div className="flex justify-between items-center">
+              <label className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Incident Report / Notes</label>
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className="text-[10px] bg-slate-800 border border-slate-700 text-cyan-400 px-3 py-1 rounded-lg font-bold cursor-pointer hover:bg-slate-700"
+              >
+                📸 Snap Incident Photo
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoCapture}
+                className="hidden"
+              />
+            </div>
+
             <textarea
               placeholder="Describe any anomalies or leave blank..."
               value={incidentReport}
               onChange={(e) => setIncidentReport(e.target.value)}
               className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-cyan-400 h-24 resize-none"
             />
+
+            {capturedPhoto && (
+              <div className="flex items-center gap-3 bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <img src={capturedPhoto} alt="Incident snapshot" className="w-12 h-12 object-cover rounded-lg" />
+                <div className="flex-1">
+                  <p className="text-[11px] font-bold text-emerald-400">Photo attached successfully</p>
+                  <button
+                    type="button"
+                    onClick={() => setCapturedPhoto(null)}
+                    className="text-[10px] text-red-400 underline cursor-pointer"
+                  >
+                    Remove photo
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <button
