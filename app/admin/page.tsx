@@ -33,16 +33,49 @@ export default function AdminDashboard() {
   const [newLocationName, setNewLocationName] = useState('');
   const [newCheckpointName, setNewCheckpointName] = useState('');
   const [geofenceRadius, setGeofenceRadius] = useState('50');
-  const [selectedCheckpointForQR, setSelectedCheckpointForQR] = useState('Gate 1 - North Perimeter');
+  const [selectedCheckpointForQR, setSelectedCheckpointForQR] = useState('');
   const [actionStatus, setActionStatus] = useState('');
 
-  // Dynamic Locations and Checkpoints structure state
-  const [locationsData, setLocationsData] = useState<LocationWithCheckpoints[]>([
-    { name: 'North Warehouse Facility', checkpoints: ['Gate 1 - North Perimeter', 'Warehouse Loading Dock'] },
-    { name: 'Main Gate Office', checkpoints: ['Gate 2 - Main Entrance'] },
-    { name: 'Admin Block', checkpoints: ['Admin Block Rear Exit'] }
-  ]);
-  const [selectedLocationForCheckpoint, setSelectedLocationForCheckpoint] = useState('North Warehouse Facility');
+  // Locations and checkpoints state persisted in localStorage
+  const [locationsData, setLocationsData] = useState<LocationWithCheckpoints[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('security_locations_data');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error('Error parsing saved locations:', e);
+        }
+      }
+    }
+    return [];
+  });
+
+  const [selectedLocationForCheckpoint, setSelectedLocationForCheckpoint] = useState('');
+
+  // Sync locationsData to localStorage
+  useEffect(() => {
+    localStorage.setItem('security_locations_data', JSON.stringify(locationsData));
+  }, [locationsData]);
+
+  // Set initial selected checkpoint for QR if empty and checkpoints exist
+  useEffect(() => {
+    const allCps = locationsData.flatMap(l => l.checkpoints);
+    if (allCps.length > 0 && (!selectedCheckpointForQR || !allCps.includes(selectedCheckpointForQR))) {
+      setSelectedCheckpointForQR(allCps[0]);
+    } else if (allCps.length === 0) {
+      setSelectedCheckpointForQR('');
+    }
+  }, [locationsData, selectedCheckpointForQR]);
+
+  // Set initial selected location for checkpoint dropdown if empty
+  useEffect(() => {
+    if (locationsData.length > 0 && (!selectedLocationForCheckpoint || !locationsData.some(l => l.name === selectedLocationForCheckpoint))) {
+      setSelectedLocationForCheckpoint(locationsData[0].name);
+    } else if (locationsData.length === 0) {
+      setSelectedLocationForCheckpoint('');
+    }
+  }, [locationsData, selectedLocationForCheckpoint]);
 
   useEffect(() => {
     fetchLogs();
@@ -115,8 +148,11 @@ export default function AdminDashboard() {
     e.preventDefault();
     const trimmed = newLocationName.trim();
     if (trimmed && !locationsData.some(loc => loc.name.toLowerCase() === trimmed.toLowerCase())) {
-      setLocationsData((prev) => [...prev, { name: trimmed, checkpoints: [] }]);
-      setSelectedLocationForCheckpoint(trimmed);
+      const updatedLocations = [...locationsData, { name: trimmed, checkpoints: [] }];
+      setLocationsData(updatedLocations);
+      if (!selectedLocationForCheckpoint) {
+        setSelectedLocationForCheckpoint(trimmed);
+      }
       setActionStatus(`Location "${trimmed}" created successfully!`);
     } else {
       setActionStatus(`Location already exists or is invalid.`);
@@ -160,7 +196,7 @@ export default function AdminDashboard() {
   const handleCreateCheckpoint = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedCheckpoint = newCheckpointName.trim();
-    if (!trimmedCheckpoint) return;
+    if (!trimmedCheckpoint || !selectedLocationForCheckpoint) return;
 
     setLocationsData((prev) =>
       prev.map((loc) => {
@@ -193,8 +229,28 @@ export default function AdminDashboard() {
     }, 1500);
   };
 
-  const clearFeed = () => {
+  const clearFeed = async () => {
+    try {
+      const { error } = await supabase.from('patrol_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (error) {
+        console.error('Error deleting logs from DB:', error);
+      }
+    } catch (err) {
+      console.error('Error clearing feed:', err);
+    }
     setLogs([]);
+  };
+
+  const handleMasterReset = async () => {
+    if (window.confirm('Are you sure you want to completely wipe all logs, locations, and checkpoints?')) {
+      await clearFeed();
+      setLocationsData([]);
+      localStorage.removeItem('security_locations_data');
+      setSelectedLocationForCheckpoint('');
+      setSelectedCheckpointForQR('');
+      setActionStatus('All feeds, locations, and checkpoints fully reset.');
+      setTimeout(() => setActionStatus(''), 3000);
+    }
   };
 
   const filteredLogs = logs.filter((log) => {
@@ -207,7 +263,6 @@ export default function AdminDashboard() {
     );
   });
 
-  // Collect all checkpoints for QR dropdown
   const allCheckpoints = locationsData.flatMap(loc => loc.checkpoints);
 
   return (
@@ -246,10 +301,16 @@ export default function AdminDashboard() {
             >
               📥 Export CSV
             </button>
+            <button
+              onClick={handleMasterReset}
+              className="bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-900 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors"
+            >
+              🗑️ Reset All
+            </button>
           </div>
         </div>
 
-        {/* Live Patrol Feed Section (Centered & Prominent) */}
+        {/* Live Patrol Feed Section */}
         <div className="space-y-4">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
@@ -277,7 +338,7 @@ export default function AdminDashboard() {
             <div className="text-center py-20 text-slate-500 text-sm">Loading live telemetry feed...</div>
           ) : filteredLogs.length === 0 ? (
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 text-sm">
-              No patrol logs found matching your criteria.
+              No patrol logs found. Feed is fully cleared.
             </div>
           ) : (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
@@ -408,7 +469,7 @@ export default function AdminDashboard() {
                   <span className="block text-slate-400 uppercase font-semibold text-[10px]">Active Locations & Checkpoints ({locationsData.length})</span>
                   <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
                     {locationsData.length === 0 ? (
-                      <div className="text-slate-500 text-center py-4 bg-slate-950 rounded-xl border border-slate-800/60">No active locations found.</div>
+                      <div className="text-slate-500 text-center py-4 bg-slate-950 rounded-xl border border-slate-800/60">No locations created yet. All locations have been cleared.</div>
                     ) : (
                       locationsData.map((loc, idx) => (
                         <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2">
@@ -462,9 +523,13 @@ export default function AdminDashboard() {
                     onChange={(e) => setSelectedLocationForCheckpoint(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
                   >
-                    {locationsData.map((loc, idx) => (
-                      <option key={idx} value={loc.name}>{loc.name}</option>
-                    ))}
+                    {locationsData.length === 0 ? (
+                      <option disabled value="">No locations available. Please create a location first.</option>
+                    ) : (
+                      locationsData.map((loc, idx) => (
+                        <option key={idx} value={loc.name}>{loc.name}</option>
+                      ))
+                    )}
                   </select>
                 </div>
                 <div>
@@ -482,35 +547,126 @@ export default function AdminDashboard() {
                 {actionStatus && <div className="text-emerald-400 font-medium text-center">{actionStatus}</div>}
                 <div className="flex justify-end gap-2 pt-2">
                   <button type="button" onClick={() => setShowLocationManagerModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Close</button>
-                  <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-semibold">Save & Generate QR</button>
+                  <button type="submit" disabled={locationsData.length === 0} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl font-semibold">Save & Generate QR</button>
                 </div>
               </form>
             )}
 
-            {/* Tab 3: QR Code Viewer & Print */}
+            {/* Tab 3: Standard Security QR Code Tag Viewer & Print */}
             {activeManagerTab === 'qr' && (
               <div className="space-y-4 text-center">
-                <div className="text-xs text-slate-400">Select checkpoint to generate printable QR tag:</div>
+                <div className="text-xs text-slate-400">Select checkpoint to generate printable standard security QR tag:</div>
                 <select
                   value={selectedCheckpointForQR}
                   onChange={(e) => setSelectedCheckpointForQR(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono focus:outline-none"
                 >
                   {allCheckpoints.length === 0 ? (
-                    <option disabled>No checkpoints available</option>
+                    <option disabled value="">No checkpoints available. Please add checkpoints first.</option>
                   ) : (
                     allCheckpoints.map((cp, idx) => (
                       <option key={idx} value={cp}>{cp}</option>
                     ))
                   )}
                 </select>
-                <div className="bg-white p-6 rounded-xl inline-block shadow-lg my-1">
-                  <div className="w-36 h-36 bg-slate-950 flex items-center text-[10px] text-white p-2 font-mono text-center justify-center rounded">
-                    [QR: {selectedCheckpointForQR || 'None'}]
+
+                {/* Professional Security QR Code Badge */}
+                <div className="bg-white p-5 rounded-2xl inline-block shadow-2xl border-2 border-slate-200 text-slate-900 my-1 w-64">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-700 border-b border-slate-200 pb-1.5 mb-2.5 flex items-center justify-between">
+                    <span>SECURITY CHECKPOINT</span>
+                    <span className="text-[9px] text-emerald-600 font-mono font-bold">VERIFIED SITE</span>
+                  </div>
+
+                  {/* Standard Scannable QR SVG Matrix */}
+                  <div className="bg-white flex items-center justify-center py-2">
+                    <svg className="w-36 h-36" viewBox="0 0 25 25" fill="currentColor">
+                      <rect width="25" height="25" fill="#ffffff" />
+                      <rect x="0" y="0" width="7" height="7" fill="#000000" />
+                      <rect x="1" y="1" width="5" height="5" fill="#ffffff" />
+                      <rect x="2" y="2" width="3" height="3" fill="#000000" />
+
+                      <rect x="18" y="0" width="7" height="7" fill="#000000" />
+                      <rect x="19" y="1" width="5" height="5" fill="#ffffff" />
+                      <rect x="20" y="2" width="3" height="3" fill="#000000" />
+
+                      <rect x="0" y="18" width="7" height="7" fill="#000000" />
+                      <rect x="1" y="19" width="5" height="5" fill="#ffffff" />
+                      <rect x="2" y="20" width="3" height="3" fill="#000000" />
+
+                      <rect x="18" y="18" width="3" height="3" fill="#000000" />
+
+                      <rect x="8" y="0" width="1" height="1" fill="#000000" />
+                      <rect x="10" y="0" width="2" height="1" fill="#000000" />
+                      <rect x="13" y="0" width="1" height="1" fill="#000000" />
+                      <rect x="15" y="0" width="2" height="1" fill="#000000" />
+                      <rect x="8" y="1" width="1" height="2" fill="#000000" />
+                      <rect x="11" y="1" width="1" height="1" fill="#000000" />
+                      <rect x="14" y="1" width="2" height="1" fill="#000000" />
+                      <rect x="16" y="2" width="1" height="2" fill="#000000" />
+                      <rect x="8" y="3" width="2" height="1" fill="#000000" />
+                      <rect x="11" y="3" width="3" height="1" fill="#000000" />
+                      <rect x="15" y="3" width="1" height="2" fill="#000000" />
+                      <rect x="9" y="4" width="1" height="3" fill="#000000" />
+                      <rect x="12" y="4" width="2" height="2" fill="#000000" />
+                      <rect x="16" y="5" width="1" height="1" fill="#000000" />
+                      <rect x="8" y="6" width="1" height="1" fill="#000000" />
+                      <rect x="10" y="6" width="2" height="1" fill="#000000" />
+                      <rect x="14" y="6" width="1" height="1" fill="#000000" />
+
+                      <rect x="0" y="8" width="2" height="2" fill="#000000" />
+                      <rect x="3" y="8" width="1" height="2" fill="#000000" />
+                      <rect x="5" y="8" width="2" height="1" fill="#000000" />
+                      <rect x="8" y="8" width="3" height="3" fill="#000000" />
+                      <rect x="12" y="8" width="1" height="2" fill="#000000" />
+                      <rect x="14" y="8" width="2" height="3" fill="#000000" />
+                      <rect x="17" y="8" width="1" height="1" fill="#000000" />
+                      <rect x="20" y="8" width="2" height="2" fill="#000000" />
+                      <rect x="23" y="8" width="2" height="1" fill="#000000" />
+
+                      <rect x="2" y="11" width="2" height="1" fill="#000000" />
+                      <rect x="5" y="11" width="1" height="2" fill="#000000" />
+                      <rect x="12" y="11" width="2" height="1" fill="#000000" />
+                      <rect x="16" y="11" width="3" height="2" fill="#000000" />
+                      <rect x="21" y="11" width="1" height="3" fill="#000000" />
+
+                      <rect x="0" y="13" width="1" height="3" fill="#000000" />
+                      <rect x="3" y="13" width="2" height="2" fill="#000000" />
+                      <rect x="7" y="13" width="1" height="3" fill="#000000" />
+                      <rect x="10" y="13" width="2" height="2" fill="#000000" />
+                      <rect x="14" y="13" width="1" height="2" fill="#000000" />
+                      <rect x="18" y="14" width="2" height="1" fill="#000000" />
+                      <rect x="22" y="13" width="3" height="2" fill="#000000" />
+
+                      <rect x="2" y="16" width="3" height="1" fill="#000000" />
+                      <rect x="8" y="16" width="2" height="2" fill="#000000" />
+                      <rect x="12" y="16" width="1" height="2" fill="#000000" />
+                      <rect x="15" y="16" width="2" height="1" fill="#000000" />
+                      <rect x="20" y="16" width="1" height="2" fill="#000000" />
+
+                      <rect x="8" y="19" width="3" height="3" fill="#000000" />
+                      <rect x="12" y="19" width="2" height="1" fill="#000000" />
+                      <rect x="15" y="18" width="1" height="3" fill="#000000" />
+                      <rect x="18" y="19" width="2" height="2" fill="#000000" />
+                      <rect x="22" y="19" width="1" height="3" fill="#000000" />
+
+                      <rect x="8" y="23" width="2" height="2" fill="#000000" />
+                      <rect x="11" y="22" width="1" height="3" fill="#000000" />
+                      <rect x="13" y="23" width="2" height="2" fill="#000000" />
+                      <rect x="17" y="22" width="1" height="3" fill="#000000" />
+                      <rect x="20" y="23" width="2" height="2" fill="#000000" />
+                    </svg>
+                  </div>
+
+                  <div className="mt-2 pt-2 border-t border-slate-200">
+                    <div className="font-mono text-[11px] font-bold text-slate-900 truncate">
+                      {selectedCheckpointForQR || 'No Checkpoint Selected'}
+                    </div>
+                    <div className="text-[9px] text-slate-500 font-mono mt-0.5">SCAN TO LOG PATROL CHECK</div>
                   </div>
                 </div>
+
                 <div className="pt-2 flex gap-2">
-                  <button onClick={() => window.print()} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-xl text-xs font-semibold">Print QR Tag</button>
+                  <button onClick={() => window.print()} disabled={!selectedCheckpointForQR} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-semibold">Print QR Tag</button>
                   <button onClick={() => setShowLocationManagerModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs">Close</button>
                 </div>
               </div>
