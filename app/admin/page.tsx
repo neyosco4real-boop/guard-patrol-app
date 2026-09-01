@@ -59,12 +59,10 @@ export default function AdminDashboard() {
 
       const map = new Map<string, string[]>();
       
-      // Seed defaults
       DEFAULT_LOCATIONS.forEach(loc => {
         map.set(loc.name, [...loc.checkpoints]);
       });
 
-      // Merge database records
       if (locsData) {
         locsData.forEach((item: any) => {
           const name = (item.name || '').trim();
@@ -337,29 +335,49 @@ export default function AdminDashboard() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] border-b border-slate-800">
                   <tr>
-                    <th className="p-4">Timestamp</th>
+                    <th className="p-4">Date/Time</th>
                     <th className="p-4">Guard Name</th>
                     <th className="p-4">Location</th>
                     <th className="p-4">Checkpoint</th>
-                    <th className="p-4">Type</th>
                     <th className="p-4">GPS</th>
+                    <th className="p-4">Geofence</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4">Incident Note & Attachment</th>
                     <th className="p-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {filteredLogs.map(log => (
-                    <tr key={log.id} onClick={() => setSelectedLogDetail(log)} className="hover:bg-slate-850 cursor-pointer">
-                      <td className="p-4 font-mono">{new Date(log.created_at).toLocaleTimeString()}</td>
-                      <td className="p-4 font-bold text-white">{log.guard_name}</td>
-                      <td className="p-4 text-emerald-400">{log.location}</td>
-                      <td className="p-4 text-slate-200">{log.checkpoint}</td>
-                      <td className="p-4"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">Patrol</span></td>
-                      <td className="p-4 font-mono text-slate-300">{log.latitude}, {log.longitude}</td>
-                      <td className="p-4 text-right" onClick={e => e.stopPropagation()}>
-                        <button onClick={e => handleDeleteSingleLog(log.id, e)} className="bg-rose-950 hover:bg-rose-900 text-rose-300 px-3 py-1.5 rounded-xl text-[10px] font-bold">Delete</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredLogs.map(log => {
+                    const isIncident = (log.notes || '').includes('[PATROL_TYPE:Incident]');
+                    return (
+                      <tr key={log.id} onClick={() => setSelectedLogDetail(log)} className="hover:bg-slate-850 cursor-pointer">
+                        <td className="p-4 font-mono text-slate-300">
+                          <div>{new Date(log.created_at).toLocaleDateString()}</div>
+                          <div className="text-[10px] text-slate-500">{new Date(log.created_at).toLocaleTimeString()}</div>
+                        </td>
+                        <td className="p-4 font-bold text-white">{log.guard_name}</td>
+                        <td className="p-4 text-emerald-400">{log.location}</td>
+                        <td className="p-4 text-slate-200">{log.checkpoint}</td>
+                        <td className="p-4 font-mono text-slate-300">{log.latitude}, {log.longitude}</td>
+                        <td className="p-4">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+                            Verified
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${isIncident ? 'bg-rose-950 text-rose-400 border border-rose-800' : 'bg-teal-950 text-teal-400 border border-teal-800'}`}>
+                            {isIncident ? 'Incident Reported' : 'Successful Scan'}
+                          </span>
+                        </td>
+                        <td className="p-4 text-slate-300 max-w-xs truncate">
+                          {log.notes || 'No remarks'}
+                        </td>
+                        <td className="p-4 text-right" onClick={e => e.stopPropagation()}>
+                          <button onClick={e => handleDeleteSingleLog(log.id, e)} className="bg-rose-950 hover:bg-rose-900 text-rose-300 px-3 py-1.5 rounded-xl text-[10px] font-bold">Delete</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
