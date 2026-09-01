@@ -16,7 +16,6 @@ interface PatrolLog {
 }
 
 interface LocationItem {
-  id?: string;
   name: string;
   checkpoints: string[];
 }
@@ -62,10 +61,30 @@ export default function AdminDashboard() {
         .select('*');
 
       if (!locsError && locsData && locsData.length > 0) {
-        const formatted = locsData.map((item: any) => ({
-          name: item.name || item.location_name,
-          checkpoints: Array.isArray(item.checkpoints) ? item.checkpoints : (typeof item.checkpoints === 'string' ? JSON.parse(item.checkpoints) : [])
+        // Filter out duplicate or junk locations like repetitive 'Multichoice' if needed, or map clean unique list
+        const map = new Map<string, string[]>();
+        locsData.forEach((item: any) => {
+          const locName = (item.name || item.location_name || '').trim();
+          if (!locName) return;
+          let cps: string[] = [];
+          if (Array.isArray(item.checkpoints)) {
+            cps = item.checkpoints;
+          } else if (typeof item.checkpoints === 'string') {
+            try { cps = JSON.parse(item.checkpoints); } catch (e) { cps = [item.checkpoints]; }
+          }
+          if (!map.has(locName)) {
+            map.set(locName, Array.from(new Set(cps)));
+          } else {
+            const existing = map.get(locName)!;
+            map.set(locName, Array.from(new Set([...existing, ...cps])));
+          }
+        });
+
+        const formatted: LocationItem[] = Array.from(map.entries()).map(([name, checkpoints]) => ({
+          name,
+          checkpoints: checkpoints.length > 0 ? checkpoints : ['Main Checkpoint']
         }));
+
         setLocations(formatted);
         localStorage.setItem('security_locations_data', JSON.stringify(formatted));
       } else {
@@ -74,8 +93,8 @@ export default function AdminDashboard() {
           setLocations(JSON.parse(saved));
         } else {
           const defaultLocs = [
-            { name: 'Headquarters Main Gate', checkpoints: ['Gate Entrance A', 'Visitor Log Desk', 'Perimeter Fence North'] },
-            { name: 'Warehouse Facility B', checkpoints: ['Loading Bay 1', 'Storage Vault', 'Emergency Exit South'] }
+            { name: 'Tom Salem Head Office', checkpoints: ['Front Gate', 'Reception Desk', 'Server Room'] },
+            { name: 'Client Facility Site', checkpoints: ['Gate Entrance', 'Perimeter Fence'] }
           ];
           setLocations(defaultLocs);
           localStorage.setItem('security_locations_data', JSON.stringify(defaultLocs));
@@ -90,7 +109,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 10000); // Live polling every 10s
+    const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -98,26 +117,27 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!newLocName.trim()) return;
 
-    const existing = locations.find(l => l.name.toLowerCase() === newLocName.trim().toLowerCase());
+    const locClean = newLocName.trim();
+    const existing = locations.find(l => l.name.toLowerCase() === locClean.toLowerCase());
     if (existing) {
       setManagerMsg('Location already exists.');
       return;
     }
 
-    const updated = [...locations, { name: newLocName.trim(), checkpoints: ['Main Checkpoint'] }];
+    const updated = [...locations, { name: locClean, checkpoints: ['Main Checkpoint'] }];
     setLocations(updated);
     localStorage.setItem('security_locations_data', JSON.stringify(updated));
 
     try {
       await supabase.from('locations').upsert({
-        name: newLocName.trim(),
+        name: locClean,
         checkpoints: ['Main Checkpoint']
       }, { onConflict: 'name' });
     } catch (err) {
       console.error('Supabase location sync error:', err);
     }
 
-    setManagerMsg(`✓ Location "${newLocName}" created successfully!`);
+    setManagerMsg(`✓ Location "${locClean}" created successfully!`);
     setNewLocName('');
     setTimeout(() => setManagerMsg(''), 3000);
     fetchData();
@@ -130,10 +150,11 @@ export default function AdminDashboard() {
       return;
     }
 
+    const cpClean = newCpName.trim();
     const updated = locations.map(loc => {
       if (loc.name === selectedLocForCp) {
-        if (!loc.checkpoints.includes(newCpName.trim())) {
-          return { ...loc, checkpoints: [...loc.checkpoints, newCpName.trim()] };
+        if (!loc.checkpoints.includes(cpClean)) {
+          return { ...loc, checkpoints: [...loc.checkpoints, cpClean] };
         }
       }
       return loc;
@@ -154,9 +175,95 @@ export default function AdminDashboard() {
       console.error('Supabase checkpoint sync error:', err);
     }
 
-    setManagerMsg(`✓ Checkpoint "${newCpName}" added to ${selectedLocForCp}!`);
+    setManagerMsg(`✓ Checkpoint "${cpClean}" added to ${selectedLocForCp}!`);
     setNewCpName('');
     setTimeout(() => setManagerMsg(''), 3000);
+    fetchData();
+  };
+
+  const handleDeleteLocation = async (locName: string) => {
+    if (!confirm(`Are you sure you want to delete location "${locName}" and all its checkpoints?`)) return;
+
+    const updated = locations.filter(l => l.name !== locName);
+    setLocations(updated);
+    localStorage.setItem('security_locations_data', JSON.stringify(updated));
+
+    try {
+      await supabase.from('locations').delete().eq('name', locName);
+    } catch (err) {
+      console.error('Error deleting location from Supabase:', err);
+    }
+
+    setManagerMsg(`✓ Location "${locName}" deleted.`);
+    setTimeout(() => setManagerMsg(''), 3000);
+    fetchData();
+  };
+
+  const handleDeleteCheckpoint = async (locName: string, cpName: string) => {
+    if (!confirm(`Are you sure you want to delete checkpoint "${cpName}" from "${locName}"?`)) return;
+
+    const updated = locations.map(loc => {
+      if (loc.name === locName) {
+        return { ...loc, checkpoints: loc.checkpoints.filter(cp => cp !== cpName) };
+      }
+      return loc;
+    }).filter(loc => loc.checkpoints.length > 0);
+
+    setLocations(updated);
+    localStorage.setItem('security_locations_data', JSON.stringify(updated));
+
+    try {
+      const target = updated.find(l => l.name === locName);
+      if (target) {
+        await supabase.from('locations').upsert({
+          name: target.name,
+          checkpoints: target.checkpoints
+        }, { onConflict: 'name' });
+      } else {
+        await supabase.from('locations').delete().eq('name', locName);
+      }
+    } catch (err) {
+      console.error('Error deleting checkpoint from Supabase:', err);
+    }
+
+    setManagerMsg(`✓ Checkpoint "${cpName}" deleted.`);
+    setTimeout(() => setManagerMsg(''), 3000);
+    fetchData();
+  };
+
+  const handleCleanJunkLocations = async () => {
+    // Remove duplicate/blurry entries like repetitive Multichoice or empty ones
+    const cleanMap = new Map<string, string[]>();
+    locations.forEach(loc => {
+      const cleanName = loc.name.trim();
+      if (!cleanName || cleanName.toLowerCase() === 'multichoice' && cleanMap.has('Multichoice')) {
+        return;
+      }
+      cleanMap.set(cleanName, loc.checkpoints);
+    });
+
+    const cleanedList: LocationItem[] = Array.from(cleanMap.entries()).map(([name, checkpoints]) => ({
+      name,
+      checkpoints
+    }));
+
+    setLocations(cleanedList);
+    localStorage.setItem('security_locations_data', JSON.stringify(cleanedList));
+
+    try {
+      // Clear and re-sync
+      await supabase.from('locations').delete().neq('name', 'NONEXISTENT');
+      for (const loc of cleanedList) {
+        await supabase.from('locations').upsert({
+          name: loc.name,
+          checkpoints: loc.checkpoints
+        }, { onConflict: 'name' });
+      }
+    } catch (err) {
+      console.error('Error cleaning locations:', err);
+    }
+
+    alert('Duplicate and blurry locations cleaned successfully!');
     fetchData();
   };
 
@@ -167,16 +274,14 @@ export default function AdminDashboard() {
     }
 
     try {
-      // Clear Supabase tables
       await supabase.from('patrol_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('locations').delete().neq('name', 'NONEXISTENT');
 
-      // Clear local storage
       localStorage.removeItem('security_locations_data');
 
       setLogs([]);
       setLocations([
-        { name: 'Headquarters Main Gate', checkpoints: ['Gate Entrance A', 'Visitor Log Desk'] }
+        { name: 'Tom Salem Head Office', checkpoints: ['Front Gate', 'Reception Desk'] }
       ]);
       setIsResetConfirmOpen(false);
       setResetPassword('');
@@ -220,6 +325,12 @@ export default function AdminDashboard() {
               className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 shadow"
             >
               <span>🖨️</span> Generate & Print QR Tags
+            </button>
+            <button
+              onClick={handleCleanJunkLocations}
+              className="bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800/60 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 shadow"
+            >
+              <span>🧹</span> Clean Blurry Locations
             </button>
             <button
               onClick={() => setIsResetConfirmOpen(true)}
@@ -329,7 +440,7 @@ export default function AdminDashboard() {
       {/* Location & Checkpoint Manager Modal */}
       {isManagerOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <span>🏢</span> Location & Checkpoint Manager
@@ -350,7 +461,7 @@ export default function AdminDashboard() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Warehouse Facility C"
+                  placeholder="e.g. Tom Salem Head Office"
                   value={newLocName}
                   onChange={(e) => setNewLocName(e.target.value)}
                   className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
@@ -380,7 +491,7 @@ export default function AdminDashboard() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Loading Bay 2"
+                    placeholder="e.g. Front Gate"
                     value={newCpName}
                     onChange={(e) => setNewCpName(e.target.value)}
                     className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
@@ -392,19 +503,43 @@ export default function AdminDashboard() {
               </div>
             </form>
 
-            {/* Existing List Overview */}
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              <label className="block text-[10px] text-slate-400 uppercase font-semibold">Configured Locations & Checkpoints</label>
+            {/* Existing List Overview with Deletion */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-[10px] text-slate-400 uppercase font-semibold">Active Locations & Checkpoints</label>
+                <button
+                  type="button"
+                  onClick={handleCleanJunkLocations}
+                  className="text-[10px] text-amber-400 hover:text-amber-300 font-semibold underline"
+                >
+                  Clean Duplicates / Blurry
+                </button>
+              </div>
+
               {locations.map((loc, idx) => (
-                <div key={idx} className="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-1 text-xs">
+                <div key={idx} className="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-2 text-xs">
                   <div className="font-bold text-white flex items-center justify-between">
                     <span>🏢 {loc.name}</span>
-                    <span className="text-[10px] text-emerald-400">{loc.checkpoints.length} Checkpoints</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteLocation(loc.name)}
+                      className="text-rose-400 hover:text-rose-300 text-[10px] font-semibold bg-rose-950/60 px-2 py-0.5 rounded border border-rose-900"
+                    >
+                      Delete Location
+                    </button>
                   </div>
-                  <div className="text-[11px] text-slate-400 flex flex-wrap gap-1.5 pt-1">
+                  <div className="flex flex-wrap gap-1.5 pt-1">
                     {loc.checkpoints.map((cp, cpidx) => (
-                      <span key={cpidx} className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-lg text-slate-300">
+                      <span key={cpidx} className="bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg text-slate-300 flex items-center gap-1.5">
                         {cp}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCheckpoint(loc.name, cp)}
+                          className="text-slate-500 hover:text-rose-400 font-bold ml-1"
+                          title="Delete Checkpoint"
+                        >
+                          ×
+                        </button>
                       </span>
                     ))}
                   </div>
