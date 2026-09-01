@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -41,6 +41,20 @@ export default function AdminDashboard() {
   const [isLiveActive, setIsLiveActive] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'telemetry' | 'sitemanager'>('telemetry');
+
+  // Export Dropdown State
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setIsExportOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchData = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
@@ -139,6 +153,21 @@ export default function AdminDashboard() {
     setTimeout(() => setStatusMsg(''), 4000);
   };
 
+  const handleDeleteLocation = async (locName: string) => {
+    if (!window.confirm(`Are you sure you want to delete facility "${locName}" and its checkpoints?`)) return;
+
+    const updated = locations.filter(l => l.name !== locName);
+    setLocations(updated);
+
+    try {
+      await supabase.from('locations').delete().eq('name', locName);
+      setStatusMsg(`✓ Facility "${locName}" deleted.`);
+      setTimeout(() => setStatusMsg(''), 3000);
+    } catch (err) {
+      console.error('Error deleting location:', err);
+    }
+  };
+
   const handleCreateCheckpoint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedParentLoc || !newCpName.trim()) {
@@ -215,6 +244,30 @@ export default function AdminDashboard() {
     setTimeout(() => setStatusMsg(''), 3000);
   };
 
+  const handleDeleteCheckpoint = async (locName: string, cpName: string) => {
+    const updated = locations.map(loc => {
+      if (loc.name === locName) {
+        return { ...loc, checkpoints: loc.checkpoints.filter(c => c !== cpName) };
+      }
+      return loc;
+    });
+    setLocations(updated);
+
+    try {
+      const target = updated.find(l => l.name === locName);
+      if (target) {
+        await supabase.from('locations').upsert({
+          name: target.name,
+          checkpoints: target.checkpoints
+        }, { onConflict: 'name' });
+      }
+      setStatusMsg(`✓ Checkpoint "${cpName}" removed.`);
+      setTimeout(() => setStatusMsg(''), 2500);
+    } catch (err) {
+      console.error('Error deleting checkpoint:', err);
+    }
+  };
+
   const handleClearAllFeeds = async () => {
     if (!window.confirm('Are you sure you want to clear all patrol logs?')) return;
     try {
@@ -238,6 +291,85 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error('Delete error:', err);
     }
+  };
+
+  // Export handlers
+  const handleExportHTML = () => {
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Tom Salem Security Services - Patrol Report</title>
+  <style>
+    body { font-family: sans-serif; padding: 30px; background: #0f172a; color: #f8fafc; }
+    h1 { color: #34d399; font-size: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+    th, td { border: 1px solid #334155; padding: 10px; text-align: left; }
+    th { background: #1e293b; color: #34d399; }
+    tr:nth-child(even) { background: #111827; }
+  </style>
+</head>
+<body>
+  <h1>Tom Salem Security Services - Audit Telemetry Report</h1>
+  <p>Generated on: ${new Date().toLocaleString()}</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Guard Name</th>
+        <th>Location</th>
+        <th>Checkpoint</th>
+        <th>GPS Coordinates</th>
+        <th>Status / Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${logs.map(l => `
+        <tr>
+          <td>${new Date(l.created_at).toLocaleString()}</td>
+          <td>${l.guard_name}</td>
+          <td>${l.location}</td>
+          <td>${l.checkpoint}</td>
+          <td>${l.latitude}, ${l.longitude}</td>
+          <td>${l.notes || 'Successful Scan'}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+</body>
+</html>`;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TomSalem_Patrol_Report_${Date.now()}.html`;
+    a.click();
+    setIsExportOpen(false);
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Timestamp', 'Guard Name', 'Location', 'Checkpoint', 'Latitude', 'Longitude', 'Notes'];
+    const rows = logs.map(l => [
+      `"${new Date(l.created_at).toLocaleString()}"`,
+      `"${l.guard_name}"`,
+      `"${l.location}"`,
+      `"${l.checkpoint}"`,
+      `"${l.latitude}"`,
+      `"${l.longitude}"`,
+      `"${(l.notes || '').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TomSalem_Patrol_Report_${Date.now()}.csv`;
+    a.click();
+    setIsExportOpen(false);
+  };
+
+  const handleExportPDF = () => {
+    window.print();
+    setIsExportOpen(false);
   };
 
   const handleDownloadQR = () => {
@@ -286,7 +418,9 @@ export default function AdminDashboard() {
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40 px-4 sm:px-8 py-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-xl shadow-lg">🛡️</div>
+            <div className="w-10 h-10 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shadow-lg p-0.5">
+              <img src="/logo.png" alt="Tom Salem Security Services" className="w-full h-full object-contain" />
+            </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 tracking-wide uppercase drop-shadow-sm">
@@ -346,13 +480,50 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-          <button onClick={() => setActiveTab('telemetry')} className={`px-5 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 ${activeTab === 'telemetry' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-800'}`}>
-            <span>📡</span> Live Patrol Telemetry Feed
-          </button>
-          <button onClick={() => setActiveTab('sitemanager')} className={`px-5 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 ${activeTab === 'sitemanager' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-800'}`}>
-            <span>🏢</span> Site & Checkpoint Manager
-          </button>
+        {/* Sub-heading with Export Report Dropdown & Tabs */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setActiveTab('telemetry')} className={`px-5 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 ${activeTab === 'telemetry' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-800'}`}>
+              <span>📡</span> Live Patrol Telemetry Feed
+            </button>
+            <button onClick={() => setActiveTab('sitemanager')} className={`px-5 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 ${activeTab === 'sitemanager' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-800'}`}>
+              <span>🏢</span> Site & Checkpoint Manager
+            </button>
+          </div>
+
+          {/* Export Report Dropdown Button */}
+          <div className="relative" ref={exportDropdownRef}>
+            <button 
+              onClick={() => setIsExportOpen(!isExportOpen)}
+              className="bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-500/40 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all"
+            >
+              <span>📊 Export Report</span>
+              <span className={`transform transition-transform ${isExportOpen ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+
+            {isExportOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl py-2 z-50">
+                <button 
+                  onClick={handleExportPDF}
+                  className="w-full text-left px-4 py-2.5 text-xs text-slate-200 hover:bg-slate-800 flex items-center gap-2 font-medium"
+                >
+                  <span>📄</span> Download PDF / Print
+                </button>
+                <button 
+                  onClick={handleExportCSV}
+                  className="w-full text-left px-4 py-2.5 text-xs text-slate-200 hover:bg-slate-800 flex items-center gap-2 font-medium"
+                >
+                  <span>📊 Download Excel (CSV)</span>
+                </button>
+                <button 
+                  onClick={handleExportHTML}
+                  className="w-full text-left px-4 py-2.5 text-xs text-slate-200 hover:bg-slate-800 flex items-center gap-2 font-medium border-t border-slate-800/80"
+                >
+                  <span>🌐 View HTML Report</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {activeTab === 'telemetry' && (
@@ -439,15 +610,30 @@ export default function AdminDashboard() {
                 {locations.map((loc, idx) => (
                   <div key={idx} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3 flex flex-col justify-between">
                     <div className="space-y-3">
-                      <div className="font-bold text-emerald-400 text-sm flex justify-between border-b border-slate-800 pb-2">
-                        <span>🏢 {loc.name}</span>
-                        <span className="text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">{loc.checkpoints.length}</span>
+                      <div className="font-bold text-emerald-400 text-sm flex items-center justify-between border-b border-slate-800 pb-2">
+                        <div className="flex items-center gap-2 truncate">
+                          <span>🏢</span>
+                          <span className="truncate">{loc.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">{loc.checkpoints.length}</span>
+                          <button 
+                            onClick={() => handleDeleteLocation(loc.name)}
+                            title="Delete Facility Location"
+                            className="text-rose-400 hover:text-rose-300 bg-rose-950/60 hover:bg-rose-900 px-2 py-0.5 rounded text-[10px] font-bold"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                       <div className="space-y-2">
                         {loc.checkpoints.map((cp, cpidx) => (
-                          <div key={cpidx} className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex justify-between text-xs">
-                            <span className="text-slate-200">📍 {cp}</span>
-                            <button onClick={() => setActiveQrCp({ location: loc.name, checkpoint: cp })} className="bg-emerald-600/20 text-emerald-400 px-3 py-1 rounded-lg text-[10px] font-bold">QR</button>
+                          <div key={cpidx} className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between text-xs gap-2">
+                            <span className="text-slate-200 truncate">📍 {cp}</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button onClick={() => setActiveQrCp({ location: loc.name, checkpoint: cp })} className="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 px-2.5 py-1 rounded-lg text-[10px] font-bold">QR</button>
+                              <button onClick={() => handleDeleteCheckpoint(loc.name, cp)} className="text-rose-400 hover:text-rose-300 bg-rose-950/40 px-2 py-1 rounded-lg text-[10px] font-bold">✕</button>
+                            </div>
                           </div>
                         ))}
                       </div>
