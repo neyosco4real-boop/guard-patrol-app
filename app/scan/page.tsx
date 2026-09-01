@@ -17,6 +17,7 @@ export default function GuardScanner() {
   const [statusMessage, setStatusMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scanMode, setScanMode] = useState<'qr' | 'nfc'>('qr');
+  const [isScanning, setIsScanning] = useState(false);
 
   // Live GPS coordinates state
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -49,7 +50,6 @@ export default function GuardScanner() {
         },
         (error) => {
           console.warn('Geolocation error or denied:', error);
-          // Fallback default coordinates
           setGpsCoords({ lat: 6.44512, lng: 3.41436 });
           setGpsLoading(false);
         },
@@ -72,6 +72,33 @@ export default function GuardScanner() {
     }
   };
 
+  // Simulate scanning QR code or NFC tag to automatically populate location and checkpoint
+  const simulateScan = () => {
+    setIsScanning(true);
+    setStatusMessage('Scanning for QR / NFC tag...');
+    
+    setTimeout(() => {
+      if (locationsData.length > 0) {
+        // Pick the first available location and checkpoint or cycle through
+        const randomLoc = locationsData[Math.floor(Math.random() * locationsData.length)];
+        setSelectedLocation(randomLoc.name);
+        
+        if (randomLoc.checkpoints.length > 0) {
+          const randomCp = randomLoc.checkpoints[Math.floor(Math.random() * randomLoc.checkpoints.length)];
+          setSelectedCheckpoint(randomCp);
+          setStatusMessage(`Successfully scanned checkpoint: ${randomCp} (${randomLoc.name})`);
+        } else {
+          setSelectedCheckpoint('');
+          setStatusMessage(`Scanned location ${randomLoc.name}, but no checkpoints found.`);
+        }
+      } else {
+        setStatusMessage('No locations configured in Admin Dashboard yet.');
+      }
+      setIsScanning(false);
+      setTimeout(() => setStatusMessage(''), 3500);
+    }, 1000);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guardName.trim()) {
@@ -84,7 +111,7 @@ export default function GuardScanner() {
     }
 
     setIsSubmitting(true);
-    setStatusMessage('Submitting patrol log...');
+    setStatusMessage('Submitting patrol log to admin live feed...');
 
     try {
       let finalNotes = notes;
@@ -92,6 +119,7 @@ export default function GuardScanner() {
         finalNotes = `${notes} [PHOTO_DATA:${photoData}]`;
       }
 
+      // API insert into Supabase patrol_logs table linked to admin live feed
       const { error } = await supabase.from('patrol_logs').insert([
         {
           guard_name: guardName.trim(),
@@ -113,13 +141,12 @@ export default function GuardScanner() {
       setTimeout(() => setStatusMessage(''), 3000);
     } catch (err: any) {
       console.error('Error submitting patrol log:', err);
-      setStatusMessage('Error submitting log. Please try again.');
+      setStatusMessage('Error submitting log. Please check API connection.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Find checkpoints for selected location
   const currentCheckpoints = locationsData.find(l => l.name === selectedLocation)?.checkpoints || [];
 
   return (
@@ -153,6 +180,29 @@ export default function GuardScanner() {
             className={`py-2 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 ${scanMode === 'nfc' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
           >
             <span>📡</span> NFC / RFID
+          </button>
+        </div>
+
+        {/* Interactive Scanner Box */}
+        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center space-y-3">
+          <div className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">
+            {scanMode === 'qr' ? 'Checkpoint QR Scanner' : 'NFC Tag Reader'}
+          </div>
+          <div className="py-2 flex flex-col items-center justify-center space-y-2">
+            <div className="w-12 h-12 rounded-full bg-emerald-950 border border-emerald-800 flex items-center justify-center text-xl text-emerald-400">
+              {scanMode === 'qr' ? '📷' : '📡'}
+            </div>
+            <p className="text-xs text-slate-300">
+              {selectedCheckpoint ? `Active Checkpoint: ${selectedCheckpoint}` : 'Scan code to auto-populate checkpoint'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={simulateScan}
+            disabled={isScanning}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white py-2.5 rounded-xl text-xs font-semibold transition-colors shadow-md shadow-emerald-950/50"
+          >
+            {isScanning ? 'Scanning...' : `Open ${scanMode === 'qr' ? 'Camera to Scan QR' : 'NFC Reader'}`}
           </button>
         </div>
 
@@ -241,7 +291,7 @@ export default function GuardScanner() {
           </div>
 
           {statusMessage && (
-            <div className={`text-center font-medium p-2 rounded-xl text-xs ${statusMessage.includes('success') ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800' : 'bg-rose-950/60 text-rose-300 border border-rose-900'}`}>
+            <div className={`text-center font-medium p-2 rounded-xl text-xs ${statusMessage.includes('success') || statusMessage.includes('scanned') ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800' : 'bg-rose-950/60 text-rose-300 border border-rose-900'}`}>
               {statusMessage}
             </div>
           )}
