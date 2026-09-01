@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -16,14 +16,17 @@ interface PatrolLog {
 }
 
 interface LocationItem {
-  id?: string;
   name: string;
   checkpoints: string[];
 }
 
+const DEFAULT_LOCATIONS: LocationItem[] = [
+  { name: 'Headquarters Facility', checkpoints: ['Main Entrance', 'Reception Desk', 'Perimeter Fence North'] }
+];
+
 export default function AdminDashboard() {
   const [logs, setLogs] = useState<PatrolLog[]>([]);
-  const [locations, setLocations] = useState<LocationItem[]>([]);
+  const [locations, setLocations] = useState<LocationItem[]>(DEFAULT_LOCATIONS);
   const [loading, setLoading] = useState(true);
   
   const [newLocName, setNewLocName] = useState('');
@@ -38,8 +41,12 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'telemetry' | 'sitemanager'>('telemetry');
 
-  const fetchData = async () => {
-    setLoading(true);
+  // Use a ref to prevent periodic polling from overwriting local optimistic updates before DB sync settles
+  const locationsRef = useRef(locations);
+  locationsRef.current = locations;
+
+  const fetchData = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     try {
       const { data: logsData, error: logsError } = await supabase
         .from('patrol_logs')
@@ -56,6 +63,12 @@ export default function AdminDashboard() {
 
       if (!locsError && locsData && locsData.length > 0) {
         const map = new Map<string, string[]>();
+        
+        // Always include currently loaded/local locations first to prevent ghosting
+        locationsRef.current.forEach(loc => {
+          map.set(loc.name, [...loc.checkpoints]);
+        });
+
         locsData.forEach((item: any) => {
           const locName = (item.name || item.location_name || '').trim();
           if (!locName) return;
@@ -65,6 +78,7 @@ export default function AdminDashboard() {
           } else if (typeof item.checkpoints === 'string') {
             try { cps = JSON.parse(item.checkpoints); } catch (e) { cps = [item.checkpoints]; }
           }
+          
           if (!map.has(locName)) {
             map.set(locName, Array.from(new Set(cps)));
           } else {
@@ -75,27 +89,22 @@ export default function AdminDashboard() {
 
         const formatted: LocationItem[] = Array.from(map.entries()).map(([name, checkpoints]) => ({
           name,
-          checkpoints: checkpoints.length > 0 ? checkpoints : ['Main Gate']
+          checkpoints: checkpoints.length > 0 ? checkpoints : ['Main Checkpoint']
         }));
         setLocations(formatted);
-      } else if (locations.length === 0) {
-        const defaultLocs = [
-          { name: 'Headquarters Facility', checkpoints: ['Main Entrance', 'Reception Desk', 'Perimeter Fence North'] }
-        ];
-        setLocations(defaultLocs);
       }
     } catch (err) {
       console.error('Error fetching admin data:', err);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(false);
     const interval = setInterval(() => {
       if (isLiveActive) {
-        fetchData();
+        fetchData(true);
       }
     }, 8000);
     return () => clearInterval(interval);
@@ -131,7 +140,6 @@ export default function AdminDashboard() {
     setStatusMsg(`✓ Location "${locName}" created successfully and added to active list!`);
     setNewLocName('');
     setTimeout(() => setStatusMsg(''), 3500);
-    fetchData();
   };
 
   const handleCreateCheckpoint = async (e: React.FormEvent) => {
@@ -169,7 +177,6 @@ export default function AdminDashboard() {
     setStatusMsg(`✓ Checkpoint "${cpName}" added under ${selectedParentLoc}!`);
     setNewCpName('');
     setTimeout(() => setStatusMsg(''), 3000);
-    fetchData();
   };
 
   const handleAddInlineCheckpoint = async (locName: string, e: React.FormEvent) => {
@@ -203,7 +210,6 @@ export default function AdminDashboard() {
     setStatusMsg(`✓ Checkpoint "${cpName}" added to ${locName}!`);
     setInlineCpInputs({ ...inlineCpInputs, [locName]: '' });
     setTimeout(() => setStatusMsg(''), 3000);
-    fetchData();
   };
 
   const handleClearAllFeeds = async () => {
@@ -282,7 +288,7 @@ export default function AdminDashboard() {
             </button>
 
             <button
-              onClick={fetchData}
+              onClick={() => fetchData(false)}
               className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border border-slate-700"
             >
               <span>🔄</span> Refresh
