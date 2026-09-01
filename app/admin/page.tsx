@@ -31,6 +31,7 @@ export default function AdminDashboard() {
   const [statusMsg, setStatusMsg] = useState('');
 
   const [activeQrCp, setActiveQrCp] = useState<{ location: string; checkpoint: string } | null>(null);
+  const [isLiveActive, setIsLiveActive] = useState(true);
 
   const fetchData = async () => {
     setLoading(true);
@@ -87,9 +88,13 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 8000);
+    const interval = setInterval(() => {
+      if (isLiveActive) {
+        fetchData();
+      }
+    }, 8000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isLiveActive]);
 
   const handleCreateLocation = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,11 +188,21 @@ export default function AdminDashboard() {
         )}
 
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-2 border-b border-slate-800">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <span>📡</span> Live Patrol Telemetry Feed
             </h2>
-            <span className="text-xs text-emerald-400 font-mono">Total Logs: {logs.length}</span>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setIsLiveActive(!isLiveActive)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-2 border ${isLiveActive ? 'bg-emerald-950 text-emerald-400 border-emerald-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}
+              >
+                <span className={`w-2 h-2 rounded-full ${isLiveActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`}></span>
+                {isLiveActive ? 'Live Feed: ON' : 'Live Feed: PAUSED'}
+              </button>
+              <span className="text-xs text-emerald-400 font-mono">Total Logs: {logs.length}</span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
