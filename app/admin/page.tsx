@@ -262,7 +262,9 @@ export default function AdminDashboard() {
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-xl shadow-lg">🛡️</div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-extrabold text-white tracking-tight">Security Command Center</h1>
+                <h1 className="text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 tracking-wide uppercase drop-shadow-sm">
+                  Tom Salem Security Guard Patrol System
+                </h1>
                 <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">Enterprise</span>
               </div>
               <p className="text-xs text-slate-400">Tom Salem Security Services • Global Operations Dashboard</p>
@@ -352,9 +354,9 @@ export default function AdminDashboard() {
                     const isIncident = (log.notes || '').includes('[PATROL_TYPE:Incident]');
                     return (
                       <tr key={log.id} onClick={() => setSelectedLogDetail(log)} className="hover:bg-slate-850 cursor-pointer transition-colors">
-                        <td className="p-4 font-mono text-slate-300 whitespace-nowrap">
+                        <td className="p-4 font-mono font-bold text-slate-200 whitespace-nowrap">
                           <div>{new Date(log.created_at).toLocaleDateString()}</div>
-                          <div className="text-[10px] text-slate-500">{new Date(log.created_at).toLocaleTimeString()}</div>
+                          <div className="text-[10px] text-slate-400">{new Date(log.created_at).toLocaleTimeString()}</div>
                         </td>
                         <td className="p-4 font-bold text-white whitespace-nowrap">{log.guard_name}</td>
                         <td className="p-4 text-emerald-400 font-semibold">{log.location}</td>
@@ -459,7 +461,7 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase font-bold">Timestamp</span>
-                  <span className="font-mono text-slate-300">{new Date(selectedLogDetail.created_at).toLocaleString()}</span>
+                  <span className="font-mono font-bold text-slate-200">{new Date(selectedLogDetail.created_at).toLocaleString()}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase font-bold">Geofence Status</span>
