@@ -24,25 +24,13 @@ export default function AdminDashboard() {
   const [logs, setLogs] = useState<PatrolLog[]>([]);
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterGuard, setFilterGuard] = useState('');
-  const [filterLocation, setFilterLocation] = useState('');
-  const [selectedLog, setSelectedLog] = useState<PatrolLog | null>(null);
-
-  // Modal states for Manager
-  const [isManagerOpen, setIsManagerOpen] = useState(false);
+  
   const [newLocName, setNewLocName] = useState('');
-  const [selectedLocForCp, setSelectedLocForCp] = useState('');
+  const [selectedParentLoc, setSelectedParentLoc] = useState('');
   const [newCpName, setNewCpName] = useState('');
-  const [managerMsg, setManagerMsg] = useState('');
+  const [statusMsg, setStatusMsg] = useState('');
 
-  // QR Modal states
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [selectedCpForQr, setSelectedCpForQr] = useState('');
-  const [selectedLocForQr, setSelectedLocForQr] = useState('');
-
-  // Reset confirmation state
-  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
-  const [resetPassword, setResetPassword] = useState('');
+  const [activeQrCp, setActiveQrCp] = useState<{ location: string; checkpoint: string } | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -61,7 +49,6 @@ export default function AdminDashboard() {
         .select('*');
 
       if (!locsError && locsData && locsData.length > 0) {
-        // Filter out duplicate or junk locations like repetitive 'Multichoice' if needed, or map clean unique list
         const map = new Map<string, string[]>();
         locsData.forEach((item: any) => {
           const locName = (item.name || item.location_name || '').trim();
@@ -82,23 +69,14 @@ export default function AdminDashboard() {
 
         const formatted: LocationItem[] = Array.from(map.entries()).map(([name, checkpoints]) => ({
           name,
-          checkpoints: checkpoints.length > 0 ? checkpoints : ['Main Checkpoint']
+          checkpoints: checkpoints.length > 0 ? checkpoints : ['Main Gate']
         }));
-
         setLocations(formatted);
-        localStorage.setItem('security_locations_data', JSON.stringify(formatted));
       } else {
-        const saved = localStorage.getItem('security_locations_data');
-        if (saved) {
-          setLocations(JSON.parse(saved));
-        } else {
-          const defaultLocs = [
-            { name: 'Tom Salem Head Office', checkpoints: ['Front Gate', 'Reception Desk', 'Server Room'] },
-            { name: 'Client Facility Site', checkpoints: ['Gate Entrance', 'Perimeter Fence'] }
-          ];
-          setLocations(defaultLocs);
-          localStorage.setItem('security_locations_data', JSON.stringify(defaultLocs));
-        }
+        const defaultLocs = [
+          { name: 'Headquarters Facility', checkpoints: ['Main Entrance', 'Reception Desk', 'Perimeter Fence North'] }
+        ];
+        setLocations(defaultLocs);
       }
     } catch (err) {
       console.error('Error fetching admin data:', err);
@@ -109,7 +87,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 10000);
+    const interval = setInterval(fetchData, 8000);
     return () => clearInterval(interval);
   }, []);
 
@@ -117,54 +95,51 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!newLocName.trim()) return;
 
-    const locClean = newLocName.trim();
-    const existing = locations.find(l => l.name.toLowerCase() === locClean.toLowerCase());
-    if (existing) {
-      setManagerMsg('Location already exists.');
+    const locName = newLocName.trim();
+    if (locations.some(l => l.name.toLowerCase() === locName.toLowerCase())) {
+      setStatusMsg('Location already exists.');
       return;
     }
 
-    const updated = [...locations, { name: locClean, checkpoints: ['Main Checkpoint'] }];
+    const updated = [...locations, { name: locName, checkpoints: ['Main Checkpoint'] }];
     setLocations(updated);
-    localStorage.setItem('security_locations_data', JSON.stringify(updated));
 
     try {
       await supabase.from('locations').upsert({
-        name: locClean,
+        name: locName,
         checkpoints: ['Main Checkpoint']
       }, { onConflict: 'name' });
     } catch (err) {
-      console.error('Supabase location sync error:', err);
+      console.error('Supabase error:', err);
     }
 
-    setManagerMsg(`✓ Location "${locClean}" created successfully!`);
+    setStatusMsg(`✓ Location "${locName}" created successfully!`);
     setNewLocName('');
-    setTimeout(() => setManagerMsg(''), 3000);
+    setTimeout(() => setStatusMsg(''), 3000);
     fetchData();
   };
 
-  const handleAddCheckpoint = async (e: React.FormEvent) => {
+  const handleCreateCheckpoint = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedLocForCp || !newCpName.trim()) {
-      setManagerMsg('Please select location and enter checkpoint name.');
+    if (!selectedParentLoc || !newCpName.trim()) {
+      setStatusMsg('Please select a parent location and enter a checkpoint name.');
       return;
     }
 
-    const cpClean = newCpName.trim();
+    const cpName = newCpName.trim();
     const updated = locations.map(loc => {
-      if (loc.name === selectedLocForCp) {
-        if (!loc.checkpoints.includes(cpClean)) {
-          return { ...loc, checkpoints: [...loc.checkpoints, cpClean] };
+      if (loc.name === selectedParentLoc) {
+        if (!loc.checkpoints.includes(cpName)) {
+          return { ...loc, checkpoints: [...loc.checkpoints, cpName] };
         }
       }
       return loc;
     });
 
     setLocations(updated);
-    localStorage.setItem('security_locations_data', JSON.stringify(updated));
 
     try {
-      const target = updated.find(l => l.name === selectedLocForCp);
+      const target = updated.find(l => l.name === selectedParentLoc);
       if (target) {
         await supabase.from('locations').upsert({
           name: target.name,
@@ -172,263 +147,213 @@ export default function AdminDashboard() {
         }, { onConflict: 'name' });
       }
     } catch (err) {
-      console.error('Supabase checkpoint sync error:', err);
+      console.error('Supabase error:', err);
     }
 
-    setManagerMsg(`✓ Checkpoint "${cpClean}" added to ${selectedLocForCp}!`);
+    setStatusMsg(`✓ Checkpoint "${cpName}" added under ${selectedParentLoc}!`);
     setNewCpName('');
-    setTimeout(() => setManagerMsg(''), 3000);
+    setTimeout(() => setStatusMsg(''), 3000);
     fetchData();
   };
-
-  const handleDeleteLocation = async (locName: string) => {
-    if (!confirm(`Are you sure you want to delete location "${locName}" and all its checkpoints?`)) return;
-
-    const updated = locations.filter(l => l.name !== locName);
-    setLocations(updated);
-    localStorage.setItem('security_locations_data', JSON.stringify(updated));
-
-    try {
-      await supabase.from('locations').delete().eq('name', locName);
-    } catch (err) {
-      console.error('Error deleting location from Supabase:', err);
-    }
-
-    setManagerMsg(`✓ Location "${locName}" deleted.`);
-    setTimeout(() => setManagerMsg(''), 3000);
-    fetchData();
-  };
-
-  const handleDeleteCheckpoint = async (locName: string, cpName: string) => {
-    if (!confirm(`Are you sure you want to delete checkpoint "${cpName}" from "${locName}"?`)) return;
-
-    const updated = locations.map(loc => {
-      if (loc.name === locName) {
-        return { ...loc, checkpoints: loc.checkpoints.filter(cp => cp !== cpName) };
-      }
-      return loc;
-    }).filter(loc => loc.checkpoints.length > 0);
-
-    setLocations(updated);
-    localStorage.setItem('security_locations_data', JSON.stringify(updated));
-
-    try {
-      const target = updated.find(l => l.name === locName);
-      if (target) {
-        await supabase.from('locations').upsert({
-          name: target.name,
-          checkpoints: target.checkpoints
-        }, { onConflict: 'name' });
-      } else {
-        await supabase.from('locations').delete().eq('name', locName);
-      }
-    } catch (err) {
-      console.error('Error deleting checkpoint from Supabase:', err);
-    }
-
-    setManagerMsg(`✓ Checkpoint "${cpName}" deleted.`);
-    setTimeout(() => setManagerMsg(''), 3000);
-    fetchData();
-  };
-
-  const handleCleanJunkLocations = async () => {
-    // Remove duplicate/blurry entries like repetitive Multichoice or empty ones
-    const cleanMap = new Map<string, string[]>();
-    locations.forEach(loc => {
-      const cleanName = loc.name.trim();
-      if (!cleanName || cleanName.toLowerCase() === 'multichoice' && cleanMap.has('Multichoice')) {
-        return;
-      }
-      cleanMap.set(cleanName, loc.checkpoints);
-    });
-
-    const cleanedList: LocationItem[] = Array.from(cleanMap.entries()).map(([name, checkpoints]) => ({
-      name,
-      checkpoints
-    }));
-
-    setLocations(cleanedList);
-    localStorage.setItem('security_locations_data', JSON.stringify(cleanedList));
-
-    try {
-      // Clear and re-sync
-      await supabase.from('locations').delete().neq('name', 'NONEXISTENT');
-      for (const loc of cleanedList) {
-        await supabase.from('locations').upsert({
-          name: loc.name,
-          checkpoints: loc.checkpoints
-        }, { onConflict: 'name' });
-      }
-    } catch (err) {
-      console.error('Error cleaning locations:', err);
-    }
-
-    alert('Duplicate and blurry locations cleaned successfully!');
-    fetchData();
-  };
-
-  const handleFullReset = async () => {
-    if (resetPassword !== 'ADMINRESET') {
-      alert('Incorrect master reset code. Enter ADMINRESET to confirm.');
-      return;
-    }
-
-    try {
-      await supabase.from('patrol_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('locations').delete().neq('name', 'NONEXISTENT');
-
-      localStorage.removeItem('security_locations_data');
-
-      setLogs([]);
-      setLocations([
-        { name: 'Tom Salem Head Office', checkpoints: ['Front Gate', 'Reception Desk'] }
-      ]);
-      setIsResetConfirmOpen(false);
-      setResetPassword('');
-      alert('System successfully wiped and reset to factory default!');
-      fetchData();
-    } catch (err) {
-      console.error('Reset error:', err);
-      alert('Error resetting system.');
-    }
-  };
-
-  const filteredLogs = logs.filter(log => {
-    const matchGuard = filterGuard === '' || log.guard_name.toLowerCase().includes(filterGuard.toLowerCase());
-    const matchLoc = filterLocation === '' || log.location.toLowerCase().includes(filterLocation.toLowerCase());
-    return matchGuard && matchLoc;
-  });
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* Top Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl">
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="text-3xl">🛡️</span>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">Admin Live Patrol Command</h1>
-              <p className="text-xs text-slate-400">Real-time guard patrol monitoring, telemetry, and QR management</p>
+              <h1 className="text-xl font-bold text-white tracking-tight">Admin Patrol Command Center</h1>
+              <p className="text-xs text-slate-400">Manage parent locations, checkpoints, generated QR codes & live telemetry</p>
             </div>
           </div>
-          
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => setIsManagerOpen(true)}
-              className="bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 shadow"
-            >
-              <span>🏢</span> Location & Checkpoint Manager
-            </button>
-            <button
-              onClick={() => setIsQrModalOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 shadow"
-            >
-              <span>🖨️</span> Generate & Print QR Tags
-            </button>
-            <button
-              onClick={handleCleanJunkLocations}
-              className="bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800/60 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 shadow"
-            >
-              <span>🧹</span> Clean Blurry Locations
-            </button>
-            <button
-              onClick={() => setIsResetConfirmOpen(true)}
-              className="bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/60 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 shadow"
-            >
-              <span>⚠️</span> Full System Reset
-            </button>
-            <button
-              onClick={fetchData}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2"
-            >
-              <span>🔄</span> Refresh Feed
-            </button>
+          <button
+            onClick={fetchData}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 shadow"
+          >
+            <span>🔄</span> Refresh Live Feed
+          </button>
+        </div>
+
+        {statusMsg && (
+          <div className="p-3.5 bg-emerald-950 border border-emerald-800 text-emerald-400 rounded-2xl text-center text-xs font-semibold">
+            {statusMsg}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <span>🏢</span> Add Site / Parent Location
+            </h2>
+            <form onSubmit={handleCreateLocation} className="space-y-3">
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Location Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Corporate Head Office"
+                  value={newLocName}
+                  onChange={(e) => setNewLocName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow"
+              >
+                Create Location Site
+              </button>
+            </form>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <span>📍</span> Add Checkpoint (Under Parent Location)
+            </h2>
+            <form onSubmit={handleCreateCheckpoint} className="space-y-3">
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Select Parent Location</label>
+                <select
+                  value={selectedParentLoc}
+                  onChange={(e) => setSelectedParentLoc(e.target.value)}
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-emerald-400 font-medium focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="" disabled>Choose parent location...</option>
+                  {locations.map((loc, idx) => (
+                    <option key={idx} value={loc.name}>{loc.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Checkpoint Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Gate Entrance A"
+                  value={newCpName}
+                  onChange={(e) => setNewCpName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow"
+              >
+                Create Checkpoint & Generate QR
+              </button>
+            </form>
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-          <div>
-            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Filter by Guard Name</label>
-            <input
-              type="text"
-              placeholder="Search guard..."
-              value={filterGuard}
-              onChange={(e) => setFilterGuard(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Filter by Location</label>
-            <input
-              type="text"
-              placeholder="Search location..."
-              value={filterLocation}
-              onChange={(e) => setFilterLocation(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-          <div className="flex items-end justify-end">
-            <div className="text-xs text-slate-400 font-medium pb-2">
-              Showing <span className="text-emerald-400 font-bold">{filteredLogs.length}</span> verified patrol logs
-            </div>
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
+          <h2 className="text-sm font-bold text-white flex items-center gap-2">
+            <span>🖨️</span> Active Location Tree & Checkpoint QR Codes
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {locations.map((loc, idx) => (
+              <div key={idx} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3">
+                <div className="font-bold text-emerald-400 text-sm flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                  <span>🏢</span> {loc.name}
+                </div>
+                <div className="space-y-2">
+                  {loc.checkpoints.map((cp, cpidx) => (
+                    <div key={cpidx} className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between text-xs">
+                      <span className="text-slate-200 font-medium">📍 {cp}</span>
+                      <button
+                        onClick={() => setActiveQrCp({ location: loc.name, checkpoint: cp })}
+                        className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors"
+                      >
+                        View QR
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Live Logs Table */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <span>📡</span> Live Patrol Telemetry Feed
+            </h2>
+            <span className="text-xs text-emerald-400 font-mono">Total Logs: {logs.length}</span>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950 text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
                 <tr>
-                  <th className="p-4 font-semibold">Timestamp</th>
-                  <th className="p-4 font-semibold">Guard Name</th>
-                  <th className="p-4 font-semibold">Location / Checkpoint</th>
-                  <th className="p-4 font-semibold">GPS / Geofence</th>
-                  <th className="p-4 font-semibold">Incident / Notes</th>
-                  <th className="p-4 font-semibold text-right">Actions</th>
+                  <th className="p-3 font-semibold">Timestamp</th>
+                  <th className="p-3 font-semibold">Guard Name</th>
+                  <th className="p-3 font-semibold">Location</th>
+                  <th className="p-3 font-semibold">Checkpoint</th>
+                  <th className="p-3 font-semibold">Patrol Type</th>
+                  <th className="p-3 font-semibold">GPS & Geofence</th>
+                  <th className="p-3 font-semibold">Notes / Evidence</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {loading && logs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-slate-500">Loading patrol feeds...</td>
+                    <td colSpan={7} className="text-center py-10 text-slate-500">Loading live telemetry...</td>
                   </tr>
-                ) : filteredLogs.length === 0 ? (
+                ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-slate-500">No patrol logs found matching criteria.</td>
+                    <td colSpan={7} className="text-center py-10 text-slate-500">No patrol scans submitted yet.</td>
                   </tr>
                 ) : (
-                  filteredLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-850/50 transition-colors">
-                      <td className="p-4 text-slate-300 font-mono whitespace-nowrap">
-                        {new Date(log.created_at).toLocaleString()}
-                      </td>
-                      <td className="p-4 font-bold text-white whitespace-nowrap">
-                        {log.guard_name}
-                      </td>
-                      <td className="p-4">
-                        <div className="font-semibold text-emerald-400">{log.location}</div>
-                        <div className="text-[11px] text-slate-400">{log.checkpoint}</div>
-                      </td>
-                      <td className="p-4 font-mono text-slate-300 whitespace-nowrap">
-                        <div>{log.latitude}, {log.longitude}</div>
-                        <span className="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-800">50m Active</span>
-                      </td>
-                      <td className="p-4 max-w-xs truncate text-slate-300">
-                        {log.notes || 'Routine check'}
-                      </td>
-                      <td className="p-4 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => setSelectedLog(log)}
-                          className="bg-slate-800 hover:bg-slate-700 text-emerald-400 px-3 py-1.5 rounded-xl font-semibold transition-colors"
-                        >
-                          View Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  logs.map((log) => {
+                    let patrolType = 'Normal Patrol';
+                    let cleanNotes = log.notes || '';
+                    if (cleanNotes.includes('[PATROL_TYPE:Incident]')) {
+                      patrolType = 'Incident Patrol';
+                      cleanNotes = cleanNotes.replace('[PATROL_TYPE:Incident]', '');
+                    } else if (cleanNotes.includes('[PATROL_TYPE:Normal]')) {
+                      cleanNotes = cleanNotes.replace('[PATROL_TYPE:Normal]', '');
+                    }
+
+                    const hasPhoto = cleanNotes.includes('[PHOTO_DATA:');
+                    let photoUrl = '';
+                    if (hasPhoto) {
+                      photoUrl = cleanNotes.split('[PHOTO_DATA:')[1]?.split(']')[0] || '';
+                      cleanNotes = cleanNotes.split('[PHOTO_DATA:')[0];
+                    }
+
+                    return (
+                      <tr key={log.id} className="hover:bg-slate-850/50 transition-colors">
+                        <td className="p-3 text-slate-300 font-mono whitespace-nowrap">
+                          {new Date(log.created_at).toLocaleTimeString()}
+                        </td>
+                        <td className="p-3 font-bold text-white whitespace-nowrap">
+                          {log.guard_name}
+                        </td>
+                        <td className="p-3 text-emerald-400 font-semibold">{log.location}</td>
+                        <td className="p-3 text-slate-200">{log.checkpoint}</td>
+                        <td className="p-3 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${patrolType === 'Incident Patrol' ? 'bg-rose-950 text-rose-400 border border-rose-800' : 'bg-emerald-950 text-emerald-400 border border-emerald-800'}`}>
+                            {patrolType}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono text-slate-300 whitespace-nowrap">
+                          <div>{log.latitude}, {log.longitude}</div>
+                          <span className="text-[9px] text-emerald-400">50m Geofence Active</span>
+                        </td>
+                        <td className="p-3 max-w-xs text-slate-300 space-y-1">
+                          <p className="truncate">{cleanNotes || 'Routine patrol scan'}</p>
+                          {hasPhoto && photoUrl && (
+                            <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline text-[10px] block">
+                              📸 View Evidence Photo
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -437,308 +362,44 @@ export default function AdminDashboard() {
 
       </div>
 
-      {/* Location & Checkpoint Manager Modal */}
-      {isManagerOpen && (
+      {activeQrCp && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <span>🏢</span> Location & Checkpoint Manager
-              </h2>
-              <button onClick={() => setIsManagerOpen(false)} className="text-slate-400 hover:text-white text-lg font-bold">✕</button>
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-5 shadow-2xl text-center">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="text-sm font-bold text-white">Checkpoint QR Tag</h3>
+              <button onClick={() => setActiveQrCp(null)} className="text-slate-400 hover:text-white text-base font-bold">✕</button>
             </div>
 
-            {managerMsg && (
-              <div className="p-3 bg-emerald-950 border border-emerald-800 text-emerald-400 rounded-xl text-center text-xs font-semibold">
-                {managerMsg}
-              </div>
-            )}
-
-            {/* Create Location Form */}
-            <form onSubmit={handleCreateLocation} className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-              <label className="block text-[10px] text-slate-400 uppercase font-semibold">Create New Location Site</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Tom Salem Head Office"
-                  value={newLocName}
-                  onChange={(e) => setNewLocName(e.target.value)}
-                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors">
-                  Create
-                </button>
-              </div>
-            </form>
-
-            {/* Add Checkpoint Form */}
-            <form onSubmit={handleAddCheckpoint} className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-              <label className="block text-[10px] text-slate-400 uppercase font-semibold">Add Checkpoint to Location</label>
-              <div className="space-y-2">
-                <select
-                  value={selectedLocForCp}
-                  onChange={(e) => setSelectedLocForCp(e.target.value)}
-                  required
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-medium focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="" disabled>Select facility location...</option>
-                  {locations.map((loc, idx) => (
-                    <option key={idx} value={loc.name}>{loc.name}</option>
-                  ))}
-                </select>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Front Gate"
-                    value={newCpName}
-                    onChange={(e) => setNewCpName(e.target.value)}
-                    className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
-                  <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors">
-                    Add Checkpoint
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            {/* Existing List Overview with Deletion */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="block text-[10px] text-slate-400 uppercase font-semibold">Active Locations & Checkpoints</label>
-                <button
-                  type="button"
-                  onClick={handleCleanJunkLocations}
-                  className="text-[10px] text-amber-400 hover:text-amber-300 font-semibold underline"
-                >
-                  Clean Duplicates / Blurry
-                </button>
-              </div>
-
-              {locations.map((loc, idx) => (
-                <div key={idx} className="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-2 text-xs">
-                  <div className="font-bold text-white flex items-center justify-between">
-                    <span>🏢 {loc.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteLocation(loc.name)}
-                      className="text-rose-400 hover:text-rose-300 text-[10px] font-semibold bg-rose-950/60 px-2 py-0.5 rounded border border-rose-900"
-                    >
-                      Delete Location
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {loc.checkpoints.map((cp, cpidx) => (
-                      <span key={cpidx} className="bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg text-slate-300 flex items-center gap-1.5">
-                        {cp}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCheckpoint(loc.name, cp)}
-                          className="text-slate-500 hover:text-rose-400 font-bold ml-1"
-                          title="Delete Checkpoint"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div id="printable-qr" className="bg-white p-5 rounded-2xl shadow-inner flex flex-col items-center space-y-3">
+              <span className="text-[10px] uppercase font-black text-emerald-700">{activeQrCp.location}</span>
+              <QRCodeSVG
+                value={JSON.stringify({ location: activeQrCp.location, checkpoint: activeQrCp.checkpoint })}
+                size={180}
+                level="H"
+                includeMargin={true}
+              />
+              <span className="text-xs font-bold text-slate-900">{activeQrCp.checkpoint}</span>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-slate-800">
-              <button onClick={() => setIsManagerOpen(false)} className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded-xl text-xs font-semibold">
-                Close Manager
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* QR Code Printable Modal */}
-      {isQrModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-6 shadow-2xl relative text-center">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <span>🖨️</span> Printable Security QR Tag Generator
-              </h2>
-              <button onClick={() => setIsQrModalOpen(false)} className="text-slate-400 hover:text-white text-lg font-bold">✕</button>
-            </div>
-
-            <div className="space-y-3">
-              <label className="block text-[10px] text-slate-400 uppercase font-semibold text-left">Select Checkpoint to Generate QR Tag</label>
-              <select
-                value={selectedCpForQr}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSelectedCpForQr(val);
-                  for (const loc of locations) {
-                    if (loc.checkpoints.includes(val)) {
-                      setSelectedLocForQr(loc.name);
-                      break;
-                    }
-                  }
-                }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-emerald-400 font-medium focus:outline-none focus:border-emerald-500"
-              >
-                <option value="" disabled>Select checkpoint...</option>
-                {locations.map((loc, idx) => (
-                  <optgroup key={idx} label={loc.name}>
-                    {loc.checkpoints.map((cp, cpidx) => (
-                      <option key={cpidx} value={cp}>{loc.name} → {cp}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-
-            {/* Printable QR Tag Card */}
-            <div id="printable-qr-tag" className="bg-white text-slate-950 p-6 rounded-2xl shadow-xl flex flex-col items-center space-y-3 border-4 border-slate-950">
-              <div className="text-[11px] uppercase tracking-wider font-extrabold text-emerald-700">Security Checkpoint • Verified Site</div>
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                {selectedCpForQr ? (
-                  <QRCodeSVG
-                    value={JSON.stringify({ location: selectedLocForQr || 'Headquarters', checkpoint: selectedCpForQr })}
-                    size={180}
-                    level="H"
-                    includeMargin={true}
-                  />
-                ) : (
-                  <div className="w-[180px] h-[180px] bg-slate-100 flex items-center justify-center text-xs text-slate-400 text-center p-4">
-                    Select a checkpoint above to generate QR code
-                  </div>
-                )}
-              </div>
-              <div className="font-bold text-sm tracking-tight text-slate-900">{selectedCpForQr || 'Select Checkpoint'}</div>
-              <div className="text-[10px] text-slate-500 font-mono">Scan with active mobile guard scanner</div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-2">
               <button
-                type="button"
-                disabled={!selectedCpForQr}
                 onClick={() => {
-                  const printContent = document.getElementById('printable-qr-tag')?.innerHTML;
-                  const win = window.open('', '', 'height=600,width=600');
-                  win?.document.write(`<html><head><title>Print QR Tag</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}</style></head><body>${printContent}</body></html>`);
+                  const content = document.getElementById('printable-qr')?.innerHTML;
+                  const win = window.open('', '', 'height=500,width=500');
+                  win?.document.write(`<html><head><title>QR Code</title><style>body{display:flex;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;}</style></head><body>${content}</body></html>`);
                   win?.document.close();
                   win?.focus();
                   win?.print();
                 }}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-xs transition-colors shadow"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors"
               >
                 Print QR Tag
               </button>
               <button
-                onClick={() => setIsQrModalOpen(false)}
-                className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-3 rounded-xl text-xs font-semibold"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Full System Reset Modal */}
-      {isResetConfirmOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-5 shadow-2xl text-center">
-            <div className="w-12 h-12 rounded-full bg-rose-950 border border-rose-800 flex items-center justify-center text-xl text-rose-400 mx-auto">
-              ⚠️
-            </div>
-            <h2 className="text-base font-bold text-white">Full System Factory Reset</h2>
-            <p className="text-xs text-slate-400">
-              This action will permanently delete all patrol logs, locations, and checkpoints. Type <span className="text-rose-400 font-mono font-bold">ADMINRESET</span> below to confirm.
-            </p>
-            <input
-              type="text"
-              placeholder="Type ADMINRESET..."
-              value={resetPassword}
-              onChange={(e) => setResetPassword(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-center text-rose-400 font-mono focus:outline-none focus:border-rose-500"
-            />
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={handleFullReset}
-                className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow"
-              >
-                Confirm Reset
-              </button>
-              <button
-                onClick={() => { setIsResetConfirmOpen(false); setResetPassword(''); }}
+                onClick={() => setActiveQrCp(null)}
                 className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl text-xs font-semibold"
               >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Log Details Modal */}
-      {selectedLog && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <h2 className="text-base font-bold text-white">Patrol Log Verification Details</h2>
-              <button onClick={() => setSelectedLog(null)} className="text-slate-400 hover:text-white text-lg font-bold">✕</button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
-                <div className="text-slate-400 text-[10px] uppercase font-semibold">Guard Name</div>
-                <div className="font-bold text-white text-sm">{selectedLog.guard_name}</div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
-                  <div className="text-slate-400 text-[10px] uppercase font-semibold">Location Site</div>
-                  <div className="font-semibold text-emerald-400">{selectedLog.location}</div>
-                </div>
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
-                  <div className="text-slate-400 text-[10px] uppercase font-semibold">Checkpoint</div>
-                  <div className="font-semibold text-white">{selectedLog.checkpoint}</div>
-                </div>
-              </div>
-
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
-                <div className="text-slate-400 text-[10px] uppercase font-semibold">Timestamp & GPS Telemetry</div>
-                <div className="font-mono text-slate-300">Time: {new Date(selectedLog.created_at).toLocaleString()}</div>
-                <div className="font-mono text-emerald-400">GPS: {selectedLog.latitude}, {selectedLog.longitude} (50m Geofence Active)</div>
-              </div>
-
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
-                <div className="text-slate-400 text-[10px] uppercase font-semibold">Incident Report & Notes</div>
-                <div className="text-slate-300 whitespace-pre-wrap">
-                  {selectedLog.notes && selectedLog.notes.includes('[PHOTO_DATA:') 
-                    ? selectedLog.notes.split('[PHOTO_DATA:')[0] 
-                    : (selectedLog.notes || 'Routine check')}
-                </div>
-              </div>
-
-              {selectedLog.notes && selectedLog.notes.includes('[PHOTO_DATA:') && (
-                <div className="space-y-1">
-                  <div className="text-slate-400 text-[10px] uppercase font-semibold">Attached Incident Photo Evidence</div>
-                  <div className="rounded-xl overflow-hidden border border-slate-800 bg-black">
-                    <img 
-                      src={selectedLog.notes.split('[PHOTO_DATA:')[1]?.split(']')[0]} 
-                      alt="Incident Evidence" 
-                      className="w-full h-auto max-h-60 object-contain"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end pt-3 border-t border-slate-800">
-              <button
-                onClick={() => setSelectedLog(null)}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-2.5 rounded-xl text-xs font-semibold transition-colors"
-              >
-                Close Report
+                Close
               </button>
             </div>
           </div>
