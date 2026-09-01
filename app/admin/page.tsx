@@ -729,19 +729,35 @@ export default function AdminDashboard() {
                 <span className="font-mono text-slate-200">{selectedLogDetail.latitude}, {selectedLogDetail.longitude}</span>
               </div>
 
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                <span className="text-slate-500 block text-[10px] uppercase font-bold">Incident Notes & Remarks</span>
-                <p className="text-slate-200 bg-slate-900 p-3 rounded-xl border border-slate-800 whitespace-pre-wrap">{selectedLogDetail.notes || 'No remarks documented.'}</p>
-              </div>
+              {(() => {
+                let rawNotes = selectedLogDetail.notes || '';
+                let extractedImg = selectedLogDetail.attachment_url;
+                if (!extractedImg && rawNotes.includes('[PHOTO_DATA:')) {
+                  const parts = rawNotes.split('[PHOTO_DATA:');
+                  rawNotes = parts[0].trim();
+                  const imgPart = parts[1];
+                  if (imgPart) {
+                    extractedImg = imgPart.replace(']', '').trim();
+                  }
+                }
+                return (
+                  <>
+                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                      <span className="text-slate-500 block text-[10px] uppercase font-bold">Incident Notes & Remarks</span>
+                      <p className="text-slate-200 bg-slate-900 p-3 rounded-xl border border-slate-800 whitespace-pre-wrap">{rawNotes || 'No remarks documented.'}</p>
+                    </div>
 
-              {selectedLogDetail.attachment_url && (
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Attached Evidence / Image</span>
-                  <div className="rounded-xl overflow-hidden border border-slate-800 max-h-60 flex justify-center bg-black/40">
-                    <img src={selectedLogDetail.attachment_url} alt="Incident Attachment" className="object-contain max-h-60 w-full" />
-                  </div>
-                </div>
-              )}
+                    {extractedImg && (
+                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Attached Evidence / Image</span>
+                        <div className="rounded-xl overflow-hidden border border-slate-800 max-h-60 flex justify-center bg-black/40">
+                          <img src={extractedImg} alt="Incident Attachment" className="object-contain max-h-60 w-full" />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
