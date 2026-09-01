@@ -146,11 +146,9 @@ export default function GuardScanner() {
     setStatusMessage('Submitting log to Admin live feed...');
 
     try {
-      const gpsString = gpsCoords ? `${gpsCoords.lat.toFixed(5)}, ${gpsCoords.lng.toFixed(5)}` : '6.44512, 3.41436';
-      
-      let finalNotes = `[PATROL_TYPE:${patrolType}] [Time: ${currentTime.toLocaleTimeString()}] [GPS: ${gpsString}] ${notes}`;
+      let finalNotes = notes.trim() ? notes.trim() : '';
       if (photoData) {
-        finalNotes = `${finalNotes} [PHOTO_DATA:${photoData}]`;
+        finalNotes = finalNotes ? `${finalNotes} [PHOTO_DATA:${photoData}]` : `[PHOTO_DATA:${photoData}]`;
       }
 
       const { error } = await supabase.from('patrol_logs').insert([
@@ -286,7 +284,7 @@ export default function GuardScanner() {
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="block text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Patrol / Incident Evidence</label>
+              <label className="block text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Patrol / Incident Notes & Evidence</label>
               <label className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer flex items-center gap-1">
                 <span>📸</span> Snap Evidence Photo
                 <input type="file" accept="image/*" capture="environment" onChange={handlePhotoCapture} className="hidden" />
