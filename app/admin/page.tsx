@@ -16,6 +16,7 @@ interface PatrolLog {
 }
 
 interface LocationItem {
+  id?: string;
   name: string;
   checkpoints: string[];
 }
@@ -28,6 +29,7 @@ export default function AdminDashboard() {
   const [newLocName, setNewLocName] = useState('');
   const [selectedParentLoc, setSelectedParentLoc] = useState('');
   const [newCpName, setNewCpName] = useState('');
+  const [inlineCpInputs, setInlineCpInputs] = useState<{ [key: string]: string }>({});
   const [statusMsg, setStatusMsg] = useState('');
 
   const [activeQrCp, setActiveQrCp] = useState<{ location: string; checkpoint: string } | null>(null);
@@ -76,7 +78,7 @@ export default function AdminDashboard() {
           checkpoints: checkpoints.length > 0 ? checkpoints : ['Main Gate']
         }));
         setLocations(formatted);
-      } else {
+      } else if (locations.length === 0) {
         const defaultLocs = [
           { name: 'Headquarters Facility', checkpoints: ['Main Entrance', 'Reception Desk', 'Perimeter Fence North'] }
         ];
@@ -105,7 +107,8 @@ export default function AdminDashboard() {
 
     const locName = newLocName.trim();
     if (locations.some(l => l.name.toLowerCase() === locName.toLowerCase())) {
-      setStatusMsg('Location already exists.');
+      setStatusMsg(`Location "${locName}" already exists.`);
+      setTimeout(() => setStatusMsg(''), 3000);
       return;
     }
 
@@ -113,24 +116,29 @@ export default function AdminDashboard() {
     setLocations(updated);
 
     try {
-      await supabase.from('locations').upsert({
+      const { error } = await supabase.from('locations').upsert({
         name: locName,
         checkpoints: ['Main Checkpoint']
       }, { onConflict: 'name' });
+
+      if (error) {
+        console.error('Supabase upsert error:', error);
+      }
     } catch (err) {
       console.error('Supabase error:', err);
     }
 
-    setStatusMsg(`✓ Location "${locName}" created successfully!`);
+    setStatusMsg(`✓ Location "${locName}" created successfully and added to active list!`);
     setNewLocName('');
-    setTimeout(() => setStatusMsg(''), 3000);
+    setTimeout(() => setStatusMsg(''), 3500);
     fetchData();
   };
 
   const handleCreateCheckpoint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedParentLoc || !newCpName.trim()) {
-      setStatusMsg('Please select a parent location and enter a checkpoint name.');
+      setStatusMsg('Please select a parent facility and enter a checkpoint name.');
+      setTimeout(() => setStatusMsg(''), 3000);
       return;
     }
 
@@ -160,6 +168,40 @@ export default function AdminDashboard() {
 
     setStatusMsg(`✓ Checkpoint "${cpName}" added under ${selectedParentLoc}!`);
     setNewCpName('');
+    setTimeout(() => setStatusMsg(''), 3000);
+    fetchData();
+  };
+
+  const handleAddInlineCheckpoint = async (locName: string, e: React.FormEvent) => {
+    e.preventDefault();
+    const cpName = (inlineCpInputs[locName] || '').trim();
+    if (!cpName) return;
+
+    const updated = locations.map(loc => {
+      if (loc.name === locName) {
+        if (!loc.checkpoints.includes(cpName)) {
+          return { ...loc, checkpoints: [...loc.checkpoints, cpName] };
+        }
+      }
+      return loc;
+    });
+
+    setLocations(updated);
+
+    try {
+      const target = updated.find(l => l.name === locName);
+      if (target) {
+        await supabase.from('locations').upsert({
+          name: target.name,
+          checkpoints: target.checkpoints
+        }, { onConflict: 'name' });
+      }
+    } catch (err) {
+      console.error('Supabase error:', err);
+    }
+
+    setStatusMsg(`✓ Checkpoint "${cpName}" added to ${locName}!`);
+    setInlineCpInputs({ ...inlineCpInputs, [locName]: '' });
     setTimeout(() => setStatusMsg(''), 3000);
     fetchData();
   };
@@ -205,7 +247,6 @@ export default function AdminDashboard() {
   });
 
   const incidentCount = logs.filter(l => (l.notes || '').includes('[PATROL_TYPE:Incident]')).length;
-  const normalCount = logs.length - incidentCount;
   const activeLocationsCount = locations.length;
   const totalCheckpointsCount = locations.reduce((acc, curr) => acc + curr.checkpoints.length, 0);
 
@@ -517,23 +558,45 @@ export default function AdminDashboard() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {locations.map((loc, idx) => (
-                    <div key={idx} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3 shadow-inner">
-                      <div className="font-bold text-emerald-400 text-sm flex items-center gap-2 border-b border-slate-800 pb-2.5">
-                        <span>🏢</span> {loc.name}
+                    <div key={idx} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3 shadow-inner flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="font-bold text-emerald-400 text-sm flex items-center justify-between border-b border-slate-800 pb-2.5">
+                          <span className="flex items-center gap-2">🏢 {loc.name}</span>
+                          <span className="text-[10px] bg-slate-900 px-2 py-0.5 rounded-md text-slate-400 font-mono">
+                            {loc.checkpoints.length} {loc.checkpoints.length === 1 ? 'Checkpoint' : 'Checkpoints'}
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {loc.checkpoints.map((cp, cpidx) => (
+                            <div key={cpidx} className="bg-slate-900 border border-slate-800/80 p-2.5 rounded-xl flex items-center justify-between text-xs">
+                              <span className="text-slate-200 font-medium truncate pr-2">📍 {cp}</span>
+                              <button
+                                onClick={() => setActiveQrCp({ location: loc.name, checkpoint: cp })}
+                                className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white px-3 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap"
+                              >
+                                View QR Tag
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        {loc.checkpoints.map((cp, cpidx) => (
-                          <div key={cpidx} className="bg-slate-900 border border-slate-800/80 p-2.5 rounded-xl flex items-center justify-between text-xs">
-                            <span className="text-slate-200 font-medium truncate pr-2">📍 {cp}</span>
-                            <button
-                              onClick={() => setActiveQrCp({ location: loc.name, checkpoint: cp })}
-                              className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white px-3 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap"
-                            >
-                              View QR Tag
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+
+                      {/* Inline Add Checkpoint Form per Parent Location */}
+                      <form onSubmit={(e) => handleAddInlineCheckpoint(loc.name, e)} className="pt-3 border-t border-slate-900 flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Add new checkpoint..."
+                          value={inlineCpInputs[loc.name] || ''}
+                          onChange={(e) => setInlineCpInputs({ ...inlineCpInputs, [loc.name]: e.target.value })}
+                          className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-[11px] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                        />
+                        <button
+                          type="submit"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-[11px] transition-colors whitespace-nowrap shadow"
+                        >
+                          + Add
+                        </button>
+                      </form>
                     </div>
                   ))}
                 </div>
