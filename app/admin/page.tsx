@@ -41,7 +41,6 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'telemetry' | 'sitemanager'>('telemetry');
 
-  // Use a ref to prevent periodic polling from overwriting local optimistic updates before DB sync settles
   const locationsRef = useRef(locations);
   locationsRef.current = locations;
 
@@ -64,7 +63,6 @@ export default function AdminDashboard() {
       if (!locsError && locsData && locsData.length > 0) {
         const map = new Map<string, string[]>();
         
-        // Always include currently loaded/local locations first to prevent ghosting
         locationsRef.current.forEach(loc => {
           map.set(loc.name, [...loc.checkpoints]);
         });
@@ -89,7 +87,7 @@ export default function AdminDashboard() {
 
         const formatted: LocationItem[] = Array.from(map.entries()).map(([name, checkpoints]) => ({
           name,
-          checkpoints: checkpoints.length > 0 ? checkpoints : ['Main Checkpoint']
+          checkpoints: checkpoints
         }));
         setLocations(formatted);
       }
@@ -121,13 +119,13 @@ export default function AdminDashboard() {
       return;
     }
 
-    const updated = [...locations, { name: locName, checkpoints: ['Main Checkpoint'] }];
+    const updated = [...locations, { name: locName, checkpoints: [] }];
     setLocations(updated);
 
     try {
       const { error } = await supabase.from('locations').upsert({
         name: locName,
-        checkpoints: ['Main Checkpoint']
+        checkpoints: []
       }, { onConflict: 'name' });
 
       if (error) {
@@ -137,9 +135,9 @@ export default function AdminDashboard() {
       console.error('Supabase error:', err);
     }
 
-    setStatusMsg(`✓ Location "${locName}" created successfully and added to active list!`);
+    setStatusMsg(`✓ Location "${locName}" created successfully with 0 checkpoints. Add checkpoints below!`);
     setNewLocName('');
-    setTimeout(() => setStatusMsg(''), 3500);
+    setTimeout(() => setStatusMsg(''), 4000);
   };
 
   const handleCreateCheckpoint = async (e: React.FormEvent) => {
@@ -489,7 +487,7 @@ export default function AdminDashboard() {
                 <h2 className="text-base font-bold text-white flex items-center gap-2">
                   <span>🏢</span> Site & Checkpoint Operations Manager
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">Provision corporate facilities, sub-checkpoints, and generate printable high-density QR tags.</p>
+                <p className="text-xs text-slate-400 mt-0.5">Provision corporate facilities, define custom checkpoints, and generate printable high-density QR tags.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -513,7 +511,7 @@ export default function AdminDashboard() {
                       type="submit"
                       className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow-md"
                     >
-                      Provision Location Site
+                      Provision Location Site (0 Checkpoints)
                     </button>
                   </form>
                 </div>
@@ -573,17 +571,21 @@ export default function AdminDashboard() {
                           </span>
                         </div>
                         <div className="space-y-2">
-                          {loc.checkpoints.map((cp, cpidx) => (
-                            <div key={cpidx} className="bg-slate-900 border border-slate-800/80 p-2.5 rounded-xl flex items-center justify-between text-xs">
-                              <span className="text-slate-200 font-medium truncate pr-2">📍 {cp}</span>
-                              <button
-                                onClick={() => setActiveQrCp({ location: loc.name, checkpoint: cp })}
-                                className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white px-3 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap"
-                              >
-                                View QR Tag
-                              </button>
-                            </div>
-                          ))}
+                          {loc.checkpoints.length === 0 ? (
+                            <p className="text-[11px] text-slate-500 italic py-2 text-center">No checkpoints added yet. Use the input below to create one.</p>
+                          ) : (
+                            loc.checkpoints.map((cp, cpidx) => (
+                              <div key={cpidx} className="bg-slate-900 border border-slate-800/80 p-2.5 rounded-xl flex items-center justify-between text-xs">
+                                <span className="text-slate-200 font-medium truncate pr-2">📍 {cp}</span>
+                                <button
+                                  onClick={() => setActiveQrCp({ location: loc.name, checkpoint: cp })}
+                                  className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white px-3 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap"
+                                >
+                                  View QR Tag
+                                </button>
+                              </div>
+                            ))
+                          )}
                         </div>
                       </div>
 
@@ -591,7 +593,7 @@ export default function AdminDashboard() {
                       <form onSubmit={(e) => handleAddInlineCheckpoint(loc.name, e)} className="pt-3 border-t border-slate-900 flex gap-2">
                         <input
                           type="text"
-                          placeholder="Add new checkpoint..."
+                          placeholder="Add custom checkpoint..."
                           value={inlineCpInputs[loc.name] || ''}
                           onChange={(e) => setInlineCpInputs({ ...inlineCpInputs, [loc.name]: e.target.value })}
                           className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-[11px] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
