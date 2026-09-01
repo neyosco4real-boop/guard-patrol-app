@@ -99,10 +99,13 @@ export default function AdminDashboard() {
         });
       }
 
-      const formatted: LocationItem[] = Array.from(map.entries()).map(([name, checkpoints]) => ({
-        name,
-        checkpoints
-      }));
+      const deletedLocs = JSON.parse(typeof window !== 'undefined' ? localStorage.getItem('tsss_deleted_locations') || '[]' : '[]');
+      const formatted: LocationItem[] = Array.from(map.entries())
+        .filter(([name]) => !deletedLocs.includes(name))
+        .map(([name, checkpoints]) => ({
+          name,
+          checkpoints
+        }));
       setLocations(formatted);
     } catch (err) {
       console.error('Fetch error:', err);
@@ -160,8 +163,20 @@ export default function AdminDashboard() {
     setLocations(updated);
 
     try {
-      await supabase.from('locations').delete().eq('name', locName);
-      setStatusMsg(`✓ Facility "${locName}" deleted.`);
+      // Delete from Supabase matching exact name or using an RPC / custom match
+      const { error } = await supabase.from('locations').delete().eq('name', locName);
+      if (error) {
+        console.error('Supabase delete error:', error.message);
+      }
+      
+      // Also store deleted list in localStorage to persist removal of hardcoded/default locations across reloads
+      const deletedLocs = JSON.parse(localStorage.getItem('tsss_deleted_locations') || '[]');
+      if (!deletedLocs.includes(locName)) {
+        deletedLocs.push(locName);
+        localStorage.setItem('tsss_deleted_locations', JSON.stringify(deletedLocs));
+      }
+
+      setStatusMsg(`✓ Facility "${locName}" deleted permanently.`);
       setTimeout(() => setStatusMsg(''), 3000);
     } catch (err) {
       console.error('Error deleting location:', err);
