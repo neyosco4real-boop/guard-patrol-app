@@ -63,7 +63,8 @@ export default function AdminDashboard() {
       if (!locsError && locsData && locsData.length > 0) {
         const map = new Map<string, string[]>();
         
-        locationsRef.current.forEach(loc => {
+        // Always include default locations first
+        DEFAULT_LOCATIONS.forEach(loc => {
           map.set(loc.name, [...loc.checkpoints]);
         });
 
@@ -87,7 +88,7 @@ export default function AdminDashboard() {
 
         const formatted: LocationItem[] = Array.from(map.entries()).map(([name, checkpoints]) => ({
           name,
-          checkpoints: checkpoints
+          checkpoints
         }));
         setLocations(formatted);
       }
@@ -163,10 +164,14 @@ export default function AdminDashboard() {
     try {
       const target = updated.find(l => l.name === selectedParentLoc);
       if (target) {
-        await supabase.from('locations').upsert({
+        const { error } = await supabase.from('locations').upsert({
           name: target.name,
           checkpoints: target.checkpoints
         }, { onConflict: 'name' });
+
+        if (error) {
+          console.error('Supabase upsert error for checkpoint:', error);
+        }
       }
     } catch (err) {
       console.error('Supabase error:', err);
@@ -196,10 +201,14 @@ export default function AdminDashboard() {
     try {
       const target = updated.find(l => l.name === locName);
       if (target) {
-        await supabase.from('locations').upsert({
+        const { error } = await supabase.from('locations').upsert({
           name: target.name,
           checkpoints: target.checkpoints
         }, { onConflict: 'name' });
+
+        if (error) {
+          console.error('Supabase upsert error for inline checkpoint:', error);
+        }
       }
     } catch (err) {
       console.error('Supabase error:', err);
@@ -763,7 +772,7 @@ export default function AdminDashboard() {
                 onClick={() => setActiveQrCp(null)}
                 className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-3 rounded-xl text-xs font-semibold"
               >
-                Close
+                Close`
               </button>
             </div>
           </div>
