@@ -240,6 +240,33 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDownloadQR = () => {
+    const svgElement = document.getElementById('printable-qr-svg');
+    if (!svgElement) return;
+
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+
+    img.onload = () => {
+      canvas.width = img.width * 2;
+      canvas.height = img.height * 2;
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const pngFile = canvas.toDataURL('image/png');
+        const downloadLink = document.createElement('a');
+        downloadLink.download = `QR_${activeQrCp?.location}_${activeQrCp?.checkpoint}.png`.replace(/\s+/g, '_');
+        downloadLink.href = pngFile;
+        downloadLink.click();
+      }
+    };
+
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
+  };
+
   const filteredLogs = logs.filter(log => {
     const query = searchQuery.toLowerCase();
     return (
@@ -501,12 +528,34 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-5 text-center">
             <h3 className="text-sm font-bold text-white">Printable Checkpoint QR</h3>
-            <div id="printable-qr" className="bg-white p-6 rounded-2xl flex flex-col items-center space-y-3">
-              <span className="text-[11px] uppercase font-black text-emerald-800">{activeQrCp.location}</span>
-              <QRCodeSVG value={JSON.stringify({ location: activeQrCp.location, checkpoint: activeQrCp.checkpoint })} size={180} level="H" includeMargin={true} />
-              <span className="text-xs font-bold text-slate-900">{activeQrCp.checkpoint}</span>
+            
+            <div id="printable-qr-svg" className="bg-white p-5 rounded-2xl flex flex-col items-center space-y-2.5 border-2 border-emerald-700 shadow-xl relative">
+              <div className="absolute top-2 left-2 text-[8px] font-mono font-bold text-emerald-800 tracking-wider uppercase">TSSS-SECURE</div>
+              <div className="absolute top-2 right-2 text-[8px] font-mono font-bold text-emerald-800 tracking-wider uppercase">VERIFIED</div>
+              
+              <div className="pt-2">
+                <span className="text-[10px] uppercase font-black tracking-widest text-slate-900 block">Tom Salem Security</span>
+                <span className="text-[11px] uppercase font-black text-emerald-800 tracking-wider">{activeQrCp.location}</span>
+              </div>
+
+              <div className="p-2 bg-slate-50 rounded-xl border border-slate-200">
+                <QRCodeSVG value={JSON.stringify({ location: activeQrCp.location, checkpoint: activeQrCp.checkpoint })} size={170} level="H" includeMargin={true} />
+              </div>
+
+              <div className="w-full bg-slate-950 py-1.5 px-3 rounded-lg flex items-center justify-between">
+                <span className="text-[9px] font-mono text-emerald-400 font-bold uppercase">SECURE CHECKPOINT</span>
+                <span className="text-[9px] font-mono text-white font-bold">{activeQrCp.checkpoint}</span>
+              </div>
             </div>
-            <button onClick={() => setActiveQrCp(null)} className="w-full bg-slate-800 text-white py-3 rounded-xl text-xs font-semibold">Close</button>
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={handleDownloadQR} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg">
+                <span>⬇️</span> Download QR
+              </button>
+              <button onClick={() => setActiveQrCp(null)} className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-3 rounded-xl text-xs font-semibold">
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
