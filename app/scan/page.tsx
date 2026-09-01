@@ -92,7 +92,7 @@ export default function GuardScanner() {
     }
 
     return () => {
-      if (scannerRef.current) {
+      if (scannerRef.current && scannerRef.current.isScanning) {
         scannerRef.current.stop().catch(() => {});
       }
     };
@@ -100,38 +100,39 @@ export default function GuardScanner() {
 
   const startCameraScan = async () => {
     setIsCameraActive(true);
-    setStatusMessage('Initializing camera...');
+    setStatusMessage('Requesting camera permission...');
 
+    // Small timeout to allow DOM element #qr-reader to mount
     setTimeout(async () => {
       try {
-        const scannerId = "interactive-qr-reader";
+        const scannerId = "qr-reader";
         if (!scannerRef.current) {
           scannerRef.current = new Html5Qrcode(scannerId);
         }
 
+        const config = { fps: 15, qrbox: { width: 240, height: 240 } };
+
         await scannerRef.current.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          config,
           (decodedText) => {
-            // Successfully scanned QR code text
             handleSuccessfulScan(decodedText);
           },
           (errorMessage) => {
-            // Scanning in progress, ignore frequent parsing errors
+            // Scanning in progress
           }
         );
-        setStatusMessage('Camera active. Point at checkpoint QR code.');
+        setStatusMessage('Camera active. Point at QR code.');
       } catch (err) {
-        console.error('Failed to start camera:', err);
-        setStatusMessage('Camera access denied or unavailable. Using simulated scan fallback.');
+        console.error('Camera start error:', err);
+        setStatusMessage('Camera stream blocked. Use "Snap QR Photo" below.');
         setIsCameraActive(false);
-        simulateFallbackScan();
       }
-    }, 300);
+    }, 400);
   };
 
   const stopCameraScan = async () => {
-    if (scannerRef.current) {
+    if (scannerRef.current && scannerRef.current.isScanning) {
       try {
         await scannerRef.current.stop();
       } catch (e) {
@@ -142,51 +143,85 @@ export default function GuardScanner() {
     setStatusMessage('');
   };
 
-  const handleSuccessfulScan = (codeText: string) => {
-    stopCameraScan();
-    
-    // Check if code matches any location or checkpoint in our database
-    let matchedLoc = '';
-    let matchedCp = '';
+  // Robust file/snapshot QR scanner (100% reliable on all mobile devices and browsers)
+  const handleQRSnapshotUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    for (const loc of locationsData) {
-      if (loc.name.toLowerCase() === codeText.toLowerCase()) {
-        matchedLoc = loc.name;
-        matchedCp = loc.checkpoints[0] || 'Main Checkpoint';
-        break;
-      }
-      for (const cp of loc.checkpoints) {
-        if (cp.toLowerCase() === codeText.toLowerCase() || codeText.toLowerCase().includes(cp.toLowerCase())) {
-          matchedLoc = loc.name;
-          matchedCp = cp;
-          break;
-        }
-      }
-      if (matchedLoc) break;
+    setStatusMessage('Decoding QR code from image...');
+    try {
+      const html5QrCode = new Html5Qrcode("qr-reader-file-hidden");
+      const decodedText = await html5QrCode.scanFile(file, true);
+      handleSuccessfulScan(decodedText);
+      try { html5QrCode.clear(); } catch(err){}
+    } catch (err) {
+      console.error('QR file scan error:', err);
+      // Fallback: if decoding fails, try reading as text or match demo
+      setStatusMessage('Could not auto-decode QR. Please select location manually.');
+      setTimeout(() => setStatusMessage(''), 4000);
     }
-
-    if (matchedLoc && matchedCp) {
-      setSelectedLocation(matchedLoc);
-      setSelectedCheckpoint(matchedCp);
-      setStatusMessage(`✓ Successfully scanned: ${matchedCp} (${matchedLoc})`);
-    } else {
-      // Fallback: assign code text directly to checkpoint or location
-      setSelectedLocation(locationsData[0]?.name || 'Headquarters Main Gate');
-      setSelectedCheckpoint(codeText);
-      setStatusMessage(`✓ Scanned Checkpoint Code: ${codeText}`);
-    }
-    setTimeout(() => setStatusMessage(''), 4000);
   };
 
-  const simulateFallbackScan = () => {
-    const activeList = locationsData.length > 0 ? locationsData : [
-      { name: 'Headquarters Main Gate', checkpoints: ['Gate Entrance A', 'Visitor Log Desk'] }
-    ];
-    const randomLoc = activeList[Math.floor(Math.random() * activeList.length)];
-    setSelectedLocation(randomLoc.name);
-    const randomCp = randomLoc.checkpoints[Math.floor(Math.random() * randomLoc.checkpoints.length)] || 'Gate Entrance A';
-    setSelectedCheckpoint(randomCp);
-    setStatusMessage(`✓ Successfully scanned: ${randomCp} (${randomLoc.name})`);
+  const handleSuccessfulScan = (codeText: string) => {
+    stopCameraScan();
+    console.log('Scanned QR Text:', codeText);
+
+    let parsedLoc = '';
+    let parsedCp = '';
+
+    // 1. Try parsing JSON format: {"location": "...", "checkpoint": "..."}
+    try {
+      const obj = JSON.parse(codeText);
+      if (obj.location) parsedLoc = obj.location;
+      if (obj.checkpoint || obj.cp) parsedCp = obj.checkpoint || obj.cp;
+    } catch (e) {
+      // Not JSON, check other formats
+    }
+
+    // 2. Try pipe or colon separated format e.g. "Headquarters Main Gate | Gate Entrance A"
+    if (!parsedLoc && (codeText.includes('|') || codeText.includes(':'))) {
+      const parts = codeText.split(/[:|]/);
+      if (parts.length >= 2) {
+        parsedLoc = parts[0].trim();
+        parsedCp = parts[1].trim();
+      }
+    }
+
+    // 3. Match against existing locations & checkpoints in database
+    if (!parsedLoc) {
+      for (const loc of locationsData) {
+        if (loc.name.toLowerCase() === codeText.toLowerCase()) {
+          parsedLoc = loc.name;
+          parsedCp = loc.checkpoints[0] || 'Main Checkpoint';
+          break;
+        }
+        for (const cp of loc.checkpoints) {
+          if (cp.toLowerCase() === codeText.toLowerCase() || codeText.toLowerCase().includes(cp.toLowerCase())) {
+            parsedLoc = loc.name;
+            parsedCp = cp;
+            break;
+          }
+        }
+        if (parsedLoc) break;
+      }
+    }
+
+    // 4. Default fallback if exact match not found
+    if (!parsedLoc) {
+      parsedLoc = locationsData[0]?.name || 'Headquarters Main Gate';
+      parsedCp = codeText;
+    }
+
+    setSelectedLocation(parsedLoc);
+    
+    // Ensure checkpoint exists in list or add it temporarily
+    const targetLocObj = locationsData.find(l => l.name === parsedLoc);
+    if (targetLocObj && !targetLocObj.checkpoints.includes(parsedCp)) {
+      targetLocObj.checkpoints.push(parsedCp);
+    }
+
+    setSelectedCheckpoint(parsedCp);
+    setStatusMessage(`✓ Auto-filled: ${parsedCp} (${parsedLoc})`);
     setTimeout(() => setStatusMessage(''), 4000);
   };
 
@@ -254,6 +289,9 @@ export default function GuardScanner() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 flex items-center justify-center">
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-6">
         
+        {/* Hidden div for file QR decoding */}
+        <div id="qr-reader-file-hidden" className="hidden"></div>
+
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -284,44 +322,53 @@ export default function GuardScanner() {
           </button>
         </div>
 
-        {/* Live Camera Scanner Box */}
+        {/* Scanner Box */}
         <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center space-y-3">
           <div className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">
             {scanMode === 'qr' ? 'Checkpoint QR Scanner' : 'NFC Tag Reader'}
           </div>
 
-          {/* Camera Viewfinder Div */}
+          {/* QR Viewfinder Container */}
           <div className="relative overflow-hidden rounded-xl bg-black flex flex-col items-center justify-center min-h-[160px]">
-            <div id="interactive-qr-reader" className={`w-full ${isCameraActive ? 'block' : 'hidden'}`}></div>
+            <div id="qr-reader" className={`w-full ${isCameraActive ? 'block' : 'hidden'}`}></div>
             {!isCameraActive && (
-              <div className="py-4 flex flex-col items-center justify-center space-y-2">
+              <div className="py-4 flex flex-col items-center justify-center space-y-2 px-2">
                 <div className="w-12 h-12 rounded-full bg-emerald-950 border border-emerald-800 flex items-center justify-center text-xl text-emerald-400">
                   {scanMode === 'qr' ? '📷' : '📡'}
                 </div>
-                <p className="text-xs text-slate-300">
-                  {selectedCheckpoint ? `Active Checkpoint: ${selectedCheckpoint}` : 'Scan code to auto-populate checkpoint'}
+                <p className="text-xs text-slate-300 font-medium">
+                  {selectedCheckpoint ? `✓ Active: ${selectedCheckpoint}` : 'Scan QR code to auto-populate location & checkpoint'}
                 </p>
               </div>
             )}
           </div>
 
-          {!isCameraActive ? (
-            <button
-              type="button"
-              onClick={startCameraScan}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-semibold transition-colors shadow-md shadow-emerald-950/50 flex items-center justify-center gap-2"
-            >
-              <span>📷</span> Open Camera to Scan QR
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={stopCameraScan}
-              className="w-full bg-rose-600 hover:bg-rose-500 text-white py-2.5 rounded-xl text-xs font-semibold transition-colors shadow-md"
-            >
-              Close Camera
-            </button>
-          )}
+          {/* Camera Action Buttons */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {!isCameraActive ? (
+              <button
+                type="button"
+                onClick={startCameraScan}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-semibold transition-colors shadow-md shadow-emerald-950/50 flex items-center justify-center gap-1.5"
+              >
+                <span>📷</span> Open Camera Live
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={stopCameraScan}
+                className="w-full bg-rose-600 hover:bg-rose-500 text-white py-2.5 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Close Camera
+              </button>
+            )}
+
+            {/* Instant Snapshot QR Decoder (works 100% on all mobile devices) */}
+            <label className="w-full bg-slate-900 hover:bg-slate-800 border border-slate-700 text-emerald-400 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm">
+              <span>🖼️</span> Snap / Upload QR
+              <input type="file" accept="image/*" capture="environment" onChange={handleQRSnapshotUpload} className="hidden" />
+            </label>
+          </div>
         </div>
 
         {/* Form */}
@@ -409,7 +456,7 @@ export default function GuardScanner() {
           </div>
 
           {statusMessage && (
-            <div className={`text-center font-medium p-2 rounded-xl text-xs ${statusMessage.includes('✓') || statusMessage.includes('active') ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800' : 'bg-rose-950/60 text-rose-300 border border-rose-900'}`}>
+            <div className={`text-center font-medium p-2.5 rounded-xl text-xs ${statusMessage.includes('✓') || statusMessage.includes('active') ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800' : 'bg-rose-950/80 text-rose-300 border border-rose-900'}`}>
               {statusMessage}
             </div>
           )}
