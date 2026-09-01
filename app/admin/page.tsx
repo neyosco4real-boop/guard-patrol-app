@@ -41,6 +41,8 @@ export default function AdminDashboard() {
   const [isLiveActive, setIsLiveActive] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'telemetry' | 'sitemanager'>('telemetry');
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+  const prevLogsLengthRef = useRef<number>(0);
 
   // Export Dropdown State
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -56,6 +58,25 @@ export default function AdminDashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const playAlertSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    } catch (e) {
+      console.error('Audio play error:', e);
+    }
+  };
+
   const fetchData = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     try {
@@ -64,7 +85,13 @@ export default function AdminDashboard() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (logsData) setLogs(logsData);
+      if (logsData) {
+        if (prevLogsLengthRef.current > 0 && logsData.length > prevLogsLengthRef.current) {
+          playAlertSound();
+        }
+        prevLogsLengthRef.current = logsData.length;
+        setLogs(logsData);
+      }
 
       const { data: locsData, error } = await supabase.from('locations').select('*');
       if (error) {
@@ -447,8 +474,8 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2.5">
-            <button onClick={() => fetchData(false)} className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700">
-              <span>🔄</span> Refresh
+            <button onClick={() => setIsMapModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg">
+              <span>🗺️</span> Geofence Map Reader
             </button>
             <button onClick={handleClearAllFeeds} className="bg-rose-950/50 hover:bg-rose-900/80 text-rose-300 border border-rose-900/60 px-3.5 py-2 rounded-xl text-xs font-semibold">
               <span>🗑️</span> Purge Feeds
@@ -756,6 +783,51 @@ export default function AdminDashboard() {
               <button onClick={() => setActiveQrCp(null)} className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-3 rounded-xl text-xs font-semibold">
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Geofence Map Reader Modal */}
+      {isMapModalOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+              <div>
+                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Live GIS Telemetry</span>
+                <h3 className="text-base font-extrabold text-white">Geofence Perimeter Map Reader</h3>
+              </div>
+              <button onClick={() => setIsMapModalOpen(false)} className="bg-slate-800 hover:bg-slate-700 text-slate-300 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">✕</button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 h-64 flex flex-col items-center justify-center relative overflow-hidden">
+                <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#34d399_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                <div className="absolute w-40 h-40 rounded-full border-2 border-emerald-500/40 animate-ping"></div>
+                <div className="absolute w-24 h-24 rounded-full border border-emerald-400 flex items-center justify-center">
+                  <div className="w-3 h-3 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50"></div>
+                </div>
+                <div className="z-10 text-center space-y-1 mt-36">
+                  <span className="text-[10px] font-mono text-emerald-400 uppercase font-bold">GPS Geofence Perimeter Active</span>
+                  <p className="text-[11px] text-slate-300">All registered patrol checkpoints operating within validated geofence coordinates.</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-slate-400 block font-bold uppercase text-[10px]">Recent Guard GPS Coordinates</span>
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                  {logs.map((l, i) => (
+                    <div key={i} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between font-mono text-[11px]">
+                      <span className="text-emerald-400 font-bold">{l.guard_name}</span>
+                      <span className="text-slate-300">{l.latitude}, {l.longitude}</span>
+                      <span className="text-[10px] bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800">In-Bounds</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button onClick={() => setIsMapModalOpen(false)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl text-xs font-bold">Close Map Reader</button>
             </div>
           </div>
         </div>
