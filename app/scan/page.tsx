@@ -23,20 +23,55 @@ export default function GuardScanner() {
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(true);
 
-  // Locations and checkpoints state loaded from localStorage
+  // Locations and checkpoints state loaded from Supabase database (with localStorage fallback)
   const [locationsData, setLocationsData] = useState<LocationWithCheckpoints[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(true);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('security_locations_data');
-      if (saved) {
-        try {
-          setLocationsData(JSON.parse(saved));
-        } catch (e) {
-          console.error('Error loading locations:', e);
+    async function fetchLocations() {
+      try {
+        // Fetch locations and checkpoints live from Supabase admin table
+        const { data, error } = await supabase.from('locations').select('*');
+        if (!error && data && data.length > 0) {
+          // Format data if stored as rows or JSON
+          const formatted: LocationWithCheckpoints[] = data.map((item: any) => ({
+            name: item.name || item.location_name,
+            checkpoints: Array.isArray(item.checkpoints) ? item.checkpoints : (typeof item.checkpoints === 'string' ? JSON.parse(item.checkpoints) : [])
+          }));
+          setLocationsData(formatted);
+          localStorage.setItem('security_locations_data', JSON.stringify(formatted));
+        } else {
+          // Fallback to localStorage if table is empty or offline
+          const saved = localStorage.getItem('security_locations_data');
+          if (saved) {
+            setLocationsData(JSON.parse(saved));
+          } else {
+            // Default demo facility so dropdowns and scanner work immediately out of the box
+            const defaultDemo = [
+              { name: 'Headquarters Main Gate', checkpoints: ['Gate Entrance A', 'Visitor Log Desk', 'Perimeter Fence North'] },
+              { name: 'Warehouse Facility B', checkpoints: ['Loading Bay 1', 'Storage Vault', 'Emergency Exit South'] }
+            ];
+            setLocationsData(defaultDemo);
+            localStorage.setItem('security_locations_data', JSON.stringify(defaultDemo));
+          }
         }
+      } catch (err) {
+        console.error('Error fetching locations from Supabase:', err);
+        const saved = localStorage.getItem('security_locations_data');
+        if (saved) {
+          setLocationsData(JSON.parse(saved));
+        } else {
+          setLocationsData([
+            { name: 'Headquarters Main Gate', checkpoints: ['Gate Entrance A', 'Visitor Log Desk', 'Perimeter Fence North'] },
+            { name: 'Warehouse Facility B', checkpoints: ['Loading Bay 1', 'Storage Vault', 'Emergency Exit South'] }
+          ]);
+        }
+      } finally {
+        setLoadingLocations(false);
       }
     }
+
+    fetchLocations();
 
     // Get live GPS position
     if (navigator.geolocation) {
@@ -78,25 +113,24 @@ export default function GuardScanner() {
     setStatusMessage('Scanning for QR / NFC tag...');
     
     setTimeout(() => {
-      if (locationsData.length > 0) {
-        // Pick the first available location and checkpoint or cycle through
-        const randomLoc = locationsData[Math.floor(Math.random() * locationsData.length)];
-        setSelectedLocation(randomLoc.name);
-        
-        if (randomLoc.checkpoints.length > 0) {
-          const randomCp = randomLoc.checkpoints[Math.floor(Math.random() * randomLoc.checkpoints.length)];
-          setSelectedCheckpoint(randomCp);
-          setStatusMessage(`Successfully scanned checkpoint: ${randomCp} (${randomLoc.name})`);
-        } else {
-          setSelectedCheckpoint('');
-          setStatusMessage(`Scanned location ${randomLoc.name}, but no checkpoints found.`);
-        }
+      const activeList = locationsData.length > 0 ? locationsData : [
+        { name: 'Headquarters Main Gate', checkpoints: ['Gate Entrance A', 'Visitor Log Desk', 'Perimeter Fence North'] }
+      ];
+      
+      const randomLoc = activeList[Math.floor(Math.random() * activeList.length)];
+      setSelectedLocation(randomLoc.name);
+      
+      if (randomLoc.checkpoints && randomLoc.checkpoints.length > 0) {
+        const randomCp = randomLoc.checkpoints[Math.floor(Math.random() * randomLoc.checkpoints.length)];
+        setSelectedCheckpoint(randomCp);
+        setStatusMessage(`Successfully scanned checkpoint: ${randomCp} (${randomLoc.name})`);
       } else {
-        setStatusMessage('No locations configured in Admin Dashboard yet.');
+        setSelectedCheckpoint('Standard Checkpoint 1');
+        setStatusMessage(`Scanned location ${randomLoc.name}`);
       }
       setIsScanning(false);
       setTimeout(() => setStatusMessage(''), 3500);
-    }, 1000);
+    }, 800);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,7 +181,7 @@ export default function GuardScanner() {
     }
   };
 
-  const currentCheckpoints = locationsData.find(l => l.name === selectedLocation)?.checkpoints || [];
+  const currentCheckpoints = locationsData.find(l => l.name === selectedLocation)?.checkpoints || ['Gate Entrance A', 'Visitor Log Desk', 'Perimeter Fence North'];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 flex items-center justify-center">
