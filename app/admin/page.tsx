@@ -165,7 +165,7 @@ export default function AdminDashboard() {
             <span className="text-3xl">🛡️</span>
             <div>
               <h1 className="text-xl font-bold text-white tracking-tight">Admin Patrol Command Center</h1>
-              <p className="text-xs text-slate-400">Manage parent locations, checkpoints, generated QR codes & live telemetry</p>
+              <p className="text-xs text-slate-400">Live telemetry monitoring and unified site & checkpoint manager</p>
             </div>
           </div>
           <button
@@ -181,100 +181,6 @@ export default function AdminDashboard() {
             {statusMsg}
           </div>
         )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <span>🏢</span> Add Site / Parent Location
-            </h2>
-            <form onSubmit={handleCreateLocation} className="space-y-3">
-              <div>
-                <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Location Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Corporate Head Office"
-                  value={newLocName}
-                  onChange={(e) => setNewLocName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow"
-              >
-                Create Location Site
-              </button>
-            </form>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <span>📍</span> Add Checkpoint (Under Parent Location)
-            </h2>
-            <form onSubmit={handleCreateCheckpoint} className="space-y-3">
-              <div>
-                <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Select Parent Location</label>
-                <select
-                  value={selectedParentLoc}
-                  onChange={(e) => setSelectedParentLoc(e.target.value)}
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-emerald-400 font-medium focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="" disabled>Choose parent location...</option>
-                  {locations.map((loc, idx) => (
-                    <option key={idx} value={loc.name}>{loc.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Checkpoint Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Gate Entrance A"
-                  value={newCpName}
-                  onChange={(e) => setNewCpName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow"
-              >
-                Create Checkpoint & Generate QR
-              </button>
-            </form>
-          </div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2">
-            <span>🖨️</span> Active Location Tree & Checkpoint QR Codes
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {locations.map((loc, idx) => (
-              <div key={idx} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3">
-                <div className="font-bold text-emerald-400 text-sm flex items-center gap-1.5 border-b border-slate-800 pb-2">
-                  <span>🏢</span> {loc.name}
-                </div>
-                <div className="space-y-2">
-                  {loc.checkpoints.map((cp, cpidx) => (
-                    <div key={cpidx} className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between text-xs">
-                      <span className="text-slate-200 font-medium">📍 {cp}</span>
-                      <button
-                        onClick={() => setActiveQrCp({ location: loc.name, checkpoint: cp })}
-                        className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors"
-                      >
-                        View QR
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
 
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-4">
           <div className="flex items-center justify-between">
@@ -357,6 +263,109 @@ export default function AdminDashboard() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-6">
+          <div className="border-b border-slate-800 pb-4">
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <span>🏢</span> Site Manager Tab (Locations & Checkpoints)
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Create and manage parent locations, sub-checkpoints, and printable QR tags</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-slate-950 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <span>➕</span> Add Site / Parent Location
+              </h3>
+              <form onSubmit={handleCreateLocation} className="space-y-3">
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Location Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Corporate Head Office"
+                    value={newLocName}
+                    onChange={(e) => setNewLocName(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow"
+                >
+                  Create Location Site
+                </button>
+              </form>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <span>➕</span> Add Checkpoint (Under Parent Location)
+              </h3>
+              <form onSubmit={handleCreateCheckpoint} className="space-y-3">
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Select Parent Location</label>
+                  <select
+                    value={selectedParentLoc}
+                    onChange={(e) => setSelectedParentLoc(e.target.value)}
+                    required
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-emerald-400 font-medium focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="" disabled>Choose parent location...</option>
+                    {locations.map((loc, idx) => (
+                      <option key={idx} value={loc.name}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Checkpoint Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Gate Entrance A"
+                    value={newCpName}
+                    onChange={(e) => setNewCpName(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow"
+                >
+                  Create Checkpoint & Generate QR
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <span>🖨️</span> Active Location Tree & Checkpoint QR Codes
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {locations.map((loc, idx) => (
+                <div key={idx} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3">
+                  <div className="font-bold text-emerald-400 text-sm flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                    <span>🏢</span> {loc.name}
+                  </div>
+                  <div className="space-y-2">
+                    {loc.checkpoints.map((cp, cpidx) => (
+                      <div key={cpidx} className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between text-xs">
+                        <span className="text-slate-200 font-medium">📍 {cp}</span>
+                        <button
+                          onClick={() => setActiveQrCp({ location: loc.name, checkpoint: cp })}
+                          className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors"
+                        >
+                          View QR
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
