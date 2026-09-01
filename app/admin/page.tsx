@@ -418,8 +418,8 @@ export default function AdminDashboard() {
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40 px-4 sm:px-8 py-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shadow-lg p-0.5">
-              <img src="/logo.png" alt="Tom Salem Security Services" className="w-full h-full object-contain" />
+            <div className="w-10 h-10 rounded-2xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-lg shadow-lg">
+              🛡️
             </div>
             <div>
               <div className="flex items-center gap-2">
