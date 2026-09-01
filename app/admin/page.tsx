@@ -130,13 +130,16 @@ export default function AdminDashboard() {
       }, { onConflict: 'name' });
 
       if (error) {
-        console.error('Supabase upsert error:', error);
+        console.error('Supabase location upsert error:', error);
+        setStatusMsg(`Error saving location: ${error.message}`);
+        setTimeout(() => setStatusMsg(''), 4000);
+        return;
       }
     } catch (err) {
       console.error('Supabase error:', err);
     }
 
-    setStatusMsg(`✓ Location "${locName}" created successfully with 0 checkpoints. Add checkpoints below!`);
+    setStatusMsg(`✓ Location "${locName}" created successfully and saved to database!`);
     setNewLocName('');
     setTimeout(() => setStatusMsg(''), 4000);
   };
@@ -170,14 +173,17 @@ export default function AdminDashboard() {
         }, { onConflict: 'name' });
 
         if (error) {
-          console.error('Supabase upsert error for checkpoint:', error);
+          console.error('Supabase checkpoint upsert error:', error);
+          setStatusMsg(`Error saving checkpoint: ${error.message}`);
+          setTimeout(() => setStatusMsg(''), 4000);
+          return;
         }
       }
     } catch (err) {
       console.error('Supabase error:', err);
     }
 
-    setStatusMsg(`✓ Checkpoint "${cpName}" added under ${selectedParentLoc}!`);
+    setStatusMsg(`✓ Checkpoint "${cpName}" added under ${selectedParentLoc} and saved!`);
     setNewCpName('');
     setTimeout(() => setStatusMsg(''), 3000);
   };
@@ -207,14 +213,17 @@ export default function AdminDashboard() {
         }, { onConflict: 'name' });
 
         if (error) {
-          console.error('Supabase upsert error for inline checkpoint:', error);
+          console.error('Supabase inline checkpoint upsert error:', error);
+          setStatusMsg(`Error saving checkpoint: ${error.message}`);
+          setTimeout(() => setStatusMsg(''), 4000);
+          return;
         }
       }
     } catch (err) {
       console.error('Supabase error:', err);
     }
 
-    setStatusMsg(`✓ Checkpoint "${cpName}" added to ${locName}!`);
+    setStatusMsg(`✓ Checkpoint "${cpName}" added to ${locName} and saved!`);
     setInlineCpInputs({ ...inlineCpInputs, [locName]: '' });
     setTimeout(() => setStatusMsg(''), 3000);
   };
@@ -772,7 +781,7 @@ export default function AdminDashboard() {
                 onClick={() => setActiveQrCp(null)}
                 className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-3 rounded-xl text-xs font-semibold"
               >
-                Close`
+                Close
               </button>
             </div>
           </div>
