@@ -612,8 +612,29 @@ export default function AdminDashboard() {
                             {isIncident ? 'Incident Reported' : 'Successful Scan'}
                           </span>
                         </td>
-                        <td className="p-4 text-slate-300 max-w-xs truncate">
-                          {log.notes || 'No remarks'}
+                        <td className="p-4 text-slate-300 max-w-xs">
+                          {(() => {
+                            let rawNotes = log.notes || '';
+                            let extractedImg = log.attachment_url;
+                            if (!extractedImg && rawNotes.includes('[PHOTO_DATA:')) {
+                              const parts = rawNotes.split('[PHOTO_DATA:');
+                              rawNotes = parts[0].trim();
+                              const imgPart = parts[1];
+                              if (imgPart) {
+                                extractedImg = imgPart.replace(']', '').trim();
+                              }
+                            }
+                            return (
+                              <div className="space-y-1.5">
+                                <p className="truncate text-xs text-slate-200">{rawNotes || 'No remarks'}</p>
+                                {extractedImg && (
+                                  <div className="w-12 h-10 rounded-lg overflow-hidden border border-slate-700 bg-black/50 flex items-center justify-center">
+                                    <img src={extractedImg} alt="Attachment Thumbnail" className="w-full h-full object-cover" />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="p-4 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           <button onClick={e => handleDeleteSingleLog(log.id, e)} className="bg-rose-950 hover:bg-rose-900 text-rose-300 px-3 py-1.5 rounded-xl text-[10px] font-bold">Delete</button>
