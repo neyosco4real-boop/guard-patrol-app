@@ -41,14 +41,24 @@ export default function AdminDashboard() {
   const [isLiveActive, setIsLiveActive] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 // Auto-refresh feeds in the background every 10 seconds without resetting UI
+   // Instant real-time WebSocket listener for immediate log delivery
   useEffect(() => {
-    const pollTimer = setInterval(async () => {
-      const { data } = await supabase.from('patrol_logs').select('*').order('created_at', { ascending: false });
-      if (data) setLogs(data);
-    }, 10000);
+    const channel = supabase
+      .channel('public:patrol_logs')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'patrol_logs' },
+        (payload) => {
+          setLogs((prevLogs) => [payload.new as PatrolLog, ...prevLogs]);
+        }
+      )
+      .subscribe();
 
-    return () => clearInterval(pollTimer);
-  }, []);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);  
+
   const [activeTab, setActiveTab] = useState<'telemetry' | 'sitemanager'>('telemetry');
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const prevLogsLengthRef = useRef<number>(0);
