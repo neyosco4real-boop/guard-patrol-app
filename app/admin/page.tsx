@@ -43,7 +43,7 @@ export default function AdminDashboard() {
 // Auto-refresh feeds in the background every 10 seconds without resetting UI
    // Instant real-time WebSocket listener for immediate log delivery
   useEffect(() => {
-    const channel = supabase
+    const channel = sup-abase
       .channel('public:patrol_logs')
       .on(
         'postgres_changes',
@@ -59,6 +59,32 @@ export default function AdminDashboard() {
     };
   }, []);  
 
+// Function to generate and download the clean patrol log report CSV
+const exportPatrolReport = () => {
+  const headers = ['Date & Time', 'Guard Name', 'Location', 'Checkpoint', 'Latitude', 'Longitude', 'Notes', 'Attachment'];
+  
+  const csvRows = logs.map(log => [
+    `"${new Date(log.created_at).toLocaleString()}"`,
+    `"${log.guard_name || ''}"`,
+    `"${log.location || ''}"`,
+    `"${log.checkpoint || ''}"`,
+    `"${log.latitude || ''}"`,
+    `"${log.longitude || ''}"`,
+    `"${(log.notes || '').replace(/"/g, '""')}"`,
+    `"${log.attachment_url || 'None'}"`
+  ]);
+
+  const csvContent = [headers.join(','), ...csvRows.map(row => row.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `tom_salem_patrol_report_${new Date().toISOString().slice(0,10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
   const [activeTab, setActiveTab] = useState<'telemetry' | 'sitemanager'>('telemetry');
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const prevLogsLengthRef = useRef<number>(0);
