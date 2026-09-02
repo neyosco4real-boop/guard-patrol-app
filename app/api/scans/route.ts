@@ -18,11 +18,11 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { guard_name, location, checkpoint, gps_coordinates, incident_report, status } = body;
+    const { guard_name, location, checkpoint, gps_coordinates, incident_report, attachment_url, status } = body;
 
     const { data, error } = await supabase
       .from('patrol_logs')
-      .insert([{ guard_name, location, checkpoint, gps_coordinates, incident_report, status }])
+      .insert([{ guard_name, location, checkpoint, gps_coordinates, incident_report, attachment_url, status }])
       .select();
 
     if (error) throw error;
