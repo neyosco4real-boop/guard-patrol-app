@@ -147,7 +147,6 @@ export default function PatrolApp() {
     setLoading(true);
     setFeedback(null);
     try {
-      const fullNotes = `${notes}${incidentPhoto ? ' [Incident Photo Attached]' : ''}`;
       
       const res = await fetch('/api/scans', {
         method: 'POST',
@@ -157,7 +156,8 @@ export default function PatrolApp() {
           location: locationSite,
           checkpoint: checkpoint || 'Main Entrance',
           gps_coordinates: gpsCoordinates,
-          incident_report: fullNotes || 'No issue',
+          incident_report: notes || 'No issue',
+          attachment_url: incidentPhoto
           status: status
         })
       });
