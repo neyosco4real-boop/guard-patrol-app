@@ -40,6 +40,15 @@ export default function AdminDashboard() {
   const [selectedLogDetail, setSelectedLogDetail] = useState<PatrolLog | null>(null);
   const [isLiveActive, setIsLiveActive] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+// Auto-refresh feeds in the background every 10 seconds without resetting UI
+  useEffect(() => {
+    const pollTimer = setInterval(async () => {
+      const { data } = await supabase.from('patrol_logs').select('*').order('created_at', { ascending: false });
+      if (data) setLogs(data);
+    }, 10000);
+
+    return () => clearInterval(pollTimer);
+  }, []);
   const [activeTab, setActiveTab] = useState<'telemetry' | 'sitemanager'>('telemetry');
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const prevLogsLengthRef = useRef<number>(0);
