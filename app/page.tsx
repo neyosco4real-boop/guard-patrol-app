@@ -157,7 +157,7 @@ export default function PatrolApp() {
           checkpoint: checkpoint || 'Main Entrance',
           gps_coordinates: gpsCoordinates,
           incident_report: notes || 'No issue',
-          attachment_url: incidentPhoto
+          attachment_url: incidentPhoto,
           status: status
         })
       });
