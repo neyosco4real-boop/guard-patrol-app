@@ -70,7 +70,7 @@ const exportPatrolReport = () => {
     `"${log.checkpoint || ''}"`,
     `"${log.latitude || ''}"`,
     `"${log.longitude || ''}"`,
-    `"${(log.notes || '').replace(/"/g, '""')}"`,
+    `"${(log.notes || '').replace(/\[PHOTO_DATA:.*?\]/g, '').replace(/"/g, '""').trim()}"`,
     `"${log.attachment_url || 'None'}"`
   ]);
 
@@ -417,7 +417,7 @@ const exportPatrolReport = () => {
           <td>${l.location}</td>
           <td>${l.checkpoint}</td>
           <td>${l.latitude}, ${l.longitude}</td>
-          <td>${l.notes || 'Successful Scan'}</td>
+          <td>${(l.notes || '').replace(/\[PHOTO_DATA:.*?\]/g, '').trim() || 'Successful Scan'}</td>
         </tr>
       `).join('')}
     </tbody>
