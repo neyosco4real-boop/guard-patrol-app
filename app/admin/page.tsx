@@ -21,13 +21,11 @@ interface LocationItem {
   checkpoints: string[];
 }
 
-const DEFAULT_LOCATIONS: LocationItem[] = [
-  { name: 'Headquarters Facility', checkpoints: ['Main Entrance', 'Reception Desk', 'Perimeter Fence North'] }
 ];
 
 export default function AdminDashboard() {
   const [logs, setLogs] = useState<PatrolLog[]>([]);
-  const [locations, setLocations] = useState<LocationItem[]>(DEFAULT_LOCATIONS);
+  const [locations, setLocations] = useState<LocationItem[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [newLocName, setNewLocName] = useState('');
