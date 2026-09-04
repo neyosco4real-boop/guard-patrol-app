@@ -393,6 +393,7 @@ const exportPatrolReport = () => {
     tr:nth-child(even) { background: #111827; }
   </style>
 </head>
+
 <body>
   <h1>Tom Salem Security Services - Audit Telemetry Report</h1>
   <p>Generated on: ${new Date().toLocaleString()}</p>
@@ -407,18 +408,21 @@ const exportPatrolReport = () => {
         <th>Status / Notes</th>
       </tr>
     </thead>
-    <tbody>
-      ${logs.map(l => `
-        <tr>
-          <td>${new Date(l.created_at).toLocaleString()}</td>
-          <td>${l.guard_name}</td>
-          <td>${l.location}</td>
-          <td>${l.checkpoint}</td>
-          <td>${l.latitude}, ${l.longitude}</td>
-          <td>${(l.notes || '').replace(/\[PHOTO_DATA:.*?\]/g, '').trim() || 'Successful Scan'}</td>
-        </tr>
-      `).join('')}
-    </tbody>
+   <tbody>
+  ${logs.map(l => `
+    <tr>
+      <td style="padding: 12px; white-space: nowrap;">${new Date(l.created_at).toLocaleString()}</td>
+      <td style="padding: 12px; white-space: nowrap;">${l.guard_name}</td>
+      <td style="padding: 12px; white-space: nowrap;">${l.location}</td>
+      <td style="padding: 12px; white-space: nowrap;">${l.checkpoint}</td>
+      <td style="padding: 12px; white-space: nowrap;">${l.latitude}, ${l.longitude}</td>
+      <td style="padding: 12px; max-width: 300px; word-break: break-word; white-space: normal;">
+        <div>${(l.notes || '').replace(/\[PHOTO_DATA:.*?\]/g, '').trim() || 'Successful Scan'}</div>
+        ${l.incident_photo ? `<img src="${l.incident_photo}" style="width: 50px; height: 50px; object-fit: cover; margin-top: 6px; border-radius: 4px;" />` : ''}
+      </td>
+    </tr>
+  `).join('')}
+</tbody>
   </table>
 </body>
 </html>`;
