@@ -1,4 +1,5 @@
 'use client';
+import { compressImage } from '@/utils/compressor';
 import { useState, useRef, useEffect } from 'react';
 import jsQR from 'jsqr';
 
@@ -126,16 +127,21 @@ export default function PatrolApp() {
     return () => clearTimeout(timeoutId);
   }, [scanning]);
 
-  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (file) {
+    try {
+      const compressedFile = await compressImage(file, 800, 0.7);
       const reader = new FileReader();
       reader.onloadend = () => {
         setIncidentPhoto(reader.result as string);
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(compressedFile);
+    } catch (error) {
+      console.error('Image compression failed:', error);
     }
-  };
+  }
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
