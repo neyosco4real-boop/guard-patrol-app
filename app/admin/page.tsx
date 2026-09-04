@@ -21,7 +21,6 @@ interface LocationItem {
   checkpoints: string[];
 }
 
-];
 
 export default function AdminDashboard() {
   const [logs, setLogs] = useState<PatrolLog[]>([]);
