@@ -411,7 +411,7 @@ const exportPatrolReport = () => {
 ${logs.map(l => {
   const fullNotes = l.notes || '';
   const parts = fullNotes.split('[PHOTO_DATA:');
-  const textNotes = parts[0].trim() || 'Successful Scan';
+  const textNotes = parts[0] ? parts[0].trim() : fullNotes.trim() || 'Successful Scan';
   const extractedPhoto = parts[1] ? parts[1].replace(']', '').trim() : l.incident_photo;
 
   return `
