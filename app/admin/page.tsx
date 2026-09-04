@@ -408,7 +408,13 @@ const exportPatrolReport = () => {
       </tr>
     </thead>
    <tbody>
-  ${logs.map(l => `
+${logs.map(l => {
+  const fullNotes = l.notes || '';
+  const parts = fullNotes.split('[PHOTO_DATA:');
+  const textNotes = parts[0].trim() || 'Successful Scan';
+  const extractedPhoto = parts[1] ? parts[1].replace(']', '').trim() : l.incident_photo;
+
+  return `
     <tr>
       <td style="padding: 12px; white-space: nowrap;">${new Date(l.created_at).toLocaleString()}</td>
       <td style="padding: 12px; white-space: nowrap;">${l.guard_name}</td>
@@ -416,12 +422,13 @@ const exportPatrolReport = () => {
       <td style="padding: 12px; white-space: nowrap;">${l.checkpoint}</td>
       <td style="padding: 12px; white-space: nowrap;">${l.latitude}, ${l.longitude}</td>
       <td style="padding: 12px; max-width: 300px; word-break: break-word; white-space: normal;">
-        <div>${(l.notes || '').replace(/\[PHOTO_DATA:.*?\]/g, '').trim() || 'Successful Scan'}</div>
-        ${l.incident_photo ? `<img src="${l.incident_photo}" style="width: 50px; height: 50px; object-fit: cover; margin-top: 6px; border-radius: 4px;" />` : ''}
+        <div>${textNotes}</div>
+        ${extractedPhoto ? `<img src="${extractedPhoto}" style="width: 50px; height: 50px; object-fit: cover; margin-top: 6px; border-radius: 4px;" />` : ''}
       </td>
     </tr>
-  `).join('')}
-</tbody>
+  `;
+}).join('')}
+</tbody
   </table>
 </body>
 </html>`;
