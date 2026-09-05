@@ -416,11 +416,6 @@ ${logs.map(l => {
 
   return `
     <tr>
-      <td style="padding: 12px; white-space: nowrap;">${new Date(l.created_at).toLocaleString()}</td>
-      <td style="padding: 12px; white-space: nowrap;">${l.guard_name}</td>
-      <td style="padding: 12px; white-space: nowrap;">${l.location}</td>
-      <td style="padding: 12px; white-space: nowrap;">${l.checkpoint}</td>
-      <td style="padding: 12px; white-space: nowrap;">${l.latitude}, ${l.longitude}</td>
       <td style="padding: 12px; max-width: 300px; word-break: break-word; white-space: normal;">
         <div>${textNotes}</div>
         ${extractedPhoto ? `<img src="${extractedPhoto}" style="width: 50px; height: 50px; object-fit: cover; margin-top: 6px; border-radius: 4px;" />` : ''}
