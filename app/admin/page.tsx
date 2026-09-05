@@ -379,51 +379,68 @@ const exportPatrolReport = () => {
 
   // Export handlers
   const handleExportHTML = () => {
-const htmlContent = `
-  <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; background-color: #0f172a; color: #fff; padding: 20px; }
-        h2 { color: #34d399; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #1e293b; }
-        th, td { border: 1px solid #334155; padding: 12px; text-align: left; font-size: 14px; }
-        th { background-color: #0f172a; color: #34d399; }
-      </style>
-    </head>
-    <body>
-      <h2>Tom Salem Security Services - Audit Telemetry Report</h2>
-      <p>Generated on: ${new Date().toLocaleString()}</p>
-      <table>
-        <thead>
-          <tr>
-            <th>Timestamp</th>
-            <th>Guard Name</th>
-            <th>Location</th>
-            <th>Checkpoint</th>
-            <th>GPS Coordinates</th>
-            <th>Status / Notes</th>
-            <th>Incident Image</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${logs.map(l => {
-            const fullNotes = l.notes || '';
-            const parts = fullNotes.split('[PHOTO_DATA:');
-            const textNotes = parts[0] ? parts[0].trim() : fullNotes.trim() || 'Successful Scan';
-            const extractedPhoto = parts[1] ? parts[1].replace(']', '').trim() : l.incident_photo;
+const handleExportHTML = () => {
+  const htmlContent = `
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; background-color: #0f172a; color: #fff; padding: 20px; }
+          h2 { color: #34d399; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #1e293b; }
+          th, td { border: 1px solid #334155; padding: 12px; text-align: left; font-size: 14px; }
+          th { background-color: #0f172a; color: #34d399; }
+        </style>
+      </head>
+      <body>
+        <h2>Tom Salem Security Services - Audit Telemetry Report</h2>
+        <p>Generated on: ${new Date().toLocaleString()}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Guard Name</th>
+              <th>Location</th>
+              <th>Checkpoint</th>
+              <th>GPS Coordinates</th>
+              <th>Status / Notes</th>
+              <th>Incident Image</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logs.map(l => {
+              const fullNotes = l.notes || '';
+              const parts = fullNotes.split('[PHOTO_DATA:');
+              const textNotes = parts[0] ? parts[0].trim() : fullNotes.trim() || 'Successful Scan';
+              const extractedPhoto = parts[1] ? parts[1].replace(']', '').trim() : l.incident_photo;
 
-            return `
-              <tr>
-                <td style="white-space: nowrap;">${new Date(l.created_at).toLocaleString()}</td>
-                <td style="white-space: nowrap;">${l.guard_name}</td>
-                <td style="white-space: nowrap;">${l.location}</td>
-                <td style="white-space: nowrap;">${l.checkpoint}</td>
-                <td style="white-space: nowrap;">${l.latitude}, ${l.longitude}</td>
-                <td style="max-width: 250px; word-break: break-word; white-space: normal;">${textNotes}</td>
-                <td style="text-align: center;">
-                  ${extractedPhoto ? `<img src="${extractedPhoto}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;" />` : 'No Image'}
-                </td>
-              </tr>
+              const imageHtml = extractedPhoto 
+                ? '<img src="' + extractedPhoto + '" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;" />' 
+                : 'No Image';
+
+              return '<tr>' +
+                '<td style="white-space: nowrap;">' + new Date(l.created_at).toLocaleString() + '</td>' +
+                '<td style="white-space: nowrap;">' + l.guard_name + '</td>' +
+                '<td style="white-space: nowrap;">' + l.location + '</td>' +
+                '<td style="white-space: nowrap;">' + l.checkpoint + '</td>' +
+                '<td style="white-space: nowrap;">' + l.latitude + ', ' + l.longitude + '</td>' +
+                '<td style="max-width: 250px; word-break: break-word; white-space: normal;">' + textNotes + '</td>' +
+                '<td style="text-align: center;">' + imageHtml + '</td>' +
+                '</tr>';
+            }).join('')}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  const blob = new Blob([htmlContent], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Tom_Salem_Security_Report_${new Date().toISOString().slice(0, 10)}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
             `;
           }).join('')}
         </tbody>
