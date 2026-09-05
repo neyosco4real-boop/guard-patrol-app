@@ -379,26 +379,58 @@ const exportPatrolReport = () => {
 
   // Export handlers
   const handleExportHTML = () => {
-    const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <title>Tom Salem Security Services - Patrol Report</title>
-  <style>
-    body { font-family: sans-serif; padding: 30px; background: #0f172a; color: #f8fafc; }
-    h1 { color: #34d399; font-size: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
-    th, td { border: 1px solid #334155; padding: 10px; text-align: left; }
-    th { background: #1e293b; color: #34d399; }
-    tr:nth-child(even) { background: #111827; }
-  </style>
-</head>
+const htmlContent = `
+  <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; background-color: #0f172a; color: #fff; padding: 20px; }
+        h2 { color: #34d399; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #1e293b; }
+        th, td { border: 1px solid #334155; padding: 12px; text-align: left; font-size: 14px; }
+        th { background-color: #0f172a; color: #34d399; }
+      </style>
+    </head>
+    <body>
+      <h2>Tom Salem Security Services - Audit Telemetry Report</h2>
+      <p>Generated on: ${new Date().toLocaleString()}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Guard Name</th>
+            <th>Location</th>
+            <th>Checkpoint</th>
+            <th>GPS Coordinates</th>
+            <th>Status / Notes</th>
+            <th>Incident Image</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${logs.map(l => {
+            const fullNotes = l.notes || '';
+            const parts = fullNotes.split('[PHOTO_DATA:');
+            const textNotes = parts[0] ? parts[0].trim() : fullNotes.trim() || 'Successful Scan';
+            const extractedPhoto = parts[1] ? parts[1].replace(']', '').trim() : l.incident_photo;
 
-<body>
-  <h1>Tom Salem Security Services - Audit Telemetry Report</h1>
-  <p>Generated on: ${new Date().toLocaleString()}</p>
-  <table>
-    <thead>
-      <tr>
+            return `
+              <tr>
+                <td style="white-space: nowrap;">${new Date(l.created_at).toLocaleString()}</td>
+                <td style="white-space: nowrap;">${l.guard_name}</td>
+                <td style="white-space: nowrap;">${l.location}</td>
+                <td style="white-space: nowrap;">${l.checkpoint}</td>
+                <td style="white-space: nowrap;">${l.latitude}, ${l.longitude}</td>
+                <td style="max-width: 250px; word-break: break-word; white-space: normal;">${textNotes}</td>
+                <td style="text-align: center;">
+                  ${extractedPhoto ? `<img src="${extractedPhoto}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;" />` : 'No Image'}
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </body>
+  </html>
+`;    
         <th>Timestamp</th>
         <th>Guard Name</th>
         <th>Location</th>
