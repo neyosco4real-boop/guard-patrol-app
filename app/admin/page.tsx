@@ -441,7 +441,10 @@ const handleExportPDF = () => {
   setIsExportOpen(false);
 };
 
-const handleExportHTML = () => {
+const handleExportPDF = () => {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+
   const rowsHtml = logs.map(l => {
     const fullNotes = l.notes || '';
     const parts = fullNotes.split('[PHOTO_DATA:');
@@ -449,57 +452,59 @@ const handleExportHTML = () => {
     const extractedPhoto = parts[1] ? parts[1].replace(']', '').trim() : l.incident_photo;
 
     const imageHtml = extractedPhoto 
-      ? '<img src="' + extractedPhoto + '" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;" />' 
+      ? `<img src="${extractedPhoto}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px;" />` 
       : 'No Image';
 
-    return '<tr>' +
-      '<td style="white-space: nowrap;">' + new Date(l.created_at).toLocaleString() + '</td>' +
-      '<td style="white-space: nowrap;">' + l.guard_name + '</td>' +
-      '<td style="white-space: nowrap;">' + l.location + '</td>' +
-      '<td style="white-space: nowrap;">' + l.checkpoint + '</td>' +
-      '<td style="white-space: nowrap;">' + l.latitude + ', ' + l.longitude + '</td>' +
-      '<td style="max-width: 250px; word-break: break-word; white-space: normal;">' + textNotes + '</td>' +
-      '<td style="text-align: center;">' + imageHtml + '</td>' +
-      '</tr>';
+    return `<tr>
+      <td style="white-space: nowrap;">${new Date(l.created_at).toLocaleString()}</td>
+      <td style="white-space: nowrap;">${l.guard_name || 'N/A'}</td>
+      <td style="white-space: nowrap;">${l.location || 'N/A'}</td>
+      <td style="white-space: nowrap;">${l.checkpoint || 'N/A'}</td>
+      <td style="white-space: nowrap;">${l.latitude ? `${l.latitude}, ${l.longitude}` : 'N/A'}</td>
+      <td style="white-space: nowrap;">${l.geofence_status || 'N/A'}</td>
+      <td style="max-width: 200px; word-break: break-word;">${textNotes}</td>
+      <td style="text-align: center;">${imageHtml}</td>
+    </tr>`;
   }).join('');
 
-  const htmlContent = '<!DOCTYPE html><html>' +
-    '<head>' +
-    '<style>' +
-    'body { font-family: Arial, sans-serif; background-color: #0f172a; color: #fff; padding: 20px; }' +
-    'h2 { color: #34d399; }' +
-    'table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #1e293b; }' +
-    'th, td { border: 1px solid #334155; padding: 12px; text-align: left; font-size: 14px; }' +
-    'th { background-color: #0f172a; color: #34d399; }' +
-    '</style>' +
-    '</head>' +
-    '<body>' +
-    '<h2>Tom Salem Security Services - Audit Telemetry Report</h2>' +
-    '<p>Generated on: ' + new Date().toLocaleString() + '</p>' +
-    '<table>' +
-    '<thead>' +
-    '<tr>' +
-    '<th>Timestamp</th>' +
-    '<th>Guard Name</th>' +
-    '<th>Location</th>' +
-    '<th>Checkpoint</th>' +
-    '<th>GPS Coordinates</th>' +
-    '<th>Status / Notes</th>' +
-    '<th>Incident Image</th>' +
-    '</tr>' +
-    '</thead>' +
-    '<tbody>' + rowsHtml + '</tbody>' +
-    '</table>' +
-    '</body>' +
-    '</html>';
+  const htmlContent = `<!DOCTYPE html><html>
+    <head>
+      <title>Tom Salem Security - Audit Report</title>
+      <style>
+        body { font-family: Arial, sans-serif; color: #111; padding: 20px; background: #fff; }
+        h2 { color: #0f172a; margin-bottom: 5px; }
+        p { color: #555; font-size: 13px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; font-size: 12px; }
+        th { background-color: #0f172a; color: #fff; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head>
+    <body>
+      <h2>Tom Salem Security Services - Live Patrol Stream & Audit Logs</h2>
+      <p>Generated on: ${new Date().toLocaleString()}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Date & Time</th>
+            <th>Guard Name</th>
+            <th>Location</th>
+            <th>Checkpoint</th>
+            <th>GPS</th>
+            <th>Geofence</th>
+            <th>Status, Incident notes</th>
+            <th>Attachment</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <script>window.onload = function() { window.print(); }</script>
+    </body>
+  </html>`;
 
-  const blob = new Blob([htmlContent], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'Tom_Salem_Security_Report_' + new Date().toISOString().slice(0, 10) + '.html';
-  a.click();
-  URL.revokeObjectURL(url);
+  printWindow.document.write(htmlContent);
+  printWindow.document.close();
+  setIsExportOpen(false);
 };
   const handleExportCSV = () => {
     const headers = ['Timestamp', 'Guard Name', 'Location', 'Checkpoint', 'Latitude', 'Longitude', 'Notes'];
