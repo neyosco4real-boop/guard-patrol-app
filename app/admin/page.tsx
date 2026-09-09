@@ -377,8 +377,6 @@ const exportPatrolReport = () => {
     }
   };
 
-  // Export handlers
-
 const handleExportPDF = () => {
   const rowsHtml = logs.map(l => {
     const fullNotes = l.notes || '';
