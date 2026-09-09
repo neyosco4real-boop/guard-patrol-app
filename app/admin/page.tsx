@@ -506,7 +506,23 @@ const handleExportPDF = () => {
   printWindow.document.close();
   setIsExportOpen(false);
 };
-  const handleExportCSV = () => {
+
+const handleDownloadQR = () => {
+  const svgElement = document.getElementById('printable-qr-svg');
+  if (!svgElement) return;
+  const svgData = new XMLSerializer().serializeToString(svgElement);
+  const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'checkpoint-qr-code.svg';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+const handleExportCSV = () => {
     const headers = ['Timestamp', 'Guard Name', 'Location', 'Checkpoint', 'Latitude', 'Longitude', 'Notes'];
     const rows = logs.map(l => [
       `"${new Date(l.created_at).toLocaleString()}"`,
@@ -526,8 +542,6 @@ const handleExportPDF = () => {
     a.click();
     setIsExportOpen(false);
   };
-
-  
 
   const htmlContent = '<!DOCTYPE html><html>' +
     '<head>' +
