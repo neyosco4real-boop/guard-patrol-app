@@ -461,9 +461,6 @@ const handleExportHTML = () => {
   };
 
   const handleExportPDF = () => {
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
-
   const rowsHtml = logs.map(l => {
     const fullNotes = l.notes || '';
     const parts = fullNotes.split('[PHOTO_DATA:');
@@ -485,6 +482,53 @@ const handleExportHTML = () => {
       '<td style="text-align: center;">' + imageHtml + '</td>' +
       '</tr>';
   }).join('');
+
+  const htmlContent = '<!DOCTYPE html><html>' +
+    '<head>' +
+    '<title>Tom Salem Security - Audit Report</title>' +
+    '<style>' +
+    'body { font-family: Arial, sans-serif; color: #111; padding: 30px; background: #fff; max-width: 1200px; margin: 0 auto; }' +
+    'h2 { color: #0f172a; margin-bottom: 5px; }' +
+    'p { color: #555; font-size: 13px; margin-bottom: 25px; }' +
+    'table { width: 100%; border-collapse: collapse; margin-top: 10px; }' +
+    'th, td { border: 1px solid #cbd5e1; padding: 10px 12px; text-align: left; font-size: 13px; }' +
+    'th { background-color: #0f172a; color: #fff; }' +
+    '@media print { body { padding: 0; } }' +
+    '</style>' +
+    '</head>' +
+    '<body>' +
+    '<h2>Tom Salem Security Services - Live Patrol Stream & Audit Logs</h2>' +
+    '<p>Generated on: ' + new Date().toLocaleString() + '</p>' +
+    '<table>' +
+    '<thead>' +
+    '<tr>' +
+    '<th>Date & Time</th>' +
+    '<th>Guard Name</th>' +
+    '<th>Location</th>' +
+    '<th>Checkpoint</th>' +
+    '<th>GPS</th>' +
+    '<th>Geofence</th>' +
+    '<th>Status, Incident notes</th>' +
+    '<th>Attachment</th>' +
+    '</tr>' +
+    '</thead>' +
+    '<tbody>' + rowsHtml + '</tbody>' +
+    '</table>' +
+    '</body>' +
+    '</html>';
+
+  const blob = new Blob([htmlContent], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const printWindow = window.open(url, '_blank');
+  if (printWindow) {
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    };
+  }
+  setIsExportOpen(false);
+};
 
   const htmlContent = '<!DOCTYPE html><html>' +
     '<head>' +
