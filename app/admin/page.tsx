@@ -506,6 +506,7 @@ const handleExportPDF = () => {
   printWindow.document.close();
   setIsExportOpen(false);
 };
+
 const handleDownloadQR = () => {
   const svgElement = document.getElementById('printable-qr-svg');
   if (!svgElement) return;
