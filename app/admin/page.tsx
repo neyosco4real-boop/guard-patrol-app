@@ -1092,21 +1092,31 @@ return (
                 <span className="text-slate-400 block font-bold uppercase text-[10px]">Recent Guard GPS Coordinates</span>
                 <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
                   {logs.map((l, i) => (
-                    <div key={i} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between font-mono text-[11px]">
-                      <span className="text-emerald-400 font-bold">{l.guard_name}</span>
-                      <span className="text-slate-300">{l.latitude}, {l.longitude}</span>
-                      <span className="text-[10px] bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800">In-Bounds</span>
-                    </div>
-                  ))}
-                </div>
-            </div>
+        <div key={i} className="flex items-center justify-between py-1">
+          <span className="text-slate-300">{l.latitude}, {l.longitude}</span>
+          <span className="text-[10px] bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800">In Bounds</span>
+        </div>
+      ))}
 
- {isMapModalOpen && (
-        <div className="flex justify-end pt-2">
-          <button onClick={() => setIsMapModalOpen(false)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg">
-            Close
-          </button>
+      {/* Map Modal */}
+      {isMapModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold mb-4">Guard Location Map</h3>
+            <div className="h-96 w-full rounded bg-gray-100 flex items-center justify-center">
+              <p className="text-gray-500">Live Map View</p>
+            </div>
+            <div className="flex justify-end pt-4">
+              <button 
+                onClick={() => setIsMapModalOpen(false)} 
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
+}
