@@ -9,6 +9,7 @@ interface PatrolLog {
   guard_name: string;
   location: string;
   checkpoint: string;
+  geofence: string
   latitude: string;
   longitude: string;
   notes: string;
@@ -40,7 +41,7 @@ export default function AdminDashboard() {
 // Auto-refresh feeds in the background every 10 seconds without resetting UI
    // Instant real-time WebSocket listener for immediate log delivery
   useEffect(() => {
-    const channel = sup-abase
+    const channel = supabase
       .channel('public:patrol_logs')
       .on(
         'postgres_changes',
@@ -56,7 +57,7 @@ export default function AdminDashboard() {
     };
   }, []);  
 
-// Function to generate and download the clean patrol log report CSV
+  // Function to generate and download the clean patrol log report CSV
 const exportPatrolReport = () => {
   const headers = ['Date & Time', 'Guard Name', 'Location', 'Checkpoint', 'Latitude', 'Longitude', 'Notes', 'Attachment'];
   
@@ -117,7 +118,6 @@ const exportPatrolReport = () => {
     } catch (e) {
       console.error('Audio play error:', e);
     }
-  };
 
   const fetchData = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
@@ -143,7 +143,7 @@ const exportPatrolReport = () => {
 
       const map = new Map<string, string[]>();
       
-      DEFAULT_LOCATIONS.forEach(loc => {
+      DEFAULT_LOCATIONS.forEach((loc: any) => {
         map.set(loc.name, [...loc.checkpoints]);
       });
 
@@ -439,8 +439,6 @@ const handleExportPDF = () => {
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
   setIsExportOpen(false);
-};
-
 const handleExportPDF = () => {
   const printWindow = window.open('', '_blank');
   if (!printWindow) return;
@@ -587,11 +585,37 @@ const handleExportCSV = () => {
       }, 500);
     };
   }
+  
   setIsExportOpen(false);
-};
+  };
 
+  const handleExportHTML = () => {
+ const rowsHtml = filteredLogs.map(log => {
+  const notesContent = log.notes || 'No issue reported';
+  const hasImage = notesContent.includes('[PHOTO_DATA:');
+
+  let textNote = notesContent;
+  let imageSrc = log.attachment_url || '';
+
+  if (hasImage) {
+    const parts = notesContent.split('[PHOTO_DATA:');
+    textNote = parts[0].trim();
+    imageSrc = parts[1].replace(']', '').trim();
+  }
+
+  return `<tr>
+    <td>${new Date(log.created_at).toLocaleString()}</td>
+    <td>${log.guard_name || 'N/A'}</td>
+    <td>${log.location || 'N/A'}</td>
+    <td>${log.checkpoint || 'N/A'}</td>
+    <td>${log.gps || 'N/A'}</td>
+    <td>${log.geofence || 'N/A'}</td>
+    <td>${textNote}</td>
+    <td>${imageSrc ? `<img src="${imageSrc}" alt="Incident Evidence" style="max-width: 100px; height: auto; border-radius: 4px; border: 1px solid #334155;" />` : 'None'}</td>
+  </tr>`;
+}).join('');
   const htmlContent = '<!DOCTYPE html><html>' +
-    '<head>' +
+  '<head>' +
     '<title>Tom Salem Security - Audit Report</title>' +
     '<style>' +
     'body { font-family: Arial, sans-serif; color: #111; padding: 20px; background: #fff; }' +
@@ -625,10 +649,9 @@ const handleExportCSV = () => {
     '</body>' +
     '</html>';
 
-  printWindow.document.write(htmlContent);
   printWindow.document.close();
   setIsExportOpen(false);
-};
+  };
 
   const handleDownloadQR = () => {
     const svgElement = document.getElementById('printable-qr-svg');
@@ -699,7 +722,7 @@ const handleExportCSV = () => {
           </div>
         </div>
       </header>
-
+return (
       <main className="max-w-7xl mx-auto px-4 sm:px-8 mt-6 space-y-6">
         {statusMsg && (
           <div className="p-4 bg-emerald-950/90 border border-emerald-800 text-emerald-400 rounded-2xl text-center text-xs font-bold shadow-lg flex items-center justify-center gap-2">
@@ -1076,15 +1099,14 @@ const handleExportCSV = () => {
                     </div>
                   ))}
                 </div>
-              </div>
             </div>
 
-            <div className="flex justify-end pt-2">
-              <button onClick={() => setIsMapModalOpen(false)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl text-xs font-bold">Close Map Reader</button>
-            </div>
-          </div>
+ {isMapModalOpen && (
+        <div className="flex justify-end pt-2">
+          <button onClick={() => setIsMapModalOpen(false)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg">
+            Close
+          </button>
         </div>
-      )}
-    </div>
+    )
   );
 }
