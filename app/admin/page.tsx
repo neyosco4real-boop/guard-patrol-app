@@ -1092,13 +1092,17 @@ return (
                 <span className="text-slate-400 block font-bold uppercase text-[10px]">Recent Guard GPS Coordinates</span>
                 <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
                   {logs.map((l, i) => (
-        <div key={i} className="flex items-center justify-between py-1">
-          <span className="text-slate-300">{l.latitude}, {l.longitude}</span>
-          <span className="text-[10px] bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800">In Bounds</span>
-        </div>
+        <tr key={i} className="border-b">
+          <td className="py-3 px-4">{l.guard_name}</td>
+          <td className="py-3 px-4">{l.location}</td>
+          <td className="py-3 px-4">{l.checkpoint}</td>
+          <td className="py-3 px-4">{l.created_at}</td>
+        </tr>
       ))}
+      </tbody>
+    </table>
 
-    {/* Map Modal */}
+      {/* Map Modal */}
       {isMapModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl">
