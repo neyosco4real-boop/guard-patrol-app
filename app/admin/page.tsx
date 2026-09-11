@@ -1107,6 +1107,7 @@ return (
             Close
           </button>
         </div>
-    )
+      )}
+    </div>
   );
 }
