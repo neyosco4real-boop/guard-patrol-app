@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import jsQR from 'jsqr';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -22,8 +23,9 @@ export default function MobileScannerPage() {
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
-  // Parse QR query parameter if scanned from standard smartphone camera app
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
@@ -33,6 +35,10 @@ export default function MobileScannerPage() {
       }
     }
     captureGpsLocation();
+
+    return () => {
+      stopCameraScanner();
+    };
   }, []);
 
   const captureGpsLocation = () => {
@@ -43,7 +49,6 @@ export default function MobileScannerPage() {
             lat: Number(position.coords.latitude.toFixed(6)),
             lng: Number(position.coords.longitude.toFixed(6)),
           });
-          setGeofenceStatus('Verified within Geofence');
         },
         () => {
           setGeofenceStatus('GPS Unavailable');
@@ -53,40 +58,46 @@ export default function MobileScannerPage() {
   };
 
   const verifyAndFetchCheckpoint = async (code: string) => {
-    setStatusMessage({ type: 'info', text: `Verifying checkpoint code: ${code}...` });
+    // Clean up URL if code contains full URL string
+    let cleanCode = code.trim();
+    if (cleanCode.includes('?code=')) {
+      cleanCode = cleanCode.split('?code=')[1];
+    }
+
+    setStatusMessage({ type: 'info', text: `Verifying checkpoint code: ${cleanCode}...` });
 
     try {
       const { data: cpData, error: cpError } = await supabase
         .from('checkpoints')
         .select('*')
-        .eq('code', code)
+        .eq('code', cleanCode)
         .maybeSingle();
 
       if (cpError || !cpData) {
         const { data: cpById } = await supabase
           .from('checkpoints')
           .select('*')
-          .eq('id', code)
+          .eq('id', cleanCode)
           .maybeSingle();
 
         if (cpById) {
           setCheckpointName(cpById.name);
           fetchParentLocation(cpById.location_id);
-          setStatusMessage({ type: 'success', text: `✓ Verified: ${cpById.name}` });
+          setStatusMessage({ type: 'success', text: `✓ Verified Checkpoint: ${cpById.name}` });
           return;
         }
 
-        setStatusMessage({ type: 'error', text: `Unregistered Checkpoint Code: ${code}` });
-        setCheckpointName(code);
+        setStatusMessage({ type: 'error', text: `Unregistered Checkpoint Code: ${cleanCode}` });
+        setCheckpointName(cleanCode);
         setLocationName('Unassigned Site');
         return;
       }
 
       setCheckpointName(cpData.name);
       fetchParentLocation(cpData.location_id);
-      setStatusMessage({ type: 'success', text: `✓ Verified: ${cpData.name}` });
+      setStatusMessage({ type: 'success', text: `✓ Verified Checkpoint: ${cpData.name}` });
     } catch (err: any) {
-      setStatusMessage({ type: 'error', text: 'Error connecting to server.' });
+      setStatusMessage({ type: 'error', text: 'Error connecting to database server.' });
     }
   };
 
@@ -110,7 +121,7 @@ export default function MobileScannerPage() {
 
   const startCameraScanner = async () => {
     setIsScanning(true);
-    setStatusMessage(null);
+    setStatusMessage({ type: 'info', text: 'Initializing camera scanner...' });
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -119,15 +130,47 @@ export default function MobileScannerPage() {
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.setAttribute('playsinline', 'true');
+        await videoRef.current.play();
+        requestAnimationFrame(scanQRCodeTick);
       }
     } catch (err) {
-      alert('Unable to access camera. Please allow camera permissions or use your device camera app to scan the QR code.');
+      alert('Unable to access camera. Please check camera permissions.');
       setIsScanning(false);
     }
   };
 
+  const scanQRCodeTick = () => {
+    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+
+      if (canvas) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert',
+          });
+
+          if (code) {
+            stopCameraScanner();
+            verifyAndFetchCheckpoint(code.data);
+            return;
+          }
+        }
+      }
+    }
+    animationFrameRef.current = requestAnimationFrame(scanQRCodeTick);
+  };
+
   const stopCameraScanner = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach((track) => track.stop());
@@ -180,47 +223,77 @@ export default function MobileScannerPage() {
     if (error) {
       setStatusMessage({ type: 'error', text: `Error transmitting log: ${error.message}` });
     } else {
-      setStatusMessage({ type: 'success', text: '🚀 Patrol Log Successfully Transmitted to Live Stream!' });
+      setStatusMessage({ type: 'success', text: '🚀 Patrol Log Successfully Transmitted!' });
       setNotes('');
       setEvidencePhoto(null);
+      setCheckpointName('');
+      setLocationName('');
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 font-sans max-w-md mx-auto">
-      {/* Header Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-4 text-center shadow-lg">
-        <div className="flex items-center justify-center gap-2 mb-1">
-          <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
-          <h1 className="text-sm font-black tracking-wider uppercase text-white">Guard Patrol Mobile Scanner</h1>
-        </div>
-        <p className="text-[11px] text-slate-400">Scan physical checkpoint QR codes to submit live audit reports</p>
-      </div>
-
-      {/* Camera Scanner Viewfinder */}
-      {isScanning ? (
-        <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl p-4 mb-4 text-center shadow-2xl">
-          <p className="text-xs font-bold text-emerald-400 mb-2 animate-pulse">📷 Point camera at Checkpoint QR Code</p>
-          <div className="relative rounded-xl overflow-hidden bg-black aspect-square mb-3 border-2 border-dashed border-emerald-500">
-            <video ref={videoRef} className="w-full h-full object-cover" />
+      {/* Top Header Card Matching Screenshot */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-4 shadow-xl">
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-red-950/80 border border-red-800 rounded-xl flex items-center justify-center text-red-400 font-black text-sm">
+              🛡️
+            </div>
+            <div>
+              <h1 className="text-sm font-black tracking-wide text-white leading-tight">Guard Patrol</h1>
+              <h2 className="text-sm font-black tracking-wide text-white leading-tight">Scanner</h2>
+            </div>
           </div>
-          <button
-            onClick={stopCameraScanner}
-            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2.5 rounded-xl text-xs uppercase"
-          >
-            Close Camera
-          </button>
+          <div className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-full flex items-center gap-2">
+            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+            <span className="text-[10px] font-bold text-emerald-400">Live Feed Connected</span>
+          </div>
         </div>
-      ) : (
-        <div className="mb-4">
-          <button
-            onClick={startCameraScanner}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-black py-4 rounded-2xl text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transition cursor-pointer"
-          >
-            📷 Open QR Scanner Camera
-          </button>
+
+        {/* QR Scanner Box Container */}
+        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-[10px] font-mono font-bold uppercase text-slate-400">QR Code Checkpoint Scanner</span>
+            <span className="text-[10px] font-mono text-emerald-400">{new Date().toLocaleTimeString()}</span>
+          </div>
+
+          {/* Reduced Camera Viewfinder */}
+          {isScanning ? (
+            <div className="relative rounded-xl overflow-hidden bg-black aspect-video mb-3 border border-emerald-500/50">
+              <video ref={videoRef} className="w-full h-full object-cover" />
+              <canvas ref={canvasRef} className="hidden" />
+              <div className="absolute inset-0 border-2 border-dashed border-emerald-400/60 pointer-events-none animate-pulse"></div>
+            </div>
+          ) : (
+            <div 
+              onClick={startCameraScanner}
+              className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-3 cursor-pointer hover:border-emerald-500/50 transition group"
+            >
+              <div className="w-12 h-12 bg-slate-950 border border-slate-800 rounded-full flex items-center justify-center mx-auto mb-2 group-hover:scale-105 transition">
+                <span className="text-xl">📷</span>
+              </div>
+              <p className="text-xs text-slate-300 font-bold">Open scanner to read checkpoint QR code</p>
+            </div>
+          )}
+
+          {isScanning ? (
+            <button
+              onClick={stopCameraScanner}
+              className="w-full bg-red-950/80 border border-red-800 text-red-300 font-bold py-3 rounded-xl text-xs uppercase"
+            >
+              Stop Camera
+            </button>
+          ) : (
+            <button
+              onClick={startCameraScanner}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-black py-3.5 rounded-xl text-xs uppercase tracking-wider transition shadow-lg cursor-pointer flex items-center justify-center gap-2"
+            >
+              📷 Open QR Scanner Camera
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Verification Status Banner */}
       {statusMessage && (
@@ -237,8 +310,8 @@ export default function MobileScannerPage() {
         </div>
       )}
 
-      {/* Main Patrol Log Form */}
-      <form onSubmit={handleSubmitLog} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4 shadow-xl text-xs">
+      {/* Main Patrol Form */}
+      <form onSubmit={handleSubmitLog} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-2xl text-xs">
         <div>
           <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Guard Name *</label>
           <input
@@ -255,7 +328,7 @@ export default function MobileScannerPage() {
           <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Location (Auto-filled by QR) *</label>
           <input
             type="text"
-            value={locationName || 'Awaiting Checkpoint Scan...'}
+            value={locationName || 'Awaiting QR scan...'}
             readOnly
             className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-emerald-400 font-bold cursor-not-allowed"
           />
@@ -265,7 +338,7 @@ export default function MobileScannerPage() {
           <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Checkpoint (Auto-filled by QR) *</label>
           <input
             type="text"
-            value={checkpointName || 'Awaiting Checkpoint Scan...'}
+            value={checkpointName || 'Awaiting QR scan...'}
             readOnly
             className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-cyan-400 font-bold cursor-not-allowed"
           />
@@ -285,24 +358,21 @@ export default function MobileScannerPage() {
           </select>
         </div>
 
-        {/* Snap Evidence Camera Button */}
+        {/* Snap Evidence Placement */}
         <div>
-          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Snap Evidence Camera (Optional)</label>
-          <div className="flex items-center gap-3">
-            <label className="flex-1 bg-slate-950 border border-slate-800 hover:border-emerald-500 text-slate-300 font-bold py-3 px-4 rounded-xl text-center cursor-pointer transition flex items-center justify-center gap-2">
-              📸 Take / Upload Photo Evidence
+          <div className="flex justify-between items-center mb-1">
+            <label className="text-[10px] uppercase font-bold text-slate-400">Patrol / Incident Notes &</label>
+            <label className="text-[10px] uppercase font-black text-emerald-400 cursor-pointer flex items-center gap-1 hover:underline">
+              📷 Snap Evidence
               <input type="file" accept="image/*" capture="environment" onChange={handlePhotoCapture} className="hidden" />
             </label>
-            {evidencePhoto && (
-              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-2 rounded-lg border border-emerald-800">
-                ✓ Attached
-              </span>
-            )}
           </div>
-        </div>
-
-        <div>
-          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Patrol / Incident Notes</label>
+          {evidencePhoto && (
+            <div className="mb-2 p-2 bg-emerald-950/40 border border-emerald-800 rounded-xl flex items-center justify-between">
+              <span className="text-[11px] text-emerald-300 font-bold">✓ Photo Evidence Attached</span>
+              <button type="button" onClick={() => setEvidencePhoto(null)} className="text-[10px] text-red-400 font-bold">Remove</button>
+            </div>
+          )}
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
