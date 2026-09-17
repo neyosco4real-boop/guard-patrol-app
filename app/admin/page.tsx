@@ -42,6 +42,88 @@ export default function AdminDashboard() {
     (l) => l.patrol_type === 'Incident Response' || (l.notes && l.notes.toLowerCase().includes('incident'))
   ).length;
 
+  // Function to generate and trigger PDF/HTML Printable Report
+  const handleExportPDF = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups to export the PDF report.');
+      return;
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Tom Salem Security - Patrol Audit Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #111; padding: 20px; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #222; padding-bottom: 15px; margin-bottom: 20px; }
+            .logo-title { font-size: 16px; font-weight: bold; color: #065f46; text-transform: uppercase; }
+            .report-title { font-size: 22px; font-weight: 900; text-transform: uppercase; margin-top: 5px; }
+            .meta { font-size: 12px; color: #555; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+            th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; }
+            th { background-color: #f3f4f6; color: #1f2937; text-transform: uppercase; font-size: 10px; }
+            img.evidence { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; }
+            .no-img { font-style: italic; color: #888; font-size: 10px; }
+            @media print {
+              .no-print { display: none; }
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="logo-title">🛡️ Tom Salem Security Guard Patrol System</div>
+              <div class="report-title">Official Patrol Audit & Telemetry Report</div>
+              <div class="meta">Generated on: ${new Date().toLocaleString()} | Total Logs: ${logs.length}</div>
+            </div>
+            <button class="no-print" onclick="window.print()" style="padding: 10px 20px; background: #059669; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Print / Save as PDF</button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Guard Name</th>
+                <th>Location</th>
+                <th>Checkpoint</th>
+                <th>Patrol Type</th>
+                <th>GPS Telemetry</th>
+                <th>Evidence Image</th>
+                <th>Incident Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${logs.map(log => `
+                <tr>
+                  <td>${new Date(log.created_at).toLocaleString()}</td>
+                  <td><strong>${log.guard_name}</strong></td>
+                  <td>${log.location}</td>
+                  <td>${log.checkpoint}</td>
+                  <td>${log.patrol_type}</td>
+                  <td>${log.latitude},${log.longitude}</td>
+                  <td>
+                    ${log.image_url ? `<img src="${log.image_url}" class="evidence" />` : `<span class="no-img">No Image</span>`}
+                  </td>
+                  <td>${log.notes || 'No reported issues'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              setTimeout(() => { window.print(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 font-sans">
       <div className="max-w-7xl mx-auto">
@@ -83,10 +165,8 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* 4 Styled Top Metric Cards matching Screenshot */}
+        {/* 4 Styled Top Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          
-          {/* TOTAL LOGS */}
           <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex justify-between items-center relative overflow-hidden">
             <div>
               <p className="text-[10px] font-mono tracking-widest text-slate-400 uppercase mb-1">Total Logs</p>
@@ -97,7 +177,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* ACTIVE INCIDENTS */}
           <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex justify-between items-center relative overflow-hidden">
             <div>
               <p className="text-[10px] font-mono tracking-widest text-slate-400 uppercase mb-1">Active Incidents</p>
@@ -108,7 +187,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* ACTIVE LOCATIONS */}
           <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex justify-between items-center relative overflow-hidden">
             <div>
               <p className="text-[10px] font-mono tracking-widest text-slate-400 uppercase mb-1">Active Locations</p>
@@ -119,7 +197,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* TOTAL CHECKPOINTS */}
           <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex justify-between items-center relative overflow-hidden">
             <div>
               <p className="text-[10px] font-mono tracking-widest text-slate-400 uppercase mb-1">Total Checkpoints</p>
@@ -129,10 +206,9 @@ export default function AdminDashboard() {
               📍
             </div>
           </div>
-
         </div>
 
-        {/* Sub-navigation bar matching screenshot (Live Patrol Telemetry Feed, Site & Checkpoint Manager, Export Report) */}
+        {/* Sub-navigation bar with Export PDF/HTML option */}
         <div className="flex flex-wrap justify-between items-center gap-3 mb-6 bg-slate-900/50 p-2 rounded-2xl border border-slate-800/60">
           <div className="flex items-center gap-2">
             <button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition shadow flex items-center gap-2">
@@ -146,7 +222,17 @@ export default function AdminDashboard() {
               🏢 Site & Checkpoint Manager
             </a>
           </div>
-          <div>
+          
+          <div className="flex items-center gap-2">
+            {/* PDF Report Export Button */}
+            <button 
+              onClick={handleExportPDF}
+              className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 cursor-pointer shadow"
+            >
+              📄 Export PDF / HTML Report
+            </button>
+
+            {/* CSV Export Button */}
             <button 
               onClick={() => {
                 const csvHeader = "Timestamp,Guard Name,Location,Checkpoint,Patrol Type,GPS,Notes\n";
@@ -160,12 +246,12 @@ export default function AdminDashboard() {
               }}
               className="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer"
             >
-              📊 Export Report ▼
+              📊 CSV ▼
             </button>
           </div>
         </div>
 
-        {/* Live Feed & Audit Trail Section */}
+        {/* Live Feed & Audit Trail Section with Evidence Image Column */}
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -193,10 +279,11 @@ export default function AdminDashboard() {
                   <tr className="border-b border-slate-800 text-[10px] font-mono uppercase text-slate-400">
                     <th className="pb-3 font-bold">Timestamp</th>
                     <th className="pb-3 font-bold">Guard Name</th>
-                    <th className="pb-3 font-bold">Location Name</th>
+                    <th className="pb-3 font-bold">Location</th>
                     <th className="pb-3 font-bold">Checkpoint</th>
                     <th className="pb-3 font-bold">Patrol Type</th>
                     <th className="pb-3 font-bold">GPS / Geofence</th>
+                    <th className="pb-3 font-bold">Evidence</th>
                     <th className="pb-3 font-bold">Incident Notes</th>
                   </tr>
                 </thead>
@@ -222,6 +309,13 @@ export default function AdminDashboard() {
                         📍 {log.latitude}, {log.longitude}
                         <div className="text-[10px] text-emerald-400">✓ {log.geofence_status || 'Verified'}</div>
                       </td>
+                      <td className="py-4">
+                        {log.image_url ? (
+                          <img src={log.image_url} alt="Evidence" className="w-10 h-10 object-cover rounded-lg border border-slate-700 shadow-md" />
+                        ) : (
+                          <span className="text-[10px] font-mono text-slate-500 italic">None</span>
+                        )}
+                      </td>
                       <td className="py-4 text-slate-300 max-w-xs truncate">{log.notes || 'No reported issues'}</td>
                     </tr>
                   ))}
@@ -234,7 +328,7 @@ export default function AdminDashboard() {
         {/* Interactive Detailed Report Modal */}
         {selectedLog && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-start mb-4 border-b border-slate-800 pb-3">
                 <div>
                   <span className="text-[10px] font-mono uppercase text-emerald-400 font-bold">Patrol Audit Report Details</span>
@@ -276,6 +370,13 @@ export default function AdminDashboard() {
                   <span className="font-mono text-slate-300">Lat/Lng: {selectedLog.latitude}, {selectedLog.longitude}</span>
                   <div className="text-emerald-400 font-bold text-[11px] mt-0.5">✓ {selectedLog.geofence_status || 'Verified within Geofence'}</div>
                 </div>
+
+                {selectedLog.image_url && (
+                  <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+                    <span className="text-[10px] font-mono uppercase text-slate-500 block mb-2">Captured Evidence Image</span>
+                    <img src={selectedLog.image_url} alt="Guard Evidence" className="w-full h-48 object-cover rounded-xl border border-slate-800" />
+                  </div>
+                )}
 
                 <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
                   <span className="text-[10px] font-mono uppercase text-slate-500 block mb-1">Incident Notes & Evidence</span>
