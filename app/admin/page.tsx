@@ -16,7 +16,6 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchAdminData();
-    // Auto-refresh feed every 10 seconds for real-time streaming
     const interval = setInterval(fetchAdminData, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -48,13 +47,23 @@ export default function AdminDashboard() {
         {/* Top Header */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xl">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
-              <p className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase font-black">TOM SALEM SECURITY GUARD PATROL SYSTEM</p>
+            {/* Prominent System Title with Logo Badge */}
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-9 h-9 bg-emerald-950/80 border border-emerald-800 rounded-xl flex items-center justify-center text-emerald-400 text-lg shadow-inner">
+                🛡️
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                <span className="text-xs md:text-sm font-mono tracking-wider text-emerald-400 font-black uppercase">
+                  TOM SALEM SECURITY GUARD PATROL SYSTEM
+                </span>
+              </div>
             </div>
+
             <h1 className="text-xl font-black tracking-wider uppercase text-white">Admin Live Patrol Stream & Audit</h1>
             <p className="text-xs text-slate-400 mt-0.5">Real-time monitoring of security guard checkpoint scans and incident logs</p>
           </div>
+
           <div className="flex items-center gap-3">
             <a 
               href="/admin/qr-codes" 
