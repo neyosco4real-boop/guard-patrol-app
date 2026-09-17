@@ -14,7 +14,7 @@ function ScannerContent() {
 
   const [scanCode, setScanCode] = useState(urlCode);
   const [guardName, setGuardName] = useState('');
-  const [locationName, setLocationName] = useState('TOM SALEM HQ');
+  const [locationName, setLocationName] = useState('');
   const [checkpointName, setCheckpointName] = useState('');
   const [patrolType, setPatrolType] = useState('Normal Patrol');
   const [notes, setNotes] = useState('');
@@ -29,18 +29,18 @@ function ScannerContent() {
   }, []);
 
   useEffect(() => {
-    if (urlCode && (checkpoints.length > 0 || locations.length > 0)) {
+    if (urlCode) {
       processCode(urlCode, checkpoints, locations);
     }
   }, [urlCode, checkpoints, locations]);
 
   const fetchAllData = async () => {
     const { data: locData } = await supabase.from('locations').select('*');
-    if (locData) setLocations(locData);
+    if (locData) setLocations(locData || []);
 
     const { data: cpData } = await supabase.from('checkpoints').select('*');
     if (cpData) {
-      setCheckpoints(cpData);
+      setCheckpoints(cpData || []);
       if (urlCode) {
         processCode(urlCode, cpData, locData || []);
       }
@@ -52,9 +52,11 @@ function ScannerContent() {
     const trimmed = codeVal.trim();
     if (!trimmed) {
       setCheckpointName('');
+      setLocationName('');
       return;
     }
 
+    // Flexible search across code, id, or name
     const match = cpList.find(
       (cp) => 
         (cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()) ||
@@ -63,25 +65,30 @@ function ScannerContent() {
     );
 
     if (match) {
-      setCheckpointName(match.name || trimmed);
-      
+      setCheckpointName(match.name);
       if (match.location_id) {
         const foundLoc = locList.find((l) => l.id === match.location_id);
-        if (foundLoc && foundLoc.name) {
+        if (foundLoc) {
           setLocationName(foundLoc.name);
+        } else {
+          setLocationName('Assigned Facility');
         }
       } else if (match.location) {
         setLocationName(match.location);
+      } else {
+        setLocationName('Assigned Facility');
       }
     } else {
+      // If code is not explicitly in DB table yet, use code as checkpoint name dynamically
       setCheckpointName(trimmed);
+      setLocationName('Scanned Site Location');
     }
   };
 
   const handleSubmitPatrol = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scanCode.trim() || !guardName.trim()) {
-      alert('Please enter your guard name and scan a checkpoint code.');
+      alert('Please enter your guard name and ensure a checkpoint code is scanned.');
       return;
     }
 
@@ -99,17 +106,16 @@ function ScannerContent() {
         latitude = pos.coords.latitude.toFixed(4);
         longitude = pos.coords.longitude.toFixed(4);
       } catch (err) {
-        console.log('Using default GPS fallback.');
+        console.log('Using GPS fallback.');
       }
     }
 
-    // Comprehensive payload sent directly to the live audit database feed
     const payload = {
       guard_name: guardName,
-      location: locationName || 'TOM SALEM HQ',
+      location: locationName || 'Scanned Site Location',
       checkpoint: checkpointName || scanCode,
       patrol_type: patrolType,
-      notes: notes || 'Standard Patrol Scan Verified',
+      notes: notes || 'Standard Scan Log',
       latitude,
       longitude,
       geofence_status: 'Inside Perimeter',
@@ -120,8 +126,9 @@ function ScannerContent() {
 
     setLoading(false);
     if (!error) {
-      setStatusMessage('✅ Patrol log successfully transmitted to Admin Live Feed!');
+      setStatusMessage('✅ Patrol log successfully sent to Admin Live Feed!');
       setScanCode('');
+      setLocationName('');
       setCheckpointName('');
       setNotes('');
     } else {
@@ -194,18 +201,19 @@ function ScannerContent() {
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">LOCATION (AUTO-RESOLVED) *</label>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">LOCATION (AUTO-FILLED BY QR) *</label>
             <input 
               type="text"
               value={locationName}
               onChange={(e) => setLocationName(e.target.value)}
+              placeholder="Awaiting QR scan..."
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
               required
             />
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">CHECKPOINT NAME (AUTO-RESOLVED) *</label>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">CHECKPOINT (AUTO-FILLED BY QR) *</label>
             <input 
               type="text"
               placeholder="Awaiting QR scan..."
@@ -217,7 +225,7 @@ function ScannerContent() {
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">PATROL ACTION / TYPE *</label>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">PATROL TYPE *</label>
             <select 
               value={patrolType}
               onChange={(e) => setPatrolType(e.target.value)}
@@ -230,7 +238,7 @@ function ScannerContent() {
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">INCIDENT NOTES & OBSERVATIONS</label>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">PATROL / INCIDENT NOTES & EVIDENCE</label>
             <textarea 
               rows={2}
               placeholder="Add patrol notes or incident details..."
@@ -240,10 +248,16 @@ function ScannerContent() {
             />
           </div>
 
+          {!scanCode.trim() && (
+            <div className="w-full bg-red-950/80 border border-red-800 text-red-300 py-2 rounded-xl text-center font-bold text-[11px]">
+              ⚠️ Please scan a checkpoint QR code first.
+            </div>
+          )}
+
           <button 
             type="submit" 
-            disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 rounded-xl shadow-lg transition uppercase tracking-wider text-xs disabled:opacity-50 cursor-pointer"
+            disabled={loading || !scanCode.trim()}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 rounded-xl shadow-lg transition uppercase tracking-wider text-xs disabled:opacity-40 cursor-pointer"
           >
             {loading ? 'Transmitting Scan...' : '🚀 SUBMIT PATROL LOG'}
           </button>
