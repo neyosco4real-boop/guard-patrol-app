@@ -72,7 +72,7 @@ function ScannerContent() {
   const handleSubmitPatrol = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scanCode.trim() || !guardName.trim()) {
-      alert('Please enter your guard name and ensure a checkpoint is scanned.');
+      alert('Please enter your guard name and ensure a checkpoint code is present.');
       return;
     }
 
@@ -96,7 +96,7 @@ function ScannerContent() {
 
     const logPayload = {
       guard_name: guardName,
-      location: resolvedLocation || 'Dynamic Location',
+      location: resolvedLocation || 'Assigned Location',
       checkpoint: resolvedCheckpointName || scanCode,
       latitude,
       longitude,
@@ -106,7 +106,7 @@ function ScannerContent() {
 
     setLoading(false);
     if (!error) {
-      setStatusMessage('✅ Patrol scan successfully verified and logged!');
+      setStatusMessage('✅ Patrol log submitted successfully to live feed!');
       setScanCode('');
       setResolvedLocation('');
       setResolvedCheckpointName('');
@@ -149,10 +149,10 @@ function ScannerContent() {
           <button 
             type="button"
             onClick={() => {
-              const manualTestCode = prompt("Simulate Scanning Checkpoint Code (e.g. TS-CP-72CQ2D):", "TS-CP-72CQ2D");
+              const manualTestCode = prompt("Enter or Simulate Checkpoint Code (e.g. TS-CP-72CQ2D):", "TS-CP-72CQ2D");
               if (manualTestCode) handleCodeChange(manualTestCode);
             }}
-            className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-black py-2.5 rounded-xl text-xs uppercase tracking-wider mb-2 transition shadow"
+            className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-black py-2.5 rounded-xl text-xs uppercase tracking-wider mb-2 transition shadow cursor-pointer"
           >
             📸 OPEN QR SCANNER CAMERA / SIMULATE SCAN
           </button>
@@ -221,7 +221,7 @@ function ScannerContent() {
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 rounded-xl shadow-lg transition uppercase tracking-wider text-xs disabled:opacity-50"
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 rounded-xl shadow-lg transition uppercase tracking-wider text-xs disabled:opacity-50 cursor-pointer"
           >
             {loading ? 'Transmitting Scan...' : '🚀 SUBMIT PATROL LOG'}
           </button>
