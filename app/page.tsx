@@ -8,15 +8,15 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function MobileScannerPage() {
-  const [guardName, setGuardName] = useState('Samuel John');
+  const [guardName, setGuardName] = useState('');
   const [locationName, setLocationName] = useState('');
   const [checkpointName, setCheckpointName] = useState('');
   const [patrolType, setPatrolType] = useState('Normal Patrol');
-  const [notes, setNotes] = useState('No reported issues');
+  const [notes, setNotes] = useState('');
+  const [evidencePhoto, setEvidencePhoto] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [geofenceStatus, setGeofenceStatus] = useState('Verified');
+  const [geofenceStatus, setGeofenceStatus] = useState('Verified within Geofence');
   
-  const [scannedCode, setScannedCode] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -35,7 +35,6 @@ export default function MobileScannerPage() {
     captureGpsLocation();
   }, []);
 
-  // Request Guard GPS Location
   const captureGpsLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -53,13 +52,10 @@ export default function MobileScannerPage() {
     }
   };
 
-  // Lookup checkpoint & parent location from code
   const verifyAndFetchCheckpoint = async (code: string) => {
-    setScannedCode(code);
     setStatusMessage({ type: 'info', text: `Verifying checkpoint code: ${code}...` });
 
     try {
-      // 1. Query checkpoint record
       const { data: cpData, error: cpError } = await supabase
         .from('checkpoints')
         .select('*')
@@ -67,7 +63,6 @@ export default function MobileScannerPage() {
         .maybeSingle();
 
       if (cpError || !cpData) {
-        // Fallback check by ID if code lookup misses
         const { data: cpById } = await supabase
           .from('checkpoints')
           .select('*')
@@ -113,7 +108,6 @@ export default function MobileScannerPage() {
     }
   };
 
-  // Live Mobile Camera Scanner Control
   const startCameraScanner = async () => {
     setIsScanning(true);
     setStatusMessage(null);
@@ -128,7 +122,7 @@ export default function MobileScannerPage() {
         videoRef.current.play();
       }
     } catch (err) {
-      alert('Unable to access camera. Please allow camera permissions in your browser or scan using your phone camera.');
+      alert('Unable to access camera. Please allow camera permissions or use your device camera app to scan the QR code.');
       setIsScanning(false);
     }
   };
@@ -141,16 +135,17 @@ export default function MobileScannerPage() {
     setIsScanning(false);
   };
 
-  // Manual Checkpoint Code Entry or Camera Code Capture
-  const handleManualCodeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (scannedCode.trim()) {
-      verifyAndFetchCheckpoint(scannedCode.trim());
-      if (isScanning) stopCameraScanner();
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEvidencePhoto(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  // Submit Guard Patrol Log to Supabase
   const handleSubmitLog = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -160,7 +155,7 @@ export default function MobileScannerPage() {
     }
 
     if (!checkpointName) {
-      alert('Please scan a valid checkpoint QR code first.');
+      alert('Please scan a checkpoint QR code before submitting.');
       return;
     }
 
@@ -175,7 +170,7 @@ export default function MobileScannerPage() {
       latitude: coords ? coords.lat : 0,
       longitude: coords ? coords.lng : 0,
       geofence_status: geofenceStatus,
-      notes: notes,
+      notes: notes + (evidencePhoto ? ' [Photo Evidence Attached]' : ''),
     };
 
     const { error } = await supabase.from('guard_logs').insert([payload]);
@@ -186,8 +181,8 @@ export default function MobileScannerPage() {
       setStatusMessage({ type: 'error', text: `Error transmitting log: ${error.message}` });
     } else {
       setStatusMessage({ type: 'success', text: '🚀 Patrol Log Successfully Transmitted to Live Stream!' });
-      // Reset patrol notes
       setNotes('');
+      setEvidencePhoto(null);
     }
   };
 
@@ -227,25 +222,6 @@ export default function MobileScannerPage() {
         </div>
       )}
 
-      {/* Manual QR Code Input Fallback */}
-      <form onSubmit={handleManualCodeSubmit} className="mb-4">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Scan or enter checkpoint code (e.g. TS-CP-1)"
-            value={scannedCode}
-            onChange={(e) => setScannedCode(e.target.value)}
-            className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-emerald-400 font-mono font-bold focus:outline-none focus:border-emerald-500"
-          />
-          <button
-            type="submit"
-            className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl uppercase"
-          >
-            Verify
-          </button>
-        </div>
-      </form>
-
       {/* Verification Status Banner */}
       {statusMessage && (
         <div
@@ -267,6 +243,7 @@ export default function MobileScannerPage() {
           <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Guard Name *</label>
           <input
             type="text"
+            placeholder="Enter your full name..."
             value={guardName}
             onChange={(e) => setGuardName(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white font-bold focus:outline-none focus:border-emerald-500"
@@ -308,12 +285,28 @@ export default function MobileScannerPage() {
           </select>
         </div>
 
+        {/* Snap Evidence Camera Button */}
         <div>
-          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Patrol / Incident Notes & Evidence</label>
+          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Snap Evidence Camera (Optional)</label>
+          <div className="flex items-center gap-3">
+            <label className="flex-1 bg-slate-950 border border-slate-800 hover:border-emerald-500 text-slate-300 font-bold py-3 px-4 rounded-xl text-center cursor-pointer transition flex items-center justify-center gap-2">
+              📸 Take / Upload Photo Evidence
+              <input type="file" accept="image/*" capture="environment" onChange={handlePhotoCapture} className="hidden" />
+            </label>
+            {evidencePhoto && (
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-2 rounded-lg border border-emerald-800">
+                ✓ Attached
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Patrol / Incident Notes</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            rows={3}
+            rows={2}
             className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 focus:outline-none focus:border-emerald-500"
             placeholder="Type observations or incident notes here..."
           />
@@ -324,7 +317,7 @@ export default function MobileScannerPage() {
           disabled={loading}
           className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-4 rounded-xl text-xs uppercase tracking-wider transition shadow-lg disabled:opacity-50 cursor-pointer"
         >
-          {loading ? 'Transmitting Log...' : '🏈 SUBMIT PATROL LOG'}
+          {loading ? 'Transmitting Log...' : 'SUBMIT PATROL LOG'}
         </button>
       </form>
     </div>
