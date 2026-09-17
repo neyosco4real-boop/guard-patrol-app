@@ -14,76 +14,56 @@ function ScannerContent() {
 
   const [scanCode, setScanCode] = useState(urlCode);
   const [guardName, setGuardName] = useState('');
-  const [resolvedLocation, setResolvedLocation] = useState('');
-  const [resolvedCheckpointName, setResolvedCheckpointName] = useState('');
+  const [locationName, setLocationName] = useState('TOM SALEM HQ');
+  const [checkpointName, setCheckpointName] = useState('');
   const [patrolType, setPatrolType] = useState('Normal Patrol');
   const [notes, setNotes] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const [locations, setLocations] = useState<any[]>([]);
   const [checkpoints, setCheckpoints] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchDatabaseData();
+    fetchCheckpoints();
   }, []);
 
   useEffect(() => {
-    if (urlCode) {
-      handleCodeChange(urlCode);
+    if (urlCode && checkpoints.length > 0) {
+      processCode(urlCode);
     }
-  }, [urlCode, checkpoints, locations]);
+  }, [urlCode, checkpoints]);
 
-  const fetchDatabaseData = async () => {
-    const { data: locs } = await supabase.from('locations').select('*');
-    if (locs) setLocations(locs);
-
-    const { data: cps } = await supabase.from('checkpoints').select('*');
-    if (cps) setCheckpoints(cps);
+  const fetchCheckpoints = async () => {
+    const { data } = await supabase.from('checkpoints').select('*');
+    if (data) setCheckpoints(data);
   };
 
-  const handleCodeChange = (codeVal: string) => {
+  const processCode = (codeVal: string) => {
     setScanCode(codeVal);
     const trimmed = codeVal.trim();
     if (!trimmed) {
-      setResolvedLocation('');
-      setResolvedCheckpointName('');
+      setCheckpointName('');
       return;
     }
 
-    // Flexible matching across code, id, or name
-    const matchedCP = checkpoints.find(
-      (cp) => 
-        (cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()) ||
-        (cp.id && cp.id.toString().toLowerCase() === trimmed.toLowerCase()) ||
-        (cp.name && cp.name.trim().toLowerCase() === trimmed.toLowerCase())
+    const match = checkpoints.find(
+      (cp) => cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()
     );
 
-    if (matchedCP) {
-      setResolvedCheckpointName(matchedCP.name);
-      const parentLoc = locations.find((l) => l.id === matchedCP.location_id || l.name?.toLowerCase() === matchedCP.location?.toLowerCase());
-      if (parentLoc) {
-        setResolvedLocation(parentLoc.name);
-      } else if (locations.length > 0) {
-        setResolvedLocation(locations[0].name);
-      } else {
-        setResolvedLocation('Primary Facility');
+    if (match) {
+      setCheckpointName(match.name);
+      if (match.location) {
+        setLocationName(match.location);
       }
     } else {
-      // Direct fallback to scanned text if not in DB yet
-      setResolvedCheckpointName(trimmed);
-      if (locations.length > 0) {
-        setResolvedLocation(locations[0].name);
-      } else {
-        setResolvedLocation('Primary Facility');
-      }
+      setCheckpointName(trimmed);
     }
   };
 
   const handleSubmitPatrol = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scanCode.trim() || !guardName.trim()) {
-      alert('Please enter your guard name and ensure a checkpoint is scanned.');
+      alert('Please enter your guard name and scan a checkpoint code.');
       return;
     }
 
@@ -95,32 +75,31 @@ function ScannerContent() {
 
     if (navigator.geolocation) {
       try {
-        const position: any = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000 });
+        const pos: any = await new Promise((res, rej) => {
+          navigator.geolocation.getCurrentPosition(res, rej, { timeout: 4000 });
         });
-        latitude = position.coords.latitude.toFixed(4);
-        longitude = position.coords.longitude.toFixed(4);
-      } catch (e) {
+        latitude = pos.coords.latitude.toFixed(4);
+        longitude = pos.coords.longitude.toFixed(4);
+      } catch (err) {
         console.log('Using default GPS fallback.');
       }
     }
 
-    const logPayload = {
+    const payload = {
       guard_name: guardName,
-      location: resolvedLocation || 'Primary Facility',
-      checkpoint: resolvedCheckpointName || scanCode,
+      location: locationName || 'TOM SALEM HQ',
+      checkpoint: checkpointName || scanCode,
       latitude,
       longitude,
     };
 
-    const { error } = await supabase.from('guard_logs').insert([logPayload]);
+    const { error } = await supabase.from('guard_logs').insert([payload]);
 
     setLoading(false);
     if (!error) {
-      setStatusMessage('✅ Patrol log submitted successfully!');
+      setStatusMessage('✅ Patrol log successfully sent to live feed!');
       setScanCode('');
-      setResolvedLocation('');
-      setResolvedCheckpointName('');
+      setCheckpointName('');
       setNotes('');
     } else {
       setStatusMessage('❌ Error transmitting log: ' + error.message);
@@ -156,12 +135,12 @@ function ScannerContent() {
               </div>
             )}
           </div>
-          
+
           <button 
             type="button"
             onClick={() => {
-              const manualTestCode = prompt("Simulate Checkpoint Scan (Enter Code):", checkpoints[0]?.code || "TS-CP-1");
-              if (manualTestCode) handleCodeChange(manualTestCode);
+              const testCode = prompt("Simulate QR Code Scan:", checkpoints[0]?.code || "TS-CP-1");
+              if (testCode) processCode(testCode);
             }}
             className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-black py-2.5 rounded-xl text-xs uppercase tracking-wider mb-2 transition shadow cursor-pointer"
           >
@@ -172,7 +151,7 @@ function ScannerContent() {
             type="text"
             placeholder="Or type checkpoint code manually..."
             value={scanCode}
-            onChange={(e) => handleCodeChange(e.target.value)}
+            onChange={(e) => processCode(e.target.value)}
             className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500 text-center"
           />
         </div>
@@ -192,17 +171,26 @@ function ScannerContent() {
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">LOCATION (AUTO-FILLED BY QR) *</label>
-            <div className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-emerald-400 font-bold">
-              {resolvedLocation || <span className="text-slate-600 font-normal">Awaiting QR Scan...</span>}
-            </div>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">LOCATION *</label>
+            <input 
+              type="text"
+              value={locationName}
+              onChange={(e) => setLocationName(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
+              required
+            />
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">CHECKPOINT (AUTO-FILLED BY QR) *</label>
-            <div className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-emerald-400 font-mono font-bold">
-              {resolvedCheckpointName || <span className="text-slate-600 font-normal">Awaiting QR scan...</span>}
-            </div>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">CHECKPOINT NAME *</label>
+            <input 
+              type="text"
+              placeholder="Awaiting QR scan..."
+              value={checkpointName}
+              onChange={(e) => setCheckpointName(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-emerald-400 font-mono font-bold focus:outline-none focus:border-emerald-500"
+              required
+            />
           </div>
 
           <div>
