@@ -22,23 +22,32 @@ function ScannerContent() {
   const [loading, setLoading] = useState(false);
   
   const [checkpoints, setCheckpoints] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchCheckpoints();
+    fetchAllData();
   }, []);
 
   useEffect(() => {
-    if (urlCode && checkpoints.length > 0) {
-      processCode(urlCode);
+    if (urlCode && (checkpoints.length > 0 || locations.length > 0)) {
+      processCode(urlCode, checkpoints, locations);
     }
-  }, [urlCode, checkpoints]);
+  }, [urlCode, checkpoints, locations]);
 
-  const fetchCheckpoints = async () => {
-    const { data } = await supabase.from('checkpoints').select('*');
-    if (data) setCheckpoints(data);
+  const fetchAllData = async () => {
+    const { data: locData } = await supabase.from('locations').select('*');
+    if (locData) setLocations(locData);
+
+    const { data: cpData } = await supabase.from('checkpoints').select('*');
+    if (cpData) {
+      setCheckpoints(cpData);
+      if (urlCode) {
+        processCode(urlCode, cpData, locData || []);
+      }
+    }
   };
 
-  const processCode = (codeVal: string) => {
+  const processCode = (codeVal: string, cpList = checkpoints, locList = locations) => {
     setScanCode(codeVal);
     const trimmed = codeVal.trim();
     if (!trimmed) {
@@ -46,13 +55,24 @@ function ScannerContent() {
       return;
     }
 
-    const match = checkpoints.find(
-      (cp) => cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()
+    // Match checkpoint by code, id, or name
+    const match = cpList.find(
+      (cp) => 
+        (cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()) ||
+        (cp.id && cp.id.toString().toLowerCase() === trimmed.toLowerCase()) ||
+        (cp.name && cp.name.trim().toLowerCase() === trimmed.toLowerCase())
     );
 
     if (match) {
-      setCheckpointName(match.name);
-      if (match.location) {
+      setCheckpointName(match.name || trimmed);
+      
+      // Resolve location via relational location_id or fallback text field
+      if (match.location_id) {
+        const foundLoc = locList.find((l) => l.id === match.location_id);
+        if (foundLoc && foundLoc.name) {
+          setLocationName(foundLoc.name);
+        }
+      } else if (match.location) {
         setLocationName(match.location);
       }
     } else {
@@ -139,7 +159,7 @@ function ScannerContent() {
           <button 
             type="button"
             onClick={() => {
-              const testCode = prompt("Simulate QR Code Scan:", checkpoints[0]?.code || "TS-CP-1");
+              const testCode = prompt("Simulate QR Code Scan (Enter Checkpoint Code):", checkpoints[0]?.code || "TS-CP-1");
               if (testCode) processCode(testCode);
             }}
             className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-black py-2.5 rounded-xl text-xs uppercase tracking-wider mb-2 transition shadow cursor-pointer"
