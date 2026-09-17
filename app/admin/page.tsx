@@ -38,16 +38,17 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  const activeGuardsCount = new Set(logs.map((l) => l.guard_name)).size;
+  const activeIncidentsCount = logs.filter(
+    (l) => l.patrol_type === 'Incident Response' || (l.notes && l.notes.toLowerCase().includes('incident'))
+  ).length;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 font-sans">
       <div className="max-w-7xl mx-auto">
         
         {/* Top Header */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xl">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xl">
           <div>
-            {/* Prominent System Title with Logo Badge */}
             <div className="flex items-center gap-3 mb-2">
               <div className="w-9 h-9 bg-emerald-950/80 border border-emerald-800 rounded-xl flex items-center justify-center text-emerald-400 text-lg shadow-inner">
                 🛡️
@@ -82,19 +83,85 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Metric Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-1">Total Patrol Scans</p>
-            <p className="text-3xl font-black text-white">{logs.length}</p>
+        {/* 4 Styled Top Metric Cards matching Screenshot */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          
+          {/* TOTAL LOGS */}
+          <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex justify-between items-center relative overflow-hidden">
+            <div>
+              <p className="text-[10px] font-mono tracking-widest text-slate-400 uppercase mb-1">Total Logs</p>
+              <p className="text-2xl font-black text-white">{logs.length}</p>
+            </div>
+            <div className="w-11 h-11 bg-slate-800/80 border border-slate-700/50 rounded-xl flex items-center justify-center text-cyan-400 shadow-inner">
+              📡
+            </div>
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-1">Active Guards Logged</p>
-            <p className="text-3xl font-black text-emerald-400">{activeGuardsCount}</p>
+
+          {/* ACTIVE INCIDENTS */}
+          <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex justify-between items-center relative overflow-hidden">
+            <div>
+              <p className="text-[10px] font-mono tracking-widest text-slate-400 uppercase mb-1">Active Incidents</p>
+              <p className="text-2xl font-black text-white">{activeIncidentsCount}</p>
+            </div>
+            <div className="w-11 h-11 bg-red-950/80 border border-red-800/60 rounded-xl flex items-center justify-center text-red-400 shadow-inner">
+              🚨
+            </div>
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-1">Monitored Facilities</p>
-            <p className="text-3xl font-black text-cyan-400">{locations.length || 1}</p>
+
+          {/* ACTIVE LOCATIONS */}
+          <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex justify-between items-center relative overflow-hidden">
+            <div>
+              <p className="text-[10px] font-mono tracking-widest text-slate-400 uppercase mb-1">Active Locations</p>
+              <p className="text-2xl font-black text-white">{locations.length || 1}</p>
+            </div>
+            <div className="w-11 h-11 bg-slate-800/80 border border-slate-700/50 rounded-xl flex items-center justify-center text-emerald-400 shadow-inner">
+              🏢
+            </div>
+          </div>
+
+          {/* TOTAL CHECKPOINTS */}
+          <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex justify-between items-center relative overflow-hidden">
+            <div>
+              <p className="text-[10px] font-mono tracking-widest text-slate-400 uppercase mb-1">Total Checkpoints</p>
+              <p className="text-2xl font-black text-white">{checkpoints.length}</p>
+            </div>
+            <div className="w-11 h-11 bg-slate-800/80 border border-slate-700/50 rounded-xl flex items-center justify-center text-pink-400 shadow-inner">
+              📍
+            </div>
+          </div>
+
+        </div>
+
+        {/* Sub-navigation bar matching screenshot (Live Patrol Telemetry Feed, Site & Checkpoint Manager, Export Report) */}
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-6 bg-slate-900/50 p-2 rounded-2xl border border-slate-800/60">
+          <div className="flex items-center gap-2">
+            <button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition shadow flex items-center gap-2">
+              <span className="w-2 h-2 bg-slate-950 rounded-full animate-pulse"></span>
+              Live Patrol Telemetry Feed
+            </button>
+            <a 
+              href="/admin/qr-codes" 
+              className="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2"
+            >
+              🏢 Site & Checkpoint Manager
+            </a>
+          </div>
+          <div>
+            <button 
+              onClick={() => {
+                const csvHeader = "Timestamp,Guard Name,Location,Checkpoint,Patrol Type,GPS,Notes\n";
+                const csvRows = logs.map(l => `"${l.created_at}","${l.guard_name}","${l.location}","${l.checkpoint}","${l.patrol_type}","${l.latitude}, ${l.longitude}","${(l.notes || '').replace(/"/g, '""')}"`).join("\n");
+                const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `TomSalem_Patrol_Audit_${new Date().toISOString().slice(0,10)}.csv`;
+                a.click();
+              }}
+              className="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer"
+            >
+              📊 Export Report ▼
+            </button>
           </div>
         </div>
 
