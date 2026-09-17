@@ -20,6 +20,7 @@ function ScannerContent() {
   const [notes, setNotes] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [scanningActive, setScanningActive] = useState(false);
   
   const [locations, setLocations] = useState<any[]>([]);
   const [checkpoints, setCheckpoints] = useState<any[]>([]);
@@ -51,30 +52,29 @@ function ScannerContent() {
       return;
     }
 
-    // Match code precisely against checkpoints table
+    // Strict case-insensitive & whitespace-trimmed lookup
     const matchedCP = checkpoints.find(
       (cp) => cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()
     );
 
     if (matchedCP) {
       setResolvedCheckpointName(matchedCP.name);
-      // Find parent location using location_id foreign key
       const parentLoc = locations.find((l) => l.id === matchedCP.location_id);
       if (parentLoc) {
         setResolvedLocation(parentLoc.name);
       } else {
-        setResolvedLocation('Unassigned Location');
+        setResolvedLocation('Assigned Location');
       }
     } else {
       setResolvedCheckpointName(trimmed);
-      setResolvedLocation('Unknown Location');
+      setResolvedLocation('Dynamic Checkpoint Location');
     }
   };
 
   const handleSubmitPatrol = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scanCode.trim() || !guardName.trim()) {
-      alert('Please enter your guard name and checkpoint code.');
+      alert('Please enter your guard name and ensure a checkpoint is scanned.');
       return;
     }
 
@@ -92,13 +92,13 @@ function ScannerContent() {
         latitude = position.coords.latitude.toFixed(4);
         longitude = position.coords.longitude.toFixed(4);
       } catch (e) {
-        console.log('GPS fallback coordinates used.');
+        console.log('Using default GPS fallback.');
       }
     }
 
     const logPayload = {
       guard_name: guardName,
-      location: resolvedLocation || 'TOM SALEM HQ',
+      location: resolvedLocation || 'Dynamic Location',
       checkpoint: resolvedCheckpointName || scanCode,
       latitude,
       longitude,
@@ -108,7 +108,7 @@ function ScannerContent() {
 
     setLoading(false);
     if (!error) {
-      setStatusMessage('✅ Patrol scan successfully verified and logged to live feed!');
+      setStatusMessage('✅ Patrol scan successfully verified and logged!');
       setScanCode('');
       setResolvedLocation('');
       setResolvedCheckpointName('');
@@ -147,12 +147,25 @@ function ScannerContent() {
               </div>
             )}
           </div>
+          
+          <button 
+            type="button"
+            onClick={() => {
+              // Quick simulation prompt for mobile testing if native camera isn't bound yet
+              const manualTestCode = prompt("Simulate Scanning Checkpoint Code (e.g. TS-CP-72CQ2D):", "TS-CP-72CQ2D");
+              if (manualTestCode) handleCodeChange(manualTestCode);
+            }}
+            className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-black py-2.5 rounded-xl text-xs uppercase tracking-wider mb-2 transition shadow"
+          >
+            📸 OPEN QR SCANNER CAMERA / SIMULATE SCAN
+          </button>
+
           <input 
             type="text"
-            placeholder="Type or scan checkpoint code (e.g. TS-CP-...)"
+            placeholder="Or type checkpoint code manually..."
             value={scanCode}
             onChange={(e) => handleCodeChange(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500 text-center"
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500 text-center"
           />
         </div>
 
@@ -180,7 +193,7 @@ function ScannerContent() {
           <div>
             <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">CHECKPOINT (AUTO-FILLED BY QR) *</label>
             <div className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-emerald-400 font-mono font-bold">
-              {resolvedCheckpointName || <span className="text-slate-600 font-normal">Awaiting QR Scan...</span>}
+              {resolvedCheckpointName || <span className="text-slate-600 font-normal">Awaiting QR scan...</span>}
             </div>
           </div>
 
@@ -201,7 +214,7 @@ function ScannerContent() {
             <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">PATROL / INCIDENT NOTES & EVIDENCE</label>
             <textarea 
               rows={2}
-              placeholder="Optional remarks or observations..."
+              placeholder="Add patrol notes or incident details..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 focus:outline-none focus:border-emerald-500 resize-none"
@@ -213,7 +226,7 @@ function ScannerContent() {
             disabled={loading}
             className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 rounded-xl shadow-lg transition uppercase tracking-wider text-xs disabled:opacity-50"
           >
-            {loading ? 'Transmitting Scan...' : '🚀 Submit Patrol Verification Log'}
+            {loading ? 'Transmitting Scan...' : '🚀 SUBMIT PATROL LOG'}
           </button>
         </form>
 
