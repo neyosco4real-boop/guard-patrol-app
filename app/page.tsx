@@ -1,303 +1,236 @@
 'use client';
-import { compressImage } from '@/utils/compressor';
-import { useState, useRef, useEffect } from 'react';
-import jsQR from 'jsqr';
 
-export default function PatrolApp() {
+import React, { useState, useEffect, Suspense } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { useSearchParams } from 'next/navigation';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+function ScannerContent() {
+  const searchParams = useSearchParams();
+  const urlCode = searchParams.get('code') || searchParams.get('checkpoint') || '';
+
+  const [scanCode, setScanCode] = useState(urlCode);
   const [guardName, setGuardName] = useState('');
-  const [locationSite, setLocationSite] = useState('');
-  const [checkpoint, setCheckpoint] = useState('');
-  const [gpsCoordinates, setGpsCoordinates] = useState('Acquiring GPS...');
+  const [resolvedLocation, setResolvedLocation] = useState('');
+  const [resolvedCheckpointName, setResolvedCheckpointName] = useState('');
+  const [patrolType, setPatrolType] = useState('Normal Patrol');
   const [notes, setNotes] = useState('');
-  const [status, setStatus] = useState('Completed');
+  const [statusMessage, setStatusMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
-
-  const [scanning, setScanning] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-
-  const [incidentPhoto, setIncidentPhoto] = useState<string | null>(null);
-  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  
+  const [locations, setLocations] = useState<any[]>([]);
+  const [checkpoints, setCheckpoints] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setGpsCoordinates('Not Supported');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude.toFixed(5);
-        const lon = position.coords.longitude.toFixed(5);
-        setGpsCoordinates(`${lat}, ${lon}`);
-      },
-      (error) => {
-        setGpsCoordinates('Permission Denied / Unavailable');
-      },
-      { timeout: 15000, enableHighAccuracy: true }
-    );
+    fetchDatabaseData();
   }, []);
 
-  const startScanner = async () => {
-    setScanning(true);
-    setFeedback(null);
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        videoRef.current.play();
-      }
-    } catch (err) {
-      setFeedback('Camera access denied or unavailable.');
-      setScanning(false);
-    }
-  };
-
-  const stopScanner = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-    setScanning(false);
-  };
-
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
+    if (urlCode && checkpoints.length > 0) {
+      handleCodeChange(urlCode);
+    }
+  }, [urlCode, checkpoints, locations]);
 
-    const scanTick = () => {
-      if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        if (canvas) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height);
-            if (code) {
-              const rawData = code.data;
-              let parsedLoc = '';
-              let parsedCp = '';
+  const fetchDatabaseData = async () => {
+    const { data: locs } = await supabase.from('locations').select('*');
+    if (locs) setLocations(locs);
 
-              if (rawData.includes('|')) {
-                const parts = rawData.split('|');
-                for (const part of parts) {
-                  const lower = part.toLowerCase();
-                  if (lower.includes('location')) {
-                    parsedLoc = part.split(':')[1]?.trim() || part.trim();
-                  } else if (lower.includes('checkpoint')) {
-                    parsedCp = part.split(':')[1]?.trim() || part.trim();
-                  }
-                }
-                if (!parsedLoc && !parsedCp && parts.length >= 2) {
-                  parsedLoc = parts[0].replace(/location[:\s]*/i, '').trim();
-                  parsedCp = parts[1].replace(/checkpoint[:\s]*/i, '').trim();
-                }
-              }
+    const { data: cps } = await supabase.from('checkpoints').select('*');
+    if (cps) setCheckpoints(cps);
+  };
 
-              if (parsedLoc) setLocationSite(parsedLoc);
-              if (parsedCp) setCheckpoint(parsedCp);
-              
-              if (!parsedLoc && !parsedCp) {
-                setCheckpoint(rawData.replace(/checkpoint[:\s]*/i, '').trim());
-              }
-
-              stopScanner();
-              setFeedback('QR Code captured successfully!');
-              return;
-            }
-          }
-        }
-      }
-      if (scanning) {
-        timeoutId = setTimeout(scanTick, 250);
-      }
-    };
-
-    if (scanning) {
-      scanTick();
+  const handleCodeChange = (codeVal: string) => {
+    setScanCode(codeVal);
+    const trimmed = codeVal.trim();
+    if (!trimmed) {
+      setResolvedLocation('');
+      setResolvedCheckpointName('');
+      return;
     }
 
-    return () => clearTimeout(timeoutId);
-  }, [scanning]);
+    // Match code precisely against checkpoints table
+    const matchedCP = checkpoints.find(
+      (cp) => cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()
+    );
 
-  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (file) {
-    try {
-      const compressedFile = await compressImage(file, 800, 0.7);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setIncidentPhoto(reader.result as string);
-      };
-      reader.readAsDataURL(compressedFile);
-    } catch (error) {
-      console.error('Image compression failed:', error);
+    if (matchedCP) {
+      setResolvedCheckpointName(matchedCP.name);
+      // Find parent location using location_id foreign key
+      const parentLoc = locations.find((l) => l.id === matchedCP.location_id);
+      if (parentLoc) {
+        setResolvedLocation(parentLoc.name);
+      } else {
+        setResolvedLocation('Unassigned Location');
+      }
+    } else {
+      setResolvedCheckpointName(trimmed);
+      setResolvedLocation('Unknown Location');
     }
-  }
-};
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmitPatrol = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guardName || !locationSite) {
-      setFeedback('Please fill in Guard Name and Location Site.');
+    if (!scanCode.trim() || !guardName.trim()) {
+      alert('Please enter your guard name and checkpoint code.');
       return;
     }
 
     setLoading(true);
-    setFeedback(null);
-    try {
-      
-      const res = await fetch('/api/scans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          guard_name: guardName,
-          location: locationSite,
-          checkpoint: checkpoint || 'Main Entrance',
-          gps_coordinates: gpsCoordinates,
-          incident_report: notes || 'No issue',
-          attachment_url: incidentPhoto,
-          status: status
-        })
-      });
+    setStatusMessage('');
 
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
+    let latitude = '6.5244';
+    let longitude = '3.3792';
 
-      setFeedback('Telemetry transmitted successfully!');
-      setCheckpoint('');
+    if (navigator.geolocation) {
+      try {
+        const position: any = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000 });
+        });
+        latitude = position.coords.latitude.toFixed(4);
+        longitude = position.coords.longitude.toFixed(4);
+      } catch (e) {
+        console.log('GPS fallback coordinates used.');
+      }
+    }
+
+    const logPayload = {
+      guard_name: guardName,
+      location: resolvedLocation || 'TOM SALEM HQ',
+      checkpoint: resolvedCheckpointName || scanCode,
+      latitude,
+      longitude,
+    };
+
+    const { error } = await supabase.from('guard_logs').insert([logPayload]);
+
+    setLoading(false);
+    if (!error) {
+      setStatusMessage('✅ Patrol scan successfully verified and logged to live feed!');
+      setScanCode('');
+      setResolvedLocation('');
+      setResolvedCheckpointName('');
       setNotes('');
-      setIncidentPhoto(null);
-    } catch (err: any) {
-      setFeedback('Error: ' + err.message);
-    } finally {
-      setLoading(false);
+    } else {
+      setStatusMessage('❌ Error transmitting log: ' + error.message);
     }
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-        <h1 className="text-xl font-bold mb-1">🛡️ Guard Patrol Scanner</h1>
-        <p className="text-sm text-slate-400 mb-4">Scan physical checkpoint QRs and capture live GPS telemetry.</p>
-        
-        {feedback && (
-          <div className="mb-4 p-3 bg-teal-950 border border-teal-500/50 text-teal-300 text-xs rounded-xl text-center font-medium">
-            {feedback}
-          </div>
-        )}
-
-        {scanning ? (
-          <div className="mb-6 bg-slate-950 p-4 rounded-xl border border-teal-500/50 text-center">
-            <video ref={videoRef} className="w-full h-48 object-cover rounded-lg mb-3" muted playsInline />
-            <canvas ref={canvasRef} className="hidden" />
-            <button 
-              type="button" 
-              onClick={stopScanner}
-              className="bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-xl text-sm w-full"
-            >
-              Cancel Scanner
-            </button>
-          </div>
-        ) : (
-          <button 
-            type="button" 
-            onClick={startScanner}
-            className="w-full mb-6 bg-slate-800 hover:bg-slate-700 border border-teal-500/40 text-teal-400 font-semibold py-3 rounded-xl transition-all shadow flex items-center justify-center gap-2"
-          >
-            <span>📷 Scan QR Camera</span>
-          </button>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs uppercase font-semibold text-slate-400 mb-1">Guard Name</label>
-            <input 
-              type="text" 
-              value={guardName} 
-              onChange={(e) => setGuardName(e.target.value)} 
-              placeholder="Enter guard name..."
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-500"
-              required 
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs uppercase font-semibold text-slate-400 mb-1">Location Site</label>
-            <input 
-              type="text" 
-              value={locationSite} 
-              onChange={(e) => setLocationSite(e.target.value)} 
-              placeholder="e.g. Multichoice"
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-500"
-              required 
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs uppercase font-semibold text-slate-400 mb-1">Checkpoint</label>
-            <input 
-              type="text" 
-              value={checkpoint} 
-              onChange={(e) => setCheckpoint(e.target.value)} 
-              placeholder="e.g. Gate 2 / Server Room"
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs uppercase font-semibold text-slate-400 mb-1">GPS Coordinates (Live)</label>
-            <input 
-              type="text" 
-              value={gpsCoordinates} 
-              readOnly
-              className="w-full bg-slate-950 border border-slate-800 text-teal-400 font-mono rounded-xl p-3 text-sm focus:outline-none cursor-not-allowed"
-            />
-          </div>
-
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-xs uppercase font-semibold text-slate-400">Incident Report / Notes</label>
-              <button 
-                type="button" 
-                onClick={() => photoInputRef.current?.click()}
-                className="text-xs text-teal-400 hover:underline flex items-center gap-1"
-              >
-                📸 {incidentPhoto ? 'Photo Attached ✅' : 'Snap Incident Photo'}
-              </button>
-              <input 
-                type="file" 
-                accept="image/*" 
-                capture="environment"
-                ref={photoInputRef} 
-                onChange={handlePhotoCapture} 
-                className="hidden" 
-              />
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-4 font-sans flex flex-col items-center">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl my-4">
+        {/* Header */}
+        <div className="flex justify-between items-center border-b border-slate-800 pb-4 mb-5">
+          <div className="flex items-center gap-2">
+            <span className="w-8 h-8 rounded-full bg-red-950 border border-red-800 flex items-center justify-center text-red-400 font-bold text-xs">🛡️</span>
+            <div>
+              <h1 className="text-sm font-black tracking-wider uppercase text-white">Guard Patrol Scanner</h1>
+              <p className="text-[10px] text-slate-400">Tom Salem Security PWA</p>
             </div>
+          </div>
+          <div className="bg-emerald-950 border border-emerald-800 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+            <span className="text-[10px] text-emerald-400 font-bold">Live Feed Connected</span>
+          </div>
+        </div>
+
+        {/* Scanner Viewport */}
+        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center mb-5">
+          <div className="h-28 bg-slate-900 rounded-xl border border-dashed border-slate-700 flex flex-col items-center justify-center relative overflow-hidden mb-3">
+            <span className="text-2xl mb-1">📷</span>
+            <p className="text-xs font-bold text-slate-300">QR CODE CHECKPOINT SCANNER</p>
+            {scanCode && (
+              <div className="absolute inset-x-0 bottom-0 bg-emerald-950/90 border-t border-emerald-800 py-1 text-[11px] font-mono text-emerald-400 font-bold">
+                ✓ Captured: {scanCode}
+              </div>
+            )}
+          </div>
+          <input 
+            type="text"
+            placeholder="Type or scan checkpoint code (e.g. TS-CP-...)"
+            value={scanCode}
+            onChange={(e) => handleCodeChange(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500 text-center"
+          />
+        </div>
+
+        {/* Form Inputs */}
+        <form onSubmit={handleSubmitPatrol} className="space-y-4 text-xs">
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">GUARD NAME *</label>
+            <input 
+              type="text" 
+              placeholder="Enter your full name..." 
+              value={guardName} 
+              onChange={(e) => setGuardName(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 font-bold focus:outline-none focus:border-emerald-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">LOCATION (AUTO-FILLED BY QR) *</label>
+            <div className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-emerald-400 font-bold">
+              {resolvedLocation || <span className="text-slate-600 font-normal">Awaiting QR Scan...</span>}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">CHECKPOINT (AUTO-FILLED BY QR) *</label>
+            <div className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-emerald-400 font-mono font-bold">
+              {resolvedCheckpointName || <span className="text-slate-600 font-normal">Awaiting QR Scan...</span>}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">PATROL TYPE *</label>
+            <select 
+              value={patrolType}
+              onChange={(e) => setPatrolType(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 font-bold focus:outline-none focus:border-emerald-500"
+            >
+              <option value="Normal Patrol">Normal Patrol</option>
+              <option value="Emergency Response">Emergency Response</option>
+              <option value="Supervisor Inspection">Supervisor Inspection</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">PATROL / INCIDENT NOTES & EVIDENCE</label>
             <textarea 
-              value={notes} 
-              onChange={(e) => setNotes(e.target.value)} 
-              placeholder="Describe any anomalies or leave blank..."
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:border-teal-500 h-24 resize-none"
+              rows={2}
+              placeholder="Optional remarks or observations..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 focus:outline-none focus:border-emerald-500 resize-none"
             />
           </div>
 
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold py-3.5 rounded-xl transition-all shadow-lg mt-2 disabled:opacity-50"
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 rounded-xl shadow-lg transition uppercase tracking-wider text-xs disabled:opacity-50"
           >
-            {loading ? 'TRANSMITTING TELEMETRY...' : 'SUBMIT PATROL LOG'}
+            {loading ? 'Transmitting Scan...' : '🚀 Submit Patrol Verification Log'}
           </button>
         </form>
+
+        {statusMessage && (
+          <div className="mt-4 p-3 bg-slate-950 border border-slate-800 rounded-xl text-[11px] text-center font-bold">
+            {statusMessage}
+          </div>
+        )}
       </div>
     </main>
+  );
+}
+
+export default function GuardScannerApp() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 text-slate-400 flex items-center justify-center">Loading Scanner...</div>}>
+      <ScannerContent />
+    </Suspense>
   );
 }
