@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -13,11 +13,24 @@ export default function AdminDashboard() {
   const [checkpoints, setCheckpoints] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchAdminData();
     const interval = setInterval(fetchAdminData, 10000);
-    return () => clearInterval(interval);
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsExportDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const fetchAdminData = async () => {
@@ -42,86 +55,102 @@ export default function AdminDashboard() {
     (l) => l.patrol_type === 'Incident Response' || (l.notes && l.notes.toLowerCase().includes('incident'))
   ).length;
 
-  // Function to generate and trigger PDF/HTML Printable Report
+  // Shared HTML generator for Report
+  const generateReportHtml = () => `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Tom Salem Security - Patrol Audit Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #111; padding: 20px; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #222; padding-bottom: 15px; margin-bottom: 20px; }
+          .logo-title { font-size: 16px; font-weight: bold; color: #065f46; text-transform: uppercase; }
+          .report-title { font-size: 22px; font-weight: 900; text-transform: uppercase; margin-top: 5px; }
+          .meta { font-size: 12px; color: #555; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+          th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; }
+          th { background-color: #f3f4f6; color: #1f2937; text-transform: uppercase; font-size: 10px; }
+          img.evidence { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; }
+          .no-img { font-style: italic; color: #888; font-size: 10px; }
+          @media print {
+            .no-print { display: none; }
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="logo-title">🛡️ Tom Salem Security Guard Patrol System</div>
+            <div class="report-title">Official Patrol Audit & Telemetry Report</div>
+            <div class="meta">Generated on: ${new Date().toLocaleString()} | Total Logs: ${logs.length}</div>
+          </div>
+          <button class="no-print" onclick="window.print()" style="padding: 10px 20px; background: #059669; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Print / Save as PDF</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Guard Name</th>
+              <th>Location</th>
+              <th>Checkpoint</th>
+              <th>Patrol Type</th>
+              <th>GPS Telemetry</th>
+              <th>Evidence Image</th>
+              <th>Incident Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logs.map(log => `
+              <tr>
+                <td>${new Date(log.created_at).toLocaleString()}</td>
+                <td><strong>${log.guard_name}</strong></td>
+                <td>${log.location}</td>
+                <td>${log.checkpoint}</td>
+                <td>${log.patrol_type}</td>
+                <td>${log.latitude},${log.longitude}</td>
+                <td>
+                  ${log.image_url ? `<img src="${log.image_url}" class="evidence" />` : `<span class="no-img">No Image</span>`}
+                </td>
+                <td>${log.notes || 'No reported issues'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  // Export as PDF via Print Window
   const handleExportPDF = () => {
+    setIsExportDropdownOpen(false);
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert('Please allow popups to export the PDF report.');
       return;
     }
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Tom Salem Security - Patrol Audit Report</title>
-          <style>
-            body { font-family: Arial, sans-serif; color: #111; padding: 20px; }
-            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #222; padding-bottom: 15px; margin-bottom: 20px; }
-            .logo-title { font-size: 16px; font-weight: bold; color: #065f46; text-transform: uppercase; }
-            .report-title { font-size: 22px; font-weight: 900; text-transform: uppercase; margin-top: 5px; }
-            .meta { font-size: 12px; color: #555; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
-            th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; }
-            th { background-color: #f3f4f6; color: #1f2937; text-transform: uppercase; font-size: 10px; }
-            img.evidence { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; }
-            .no-img { font-style: italic; color: #888; font-size: 10px; }
-            @media print {
-              .no-print { display: none; }
-              body { padding: 0; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <div class="logo-title">🛡️ Tom Salem Security Guard Patrol System</div>
-              <div class="report-title">Official Patrol Audit & Telemetry Report</div>
-              <div class="meta">Generated on: ${new Date().toLocaleString()} | Total Logs: ${logs.length}</div>
-            </div>
-            <button class="no-print" onclick="window.print()" style="padding: 10px 20px; background: #059669; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Print / Save as PDF</button>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>Guard Name</th>
-                <th>Location</th>
-                <th>Checkpoint</th>
-                <th>Patrol Type</th>
-                <th>GPS Telemetry</th>
-                <th>Evidence Image</th>
-                <th>Incident Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${logs.map(log => `
-                <tr>
-                  <td>${new Date(log.created_at).toLocaleString()}</td>
-                  <td><strong>${log.guard_name}</strong></td>
-                  <td>${log.location}</td>
-                  <td>${log.checkpoint}</td>
-                  <td>${log.patrol_type}</td>
-                  <td>${log.latitude},${log.longitude}</td>
-                  <td>
-                    ${log.image_url ? `<img src="${log.image_url}" class="evidence" />` : `<span class="no-img">No Image</span>`}
-                  </td>
-                  <td>${log.notes || 'No reported issues'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <script>
-            window.onload = function() {
-              setTimeout(() => { window.print(); }, 500);
-            };
-          </script>
-        </body>
-      </html>
+    const html = generateReportHtml() + `
+      <script>
+        window.onload = function() {
+          setTimeout(() => { window.print(); }, 500);
+        };
+      </script>
     `;
-
-    printWindow.document.write(htmlContent);
+    printWindow.document.write(html);
     printWindow.document.close();
+  };
+
+  // Export as standalone HTML file download
+  const handleExportHTML = () => {
+    setIsExportDropdownOpen(false);
+    const htmlContent = generateReportHtml();
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TomSalem_Patrol_Report_${new Date().toISOString().slice(0, 10)}.html`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -208,7 +237,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Sub-navigation bar with Export PDF/HTML option */}
+        {/* Sub-navigation bar with Export parent tab and dropdown */}
         <div className="flex flex-wrap justify-between items-center gap-3 mb-6 bg-slate-900/50 p-2 rounded-2xl border border-slate-800/60">
           <div className="flex items-center gap-2">
             <button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition shadow flex items-center gap-2">
@@ -223,31 +252,31 @@ export default function AdminDashboard() {
             </a>
           </div>
           
-          <div className="flex items-center gap-2">
-            {/* PDF Report Export Button */}
+          {/* Export Parent Tab with Dropdown */}
+          <div className="relative" ref={dropdownRef}>
             <button 
-              onClick={handleExportPDF}
-              className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 cursor-pointer shadow"
+              onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+              className="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow"
             >
-              📄 Export PDF / HTML Report
+              📤 Export Report <span className="text-[10px]">▼</span>
             </button>
 
-            {/* CSV Export Button */}
-            <button 
-              onClick={() => {
-                const csvHeader = "Timestamp,Guard Name,Location,Checkpoint,Patrol Type,GPS,Notes\n";
-                const csvRows = logs.map(l => `"${l.created_at}","${l.guard_name}","${l.location}","${l.checkpoint}","${l.patrol_type}","${l.latitude}, ${l.longitude}","${(l.notes || '').replace(/"/g, '""')}"`).join("\n");
-                const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `TomSalem_Patrol_Audit_${new Date().toISOString().slice(0,10)}.csv`;
-                a.click();
-              }}
-              className="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer"
-            >
-              📊 CSV ▼
-            </button>
+            {isExportDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1.5 z-50">
+                <button
+                  onClick={handleExportPDF}
+                  className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                >
+                  📄 Download PDF Report
+                </button>
+                <button
+                  onClick={handleExportHTML}
+                  className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 flex items-center gap-2 cursor-pointer border-t border-slate-800/60"
+                >
+                  🌐 Download HTML Report
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
