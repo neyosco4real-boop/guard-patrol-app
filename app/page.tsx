@@ -29,7 +29,7 @@ function ScannerContent() {
   }, []);
 
   useEffect(() => {
-    if (urlCode && checkpoints.length > 0) {
+    if (urlCode) {
       handleCodeChange(urlCode);
     }
   }, [urlCode, checkpoints, locations]);
@@ -51,28 +51,39 @@ function ScannerContent() {
       return;
     }
 
+    // Flexible matching across code, id, or name
     const matchedCP = checkpoints.find(
-      (cp) => cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()
+      (cp) => 
+        (cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()) ||
+        (cp.id && cp.id.toString().toLowerCase() === trimmed.toLowerCase()) ||
+        (cp.name && cp.name.trim().toLowerCase() === trimmed.toLowerCase())
     );
 
     if (matchedCP) {
       setResolvedCheckpointName(matchedCP.name);
-      const parentLoc = locations.find((l) => l.id === matchedCP.location_id);
+      const parentLoc = locations.find((l) => l.id === matchedCP.location_id || l.name?.toLowerCase() === matchedCP.location?.toLowerCase());
       if (parentLoc) {
         setResolvedLocation(parentLoc.name);
+      } else if (locations.length > 0) {
+        setResolvedLocation(locations[0].name);
       } else {
-        setResolvedLocation('Assigned Location');
+        setResolvedLocation('Primary Facility');
       }
     } else {
+      // Direct fallback to scanned text if not in DB yet
       setResolvedCheckpointName(trimmed);
-      setResolvedLocation('Dynamic Checkpoint Location');
+      if (locations.length > 0) {
+        setResolvedLocation(locations[0].name);
+      } else {
+        setResolvedLocation('Primary Facility');
+      }
     }
   };
 
   const handleSubmitPatrol = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scanCode.trim() || !guardName.trim()) {
-      alert('Please enter your guard name and ensure a checkpoint code is present.');
+      alert('Please enter your guard name and ensure a checkpoint is scanned.');
       return;
     }
 
@@ -96,7 +107,7 @@ function ScannerContent() {
 
     const logPayload = {
       guard_name: guardName,
-      location: resolvedLocation || 'Assigned Location',
+      location: resolvedLocation || 'Primary Facility',
       checkpoint: resolvedCheckpointName || scanCode,
       latitude,
       longitude,
@@ -106,7 +117,7 @@ function ScannerContent() {
 
     setLoading(false);
     if (!error) {
-      setStatusMessage('✅ Patrol log submitted successfully to live feed!');
+      setStatusMessage('✅ Patrol log submitted successfully!');
       setScanCode('');
       setResolvedLocation('');
       setResolvedCheckpointName('');
@@ -149,7 +160,7 @@ function ScannerContent() {
           <button 
             type="button"
             onClick={() => {
-              const manualTestCode = prompt("Enter or Simulate Checkpoint Code (e.g. TS-CP-72CQ2D):", "TS-CP-72CQ2D");
+              const manualTestCode = prompt("Simulate Checkpoint Scan (Enter Code):", checkpoints[0]?.code || "TS-CP-1");
               if (manualTestCode) handleCodeChange(manualTestCode);
             }}
             className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-black py-2.5 rounded-xl text-xs uppercase tracking-wider mb-2 transition shadow cursor-pointer"
