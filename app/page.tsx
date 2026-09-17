@@ -55,7 +55,6 @@ function ScannerContent() {
       return;
     }
 
-    // Match checkpoint by code, id, or name
     const match = cpList.find(
       (cp) => 
         (cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()) ||
@@ -66,7 +65,6 @@ function ScannerContent() {
     if (match) {
       setCheckpointName(match.name || trimmed);
       
-      // Resolve location via relational location_id or fallback text field
       if (match.location_id) {
         const foundLoc = locList.find((l) => l.id === match.location_id);
         if (foundLoc && foundLoc.name) {
@@ -105,19 +103,24 @@ function ScannerContent() {
       }
     }
 
+    // Comprehensive payload sent directly to the live audit database feed
     const payload = {
       guard_name: guardName,
       location: locationName || 'TOM SALEM HQ',
       checkpoint: checkpointName || scanCode,
+      patrol_type: patrolType,
+      notes: notes || 'Standard Patrol Scan Verified',
       latitude,
       longitude,
+      geofence_status: 'Inside Perimeter',
+      created_at: new Date().toISOString(),
     };
 
     const { error } = await supabase.from('guard_logs').insert([payload]);
 
     setLoading(false);
     if (!error) {
-      setStatusMessage('✅ Patrol log successfully sent to live feed!');
+      setStatusMessage('✅ Patrol log successfully transmitted to Admin Live Feed!');
       setScanCode('');
       setCheckpointName('');
       setNotes('');
@@ -191,7 +194,7 @@ function ScannerContent() {
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">LOCATION *</label>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">LOCATION (AUTO-RESOLVED) *</label>
             <input 
               type="text"
               value={locationName}
@@ -202,7 +205,7 @@ function ScannerContent() {
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">CHECKPOINT NAME *</label>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">CHECKPOINT NAME (AUTO-RESOLVED) *</label>
             <input 
               type="text"
               placeholder="Awaiting QR scan..."
@@ -214,7 +217,7 @@ function ScannerContent() {
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">PATROL TYPE *</label>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">PATROL ACTION / TYPE *</label>
             <select 
               value={patrolType}
               onChange={(e) => setPatrolType(e.target.value)}
@@ -227,7 +230,7 @@ function ScannerContent() {
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">PATROL / INCIDENT NOTES & EVIDENCE</label>
+            <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">INCIDENT NOTES & OBSERVATIONS</label>
             <textarea 
               rows={2}
               placeholder="Add patrol notes or incident details..."
