@@ -20,7 +20,6 @@ function ScannerContent() {
   const [notes, setNotes] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [scanningActive, setScanningActive] = useState(false);
   
   const [locations, setLocations] = useState<any[]>([]);
   const [checkpoints, setCheckpoints] = useState<any[]>([]);
@@ -52,7 +51,6 @@ function ScannerContent() {
       return;
     }
 
-    // Strict case-insensitive & whitespace-trimmed lookup
     const matchedCP = checkpoints.find(
       (cp) => cp.code && cp.code.trim().toLowerCase() === trimmed.toLowerCase()
     );
@@ -151,7 +149,6 @@ function ScannerContent() {
           <button 
             type="button"
             onClick={() => {
-              // Quick simulation prompt for mobile testing if native camera isn't bound yet
               const manualTestCode = prompt("Simulate Scanning Checkpoint Code (e.g. TS-CP-72CQ2D):", "TS-CP-72CQ2D");
               if (manualTestCode) handleCodeChange(manualTestCode);
             }}
