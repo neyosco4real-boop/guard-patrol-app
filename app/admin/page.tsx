@@ -10,6 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export default function AdminDashboard() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'feed' | 'manager'>('feed');
 
@@ -22,10 +23,17 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchLogs();
     fetchStats();
+
+    // Auto-refresh interval every 15 seconds with smooth transition state
+    const interval = setInterval(() => {
+      handleAutoRefresh();
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchLogs = async () => {
-    setLoading(true);
+  const fetchLogs = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     const { data, error } = await supabase
       .from('guard_logs')
       .select('*')
@@ -39,7 +47,13 @@ export default function AdminDashboard() {
       const uniqueLocs = new Set(data.map((l) => l.location)).size;
       setActiveLocations(uniqueLocs);
     }
-    setLoading(false);
+    if (!isBackground) setLoading(false);
+  };
+
+  const handleAutoRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchLogs(true);
+    setTimeout(() => setIsRefreshing(false), 600);
   };
 
   const fetchStats = async () => {
@@ -146,9 +160,13 @@ export default function AdminDashboard() {
               🏢 Site & Checkpoint Manager
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
+              <span className={`w-2 h-2 rounded-full ${isRefreshing ? 'bg-amber-400 animate-ping' : 'bg-emerald-500'}`}></span>
+              {isRefreshing ? 'Syncing feed...' : 'Auto-refresh active (15s)'}
+            </div>
             <button
-              onClick={fetchLogs}
+              onClick={() => fetchLogs(false)}
               className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
             >
               🔄 Refresh Feed
@@ -158,7 +176,7 @@ export default function AdminDashboard() {
 
         {/* Conditional Tab Content */}
         {activeTab === 'feed' ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-6">
+          <div className={`bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-6 transition-opacity duration-300 ${isRefreshing ? 'opacity-85' : 'opacity-100'}`}>
             <div className="mb-6">
               <h2 className="text-base font-black tracking-wide text-white uppercase">LIVE PATROL FEED & AUDIT TRAIL</h2>
               <p className="text-xs text-slate-400 mt-0.5">Review real-time guard checkpoints, incident notes, attachments, and manage entries.</p>
