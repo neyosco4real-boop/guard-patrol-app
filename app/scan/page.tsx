@@ -21,9 +21,10 @@ export default function MobileScanPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const animFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Parse URL query parameters automatically on load if opened via QR scan or direct link
+    // Parse URL query parameters automatically on load if opened via direct link
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const loc = params.get('location');
@@ -31,13 +32,24 @@ export default function MobileScanPage() {
       if (loc) setLocation(decodeURIComponent(loc));
       if (chk) setCheckpoint(decodeURIComponent(chk));
     }
+
+    // Load jsQR library dynamically for actual camera QR decoding
+    if (typeof window !== 'undefined' && !document.getElementById('jsqr-script')) {
+      const script = document.createElement('script');
+      script.id = 'jsqr-script';
+      script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+      script.async = true;
+      document.body.appendChild(script);
+    }
+
+    return () => {
+      stopScanner();
+    };
   }, []);
 
-  // Function to process scanned text or URL and correctly split parameters
   const handleScannedData = (scannedText: string) => {
     try {
       if (scannedText.includes('location=') || scannedText.includes('checkpoint=')) {
-        // Handle URL format
         let urlObj;
         if (scannedText.startsWith('http')) {
           urlObj = new URL(scannedText);
@@ -51,35 +63,69 @@ export default function MobileScanPage() {
         if (chk) setCheckpoint(decodeURIComponent(chk));
 
         if (!loc && !chk) {
-          // Fallback: assign entire string to checkpoint if params aren't found
           setCheckpoint(scannedText);
         }
       } else {
-        // Plain text fallback
         setCheckpoint(scannedText);
       }
-      setStatusMessage({ text: `✓ Successfully Captured Checkpoint Code`, type: 'success' });
+      setStatusMessage({ text: `✅ Checkpoint Scanned Successfully!`, type: 'success' });
     } catch (e) {
       setCheckpoint(scannedText);
-      setStatusMessage({ text: `✓ Captured Checkpoint: ${scannedText}`, type: 'success' });
+      setStatusMessage({ text: `✅ Captured Checkpoint: ${scannedText}`, type: 'success' });
     }
-    setIsScanning(false);
+    stopScanner();
   };
 
-  // Trigger camera scanner simulation / input
+  // Real-time video frame scanning loop using jsQR
+  const tick = () => {
+    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current || document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        
+        // @ts-ignore
+        if (window.jsQR) {
+          // @ts-ignore
+          const code = window.jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert',
+          });
+
+          if (code && code.data) {
+            handleScannedData(code.data);
+            return;
+          }
+        }
+      }
+    }
+    if (isScanning) {
+      animFrameRef.current = requestAnimationFrame(tick);
+    }
+  };
+
   const startScanner = async () => {
     setIsScanning(true);
-    setStatusMessage({ text: 'Initializing camera scanner...', type: '' });
+    setStatusMessage({ text: 'Accessing camera...', type: '' });
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.setAttribute('playsinline', 'true');
+        await videoRef.current.play();
+        animFrameRef.current = requestAnimationFrame(tick);
+        setStatusMessage({ text: 'Align QR code within the frame to scan', type: '' });
       }
-    } catch (err) {
-      // Fallback to prompt if camera permission is blocked or unavailable
+    } catch (err: any) {
       setIsScanning(false);
-      const manualInput = prompt('Camera access unavailable. Enter Checkpoint Code or URL manually:');
+      setStatusMessage({ text: 'Camera access error: ' + (err.message || 'Permission denied'), type: 'error' });
+      const manualInput = prompt('Camera unavailable. Enter Checkpoint or QR URL manually:');
       if (manualInput) {
         handleScannedData(manualInput);
       }
@@ -87,14 +133,18 @@ export default function MobileScanPage() {
   };
 
   const stopScanner = () => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
     }
     setIsScanning(false);
   };
 
-  // Handle Photo Evidence Attachment
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -120,7 +170,6 @@ export default function MobileScanPage() {
     setSubmitting(true);
     setStatusMessage({ text: 'Submitting patrol log to live feed...', type: '' });
 
-    // Fetch live Geolocation
     let latitude = '6.5244';
     let longitude = '3.3792';
     if (navigator.geolocation) {
@@ -131,7 +180,7 @@ export default function MobileScanPage() {
         latitude = position.coords.latitude.toFixed(6);
         longitude = position.coords.longitude.toFixed(6);
       } catch (err) {
-        console.warn('Geolocation lookup failed, using default coordinates.');
+        console.warn('Geolocation lookup failed.');
       }
     }
 
@@ -164,6 +213,7 @@ export default function MobileScanPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 font-sans max-w-md mx-auto">
+      <canvas ref={canvasRef} className="hidden" />
       <div className="space-y-4">
         
         {/* Header */}
@@ -189,28 +239,17 @@ export default function MobileScanPage() {
           
           {isScanning ? (
             <div className="relative rounded-2xl overflow-hidden bg-black aspect-square flex flex-col items-center justify-center">
-              <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" />
+              <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" muted playsInline />
               <div className="absolute inset-0 border-2 border-emerald-500/80 rounded-2xl pointer-events-none flex items-center justify-center">
                 <div className="w-48 h-48 border border-dashed border-white/60 rounded-xl animate-pulse flex items-center justify-center">
                   <span className="text-[10px] bg-black/70 text-white px-2 py-1 rounded">Align QR Code</span>
                 </div>
               </div>
-              <div className="absolute bottom-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    stopScanner();
-                    // Simulating successful scan for testing convenience if video feed fails
-                    handleScannedData(`${window.location.origin}/scan?location=TOM%20SALEM%20HQ&checkpoint=RECEPTION`);
-                  }}
-                  className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow"
-                >
-                  Simulate Scan OK
-                </button>
+              <div className="absolute bottom-4">
                 <button
                   type="button"
                   onClick={stopScanner}
-                  className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow"
+                  className="bg-red-600 hover:bg-red-500 text-white px-6 py-2.5 rounded-xl text-xs font-bold shadow cursor-pointer"
                 >
                   Close Camera
                 </button>
