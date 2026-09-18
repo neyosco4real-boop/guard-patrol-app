@@ -23,7 +23,6 @@ export default function MobileScanPage() {
   const qrFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    // 1. Check URL parameters if opened directly
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const loc = params.get('location');
@@ -32,7 +31,6 @@ export default function MobileScanPage() {
       if (chk) setCheckpoint(decodeURIComponent(chk));
     }
 
-    // 2. Load industry-standard html5-qrcode library
     if (typeof window !== 'undefined' && !document.getElementById('html5-qrcode-script')) {
       const script = document.createElement('script');
       script.id = 'html5-qrcode-script';
@@ -66,6 +64,7 @@ export default function MobileScanPage() {
           setCheckpoint(decodedText);
         }
       } else {
+        // If QR code only contains plain text (e.g. "RECEPTION"), set it as checkpoint
         setCheckpoint(decodedText);
       }
       setStatusMessage({ text: `✅ Checkpoint Scanned Successfully!`, type: 'success' });
@@ -80,7 +79,6 @@ export default function MobileScanPage() {
     setIsScanning(true);
     setStatusMessage({ text: 'Initializing camera...', type: '' });
 
-    // Wait for container element to mount in DOM
     setTimeout(async () => {
       try {
         // @ts-ignore
@@ -95,9 +93,7 @@ export default function MobileScanPage() {
             (decodedText: string) => {
               handleScannedData(decodedText);
             },
-            (errorMessage: string) => {
-              // Scanning frame misses can be ignored safely
-            }
+            (errorMessage: string) => {}
           );
           setStatusMessage({ text: 'Align QR code within the frame', type: '' });
         } else {
@@ -124,7 +120,6 @@ export default function MobileScanPage() {
     setIsScanning(false);
   };
 
-  // Direct file scan using html5-qrcode file scanner (100% reliable on iOS & Android webviews)
   const handleQRFileScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -160,8 +155,8 @@ export default function MobileScanPage() {
       setStatusMessage({ text: 'Error: Please enter your Guard Name.', type: 'error' });
       return;
     }
-    if (!location.trim() || !checkpoint.trim()) {
-      setStatusMessage({ text: 'Error: Location and Checkpoint must be populated via QR scan.', type: 'error' });
+    if (!checkpoint.trim()) {
+      setStatusMessage({ text: 'Error: Checkpoint must be populated via QR scan.', type: 'error' });
       return;
     }
 
@@ -187,7 +182,7 @@ export default function MobileScanPage() {
     const { error } = await supabase.from('guard_logs').insert([
       {
         guard_name: guardName.trim(),
-        location: location.trim(),
+        location: location.trim() || 'Main Facility',
         checkpoint: checkpoint.trim(),
         patrol_type: patrolType,
         latitude,
@@ -290,13 +285,13 @@ export default function MobileScanPage() {
           </div>
 
           <div>
-            <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Location (Auto-Filled by QR) *</label>
+            <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Location (Editable / Auto-Filled)</label>
             <input
               type="text"
               value={location}
-              readOnly
-              placeholder="Scan QR code to populate location"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none"
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Enter or scan location..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
             />
           </div>
 
@@ -305,9 +300,10 @@ export default function MobileScanPage() {
             <input
               type="text"
               value={checkpoint}
-              readOnly
+              onChange={(e) => setCheckpoint(e.target.value)}
               placeholder="Scan QR code to populate checkpoint"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
+              required
             />
           </div>
 
@@ -348,7 +344,7 @@ export default function MobileScanPage() {
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Type observations or incident notes here..."
               rows={3}
-              className="w-xl bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 w-full"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500"
             ></textarea>
             {evidencePhoto && (
               <div className="mt-2 flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
@@ -357,7 +353,7 @@ export default function MobileScanPage() {
                 <button
                   type="button"
                   onClick={() => setEvidencePhoto(null)}
-                  className="ml-auto text-[10px] text-red-400 font-bold hover:underline"
+                  className="ml-auto text-[10px] text-red-400 font-brighter hover:underline"
                 >
                   Remove
                 </button>
