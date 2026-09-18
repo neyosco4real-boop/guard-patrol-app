@@ -1,4 +1,3 @@
-'app client';
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -47,18 +46,6 @@ export default function AdminDashboard() {
     const { data } = await supabase.from('checkpoints').select('*');
     if (data) {
       setTotalCheckpoints(data.length);
-    }
-  };
-
-  const handleDeleteLog = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this patrol log?')) return;
-
-    const { error } = await supabase.from('guard_logs').delete().eq('id', id);
-    if (error) {
-      alert(`Error deleting log: ${error.message}`);
-    } else {
-      setLogs(logs.filter((log) => log.id !== id));
-      setTotalLogs((prev) => prev - 1);
     }
   };
 
@@ -162,7 +149,7 @@ export default function AdminDashboard() {
           <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-6">
             <div className="mb-4">
               <h2 className="text-base font-black tracking-wide text-white uppercase">Live Patrol Feed & Audit Trail</h2>
-              <p className="text-xs text-slate-400">Review real-time guard checkpoints, incident notes, attachments, and manage entries.</p>
+              <p className="text-xs text-slate-400">Review real-time guard checkpoints, incident notes, and attachments.</p>
             </div>
 
             {loading ? (
@@ -182,7 +169,6 @@ export default function AdminDashboard() {
                       <th className="p-4">Geofence</th>
                       <th className="p-4">Status</th>
                       <th className="p-4">Incident Note & Attachment</th>
-                      <th className="p-4 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
@@ -225,14 +211,6 @@ export default function AdminDashboard() {
                                 />
                               </div>
                             )}
-                          </td>
-                          <td className="p-4 text-center whitespace-nowrap">
-                            <button
-                              onClick={() => handleDeleteLog(log.id)}
-                              className="bg-red-950 hover:bg-red-900 border border-red-800 text-red-200 px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shadow"
-                            >
-                              Delete
-                            </button>
                           </td>
                         </tr>
                       );
