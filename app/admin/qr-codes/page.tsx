@@ -235,7 +235,8 @@ export default function SiteAndCheckpointManager() {
               const locationName = matchedLocation ? matchedLocation.name : 'Unassigned Facility';
               const checkpointCode = cp.code || cp.id;
 
-              const qrPayload = `${origin || 'https://guard-patrol-app.vercel.app'}/?code=${encodeURIComponent(checkpointCode)}`;
+              // Include both location and checkpoint parameters properly in the QR link
+              const qrPayload = `${origin || 'https://guard-patrol-app.vercel.app'}/scan?location=${encodeURIComponent(locationName)}&checkpoint=${encodeURIComponent(cp.name)}`;
 
               return (
                 <div key={cp.id} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl flex flex-col justify-between">
