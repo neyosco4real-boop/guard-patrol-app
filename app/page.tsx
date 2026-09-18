@@ -8,21 +8,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371e3;
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
-}
-
 export default function MobileScannerPage() {
   const [guardName, setGuardName] = useState('');
   const [locationName, setLocationName] = useState('');
@@ -37,8 +22,6 @@ export default function MobileScannerPage() {
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
-  const [logs, setLogs] = useState<any[]>([]);
-
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -52,23 +35,11 @@ export default function MobileScannerPage() {
       }
     }
     captureGpsLocation();
-    fetchLogs();
 
     return () => {
       stopCameraScanner();
     };
   }, []);
-
-  const fetchLogs = async () => {
-    const { data, error } = await supabase
-      .from('guard_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(10);
-    if (data) {
-      setLogs(data);
-    }
-  };
 
   const captureGpsLocation = () => {
     if (navigator.geolocation) {
@@ -256,19 +227,6 @@ export default function MobileScannerPage() {
       setEvidencePhoto(null);
       setCheckpointName('');
       setLocationName('');
-      fetchLogs();
-    }
-  };
-
-  const handleDeleteLog = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this log?')) return;
-
-    const { error } = await supabase.from('guard_logs').delete().eq('id', id);
-    if (error) {
-      alert(`Error deleting log: ${error.message}`);
-    } else {
-      setLogs(logs.filter((log) => log.id !== id));
-      setStatusMessage({ type: 'success', text: 'Log successfully deleted.' });
     }
   };
 
@@ -431,40 +389,6 @@ export default function MobileScannerPage() {
           {loading ? 'Transmitting Log...' : 'SUBMIT PATROL LOG'}
         </button>
       </form>
-
-      {/* Recent Scanned Logs Section with Status & Delete */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-3">
-        <h3 className="text-xs font-black uppercase text-slate-300 tracking-wider">Recent Scanned Logs & Status</h3>
-        {logs.length === 0 ? (
-          <p className="text-xs text-slate-500 italic text-center py-2">No patrol logs recorded yet.</p>
-        ) : (
-          <div className="space-y-2.5">
-            {logs.map((log) => {
-              const isFraud = log.geofence_status && log.geofence_status.toLowerCase().includes('fraud');
-              return (
-                <div key={log.id} className="bg-slate-950 border border-slate-800/80 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs">
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white truncate">{log.guard_name}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide ${isFraud ? 'bg-red-950 border border-red-800 text-red-400' : 'bg-emerald-950 border border-emerald-800 text-emerald-400'}`}>
-                        {isFraud ? 'Fraud' : 'Verified'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 truncate">{log.checkpoint} • {log.location}</p>
-                    <p className="text-[9px] text-slate-500 font-mono">{new Date(log.created_at).toLocaleTimeString()}</p>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteLog(log.id)}
-                    className="bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-300 px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition shrink-0 cursor-pointer"
-                  >
-                    Delete
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
