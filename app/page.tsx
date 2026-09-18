@@ -64,7 +64,6 @@ export default function MobileScanPage() {
           setCheckpoint(decodedText);
         }
       } else {
-        // If QR code only contains plain text (e.g. "RECEPTION"), set it as checkpoint
         setCheckpoint(decodedText);
       }
       setStatusMessage({ text: `✅ Checkpoint Scanned Successfully!`, type: 'success' });
@@ -79,10 +78,20 @@ export default function MobileScanPage() {
     setIsScanning(true);
     setStatusMessage({ text: 'Initializing camera...', type: '' });
 
+    // Allow React state update to render reader-container in DOM first
     setTimeout(async () => {
       try {
         // @ts-ignore
         if (window.Html5Qrcode) {
+          // Clear any prior instance if stuck
+          try {
+            // @ts-ignore
+            const oldScanner = new window.Html5Qrcode("reader-container");
+            if (oldScanner && oldScanner.isScanning) {
+              await oldScanner.stop();
+            }
+          } catch(e) {}
+
           // @ts-ignore
           const html5QrCode = new window.Html5Qrcode("reader-container");
           scannerRef.current = html5QrCode;
@@ -102,15 +111,17 @@ export default function MobileScanPage() {
         }
       } catch (err: any) {
         setIsScanning(false);
-        setStatusMessage({ text: 'Camera permission denied or unavailable. Use file upload below.', type: 'error' });
+        setStatusMessage({ text: 'Camera access error. Please use "Snap/Upload QR Photo" below.', type: 'error' });
       }
-    }, 300);
+    }, 400);
   };
 
   const stopScanner = async () => {
     if (scannerRef.current) {
       try {
-        await scannerRef.current.stop();
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
         scannerRef.current.clear();
       } catch (e) {
         console.warn('Scanner stop error:', e);
@@ -239,18 +250,18 @@ export default function MobileScanPage() {
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl text-center space-y-3">
           <div className="text-xs font-black uppercase text-slate-300">QR Code Checkpoint Scanner</div>
           
-          <div className={`${isScanning ? 'block' : 'hidden'} relative rounded-2xl overflow-hidden bg-black`}>
-            <div id="reader-container" className="w-full"></div>
-            <button
-              type="button"
-              onClick={stopScanner}
-              className="mt-3 bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-xl text-xs font-bold shadow cursor-pointer"
-            >
-              Close Camera
-            </button>
-          </div>
-
-          {!isScanning && (
+          {isScanning ? (
+            <div className="relative rounded-2xl overflow-hidden bg-black p-2">
+              <div id="reader-container" className="w-full"></div>
+              <button
+                type="button"
+                onClick={stopScanner}
+                className="mt-3 bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-xl text-xs font-bold shadow cursor-pointer"
+              >
+                Close Camera
+              </button>
+            </div>
+          ) : (
             <div className="space-y-2">
               <button
                 type="button"
@@ -353,7 +364,7 @@ export default function MobileScanPage() {
                 <button
                   type="button"
                   onClick={() => setEvidencePhoto(null)}
-                  className="ml-auto text-[10px] text-red-400 font-brighter hover:underline"
+                  className="ml-auto text-[10px] text-red-400 font-bold hover:underline"
                 >
                   Remove
                 </button>
