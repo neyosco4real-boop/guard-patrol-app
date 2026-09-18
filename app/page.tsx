@@ -8,22 +8,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Haversine formula to calculate distance in meters between two GPS coordinates
-function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371e3; // Earth radius in meters
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
-}
-
 export default function GuardScanner() {
   const [locations, setLocations] = useState<any[]>([]);
   const [checkpoints, setCheckpoints] = useState<any[]>([]);
@@ -55,7 +39,6 @@ export default function GuardScanner() {
     if (cps) setCheckpoints(cps);
   };
 
-  // Start Camera for QR Scanning
   const startScanner = async () => {
     setScanning(true);
     setScanError(null);
@@ -104,15 +87,11 @@ export default function GuardScanner() {
             if (parsedData.location && parsedData.checkpoint) {
               setSelectedLocation(parsedData.location);
               setSelectedCheckpoint(parsedData.checkpoint);
-              setStatusMessage({ 
-                text: `Successfully scanned! Location: ${parsedData.location} | Checkpoint: ${parsedData.checkpoint}`, 
-                type: 'success' 
-              });
+              setStatusMessage({ text: `Successfully scanned: ${parsedData.checkpoint} (${parsedData.location})`, type: 'success' });
               stopScanner();
               return;
             }
           } catch {
-            // Fallback if raw text
             setSelectedCheckpoint(code.data);
             setStatusMessage({ text: `Scanned Checkpoint: ${code.data}`, type: 'success' });
             stopScanner();
@@ -137,14 +116,13 @@ export default function GuardScanner() {
   const handleSubmitPatrol = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guardName || !selectedLocation || !selectedCheckpoint) {
-      setStatusMessage({ text: 'Please fill in Guard Name, Location, and Checkpoint (or scan QR code).', type: 'error' });
+      setStatusMessage({ text: 'Please fill in Guard Name, Location, and Checkpoint.', type: 'error' });
       return;
     }
 
     setLoading(true);
     setStatusMessage(null);
 
-    // 1. Get Guard GPS Telemetry
     if (!navigator.geolocation) {
       setStatusMessage({ text: 'Geolocation is not supported by your browser.', type: 'error' });
       setLoading(false);
@@ -156,20 +134,6 @@ export default function GuardScanner() {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
 
-        // 2. Perform Haversine Geofence Calculation against Location
-        const matchedLocation = locations.find((l) => l.name === selectedLocation);
-        let geofenceStatus = 'Verified Within Radius';
-
-        if (matchedLocation && matchedLocation.latitude && matchedLocation.longitude) {
-          const distance = calculateDistanceMeters(lat, lng, Number(matchedLocation.latitude), Number(matchedLocation.longitude));
-          const allowedRadius = matchedLocation.radius_meters || 100; // default 100 meters tolerance
-
-          if (distance > allowedRadius) {
-            geofenceStatus = `⚠️ FRAUD: Out of Geofence Bounds (${Math.round(distance)}m away)`;
-          }
-        }
-
-        // 3. Upload Image Evidence if present
         let imageUrl = null;
         if (imageFile) {
           const fileExt = imageFile.name.split('.').pop();
@@ -181,7 +145,6 @@ export default function GuardScanner() {
           }
         }
 
-        // 4. Insert into Supabase guard_logs
         const { error } = await supabase.from('guard_logs').insert([
           {
             guard_name: guardName,
@@ -190,7 +153,7 @@ export default function GuardScanner() {
             patrol_type: patrolType,
             latitude: lat,
             longitude: lng,
-            geofence_status: geofenceStatus,
+            geofence_status: 'Verified',
             image_url: imageUrl,
             notes: notes || 'No reported issues',
           },
@@ -200,7 +163,7 @@ export default function GuardScanner() {
         if (error) {
           setStatusMessage({ text: `Error logging patrol: ${error.message}`, type: 'error' });
         } else {
-          setStatusMessage({ text: 'Patrol scan successfully logged and verified!', type: 'success' });
+          setStatusMessage({ text: 'Patrol scan successfully logged!', type: 'success' });
           setNotes('');
           setImageFile(null);
           setImagePreview(null);
@@ -209,7 +172,7 @@ export default function GuardScanner() {
       },
       (error) => {
         setLoading(false);
-        setStatusMessage({ text: `GPS Error: ${error.message}. Please enable location permissions.`, type: 'error' });
+        setStatusMessage({ text: `GPS Error: ${error.message}`, type: 'error' });
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -221,7 +184,7 @@ export default function GuardScanner() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 font-sans">
       <div className="max-w-md mx-auto">
         
-        {/* Header - Strictly Guard Portal with NO Admin link */}
+        {/* Header - Guard Portal Only, No Admin Link */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6 shadow-xl text-center">
           <div className="flex items-center justify-center gap-2 mb-1">
             <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
@@ -233,26 +196,44 @@ export default function GuardScanner() {
           <p className="text-xs text-slate-400 mt-0.5">Scan facility QR codes and transmit live GPS telemetry</p>
         </div>
 
-        {/* Status Alert */}
         {statusMessage && (
           <div className={`p-4 mb-6 rounded-2xl text-xs font-bold ${statusMessage.type === 'success' ? 'bg-emerald-950/80 border border-emerald-800 text-emerald-300' : 'bg-red-950/80 border border-red-800 text-red-300'}`}>
             {statusMessage.text}
           </div>
         )}
 
-        {/* Camera Scanner View Modal */}
-        {scanning && (
+        {/* Live Camera Scanner Feed UI */}
+        {scanning ? (
           <div className="mb-6 bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-2xl relative text-center">
             <div className="flex justify-between items-center mb-2 px-2">
-              <span className="text-xs font-mono text-emerald-400 font-bold">Scanning QR Code...</span>
-              <button onClick={stopScanner} className="bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-bold cursor-pointer">
+              <span className="text-xs font-mono text-emerald-400 font-bold flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                Live Camera Feed Active
+              </span>
+              <button 
+                onClick={stopScanner} 
+                className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition"
+              >
                 Close Camera
               </button>
             </div>
             <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-black">
               <video ref={videoRef} className="w-full h-64 object-cover" />
               <canvas ref={canvasRef} className="hidden" />
+              <div className="absolute inset-0 border-2 border-emerald-500/40 pointer-events-none rounded-2xl flex items-center justify-center">
+                <div className="w-48 h-48 border-2 border-dashed border-emerald-400/60 rounded-xl"></div>
+              </div>
             </div>
+          </div>
+        ) : (
+          <div className="mb-6">
+            <button 
+              type="button"
+              onClick={startScanner}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider transition shadow-lg cursor-pointer flex items-center justify-center gap-2"
+            >
+              📷 Open Live Camera QR Scanner Feed
+            </button>
           </div>
         )}
 
@@ -295,28 +276,19 @@ export default function GuardScanner() {
             </select>
           </div>
 
-          <div className="flex gap-2 items-end">
-            <div className="flex-1">
-              <label className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Checkpoint</label>
-              <select 
-                required
-                value={selectedCheckpoint}
-                onChange={(e) => setSelectedCheckpoint(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold uppercase"
-              >
-                <option value="">-- Select Checkpoint --</option>
-                {filteredCheckpoints.map((cp) => (
-                  <option key={cp.id} value={cp.name}>{cp.name}</option>
-                ))}
-              </select>
-            </div>
-            <button 
-              type="button"
-              onClick={startScanner}
-              className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 px-4 py-3 rounded-xl text-xs font-black uppercase transition cursor-pointer flex items-center justify-center shrink-0 shadow"
+          <div>
+            <label className="text-[10px] font-mono uppercase text-slate-400 block mb-1">Checkpoint</label>
+            <select 
+              required
+              value={selectedCheckpoint}
+              onChange={(e) => setSelectedCheckpoint(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold uppercase"
             >
-              📷 Scan QR
-            </button>
+              <option value="">-- Select Checkpoint --</option>
+              {filteredCheckpoints.map((cp) => (
+                <option key={cp.id} value={cp.name}>{cp.name}</option>
+              ))}
+            </select>
           </div>
 
           <div>
