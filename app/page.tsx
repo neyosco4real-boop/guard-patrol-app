@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import jsQR from 'jsqr';
+import { Html5Qrcode } from 'html5-qrcode';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -22,9 +22,8 @@ export default function MobileScannerPage() {
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerRunningRef = useRef(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -119,70 +118,62 @@ export default function MobileScannerPage() {
   };
 
   const startCameraScanner = async () => {
+    if (isScanning) return;
     setIsScanning(true);
     setStatusMessage({ type: 'info', text: 'Initializing camera scanner...' });
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-      });
+      // Small timeout to make sure DOM element #qr-reader is rendered
+      setTimeout(async () => {
+        const scanner = new Html5Qrcode('qr-reader');
+        scannerRef.current = scanner;
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', 'true');
-        await videoRef.current.play();
-        // Moderate scan loop speed using setTimeout (~150ms intervals) to reduce CPU load & scanning frequency
-        scheduleScanTick();
-      }
+        await scanner.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10, // Moderate scanning frequency (10 frames per second)
+            qrbox: { width: 220, height: 220 },
+          },
+          (decodedText) => {
+            if (scannerRunningRef.current) return;
+            scannerRunningRef.current = true;
+
+            scanner.stop().then(() => {
+              scanner.clear();
+              scannerRef.current = null;
+              scannerRunningRef.current = false;
+              setIsScanning(false);
+              verifyAndFetchCheckpoint(decodedText);
+            }).catch(() => {
+              scannerRef.current = null;
+              scannerRunningRef.current = false;
+              setIsScanning(false);
+              verifyAndFetchCheckpoint(decodedText);
+            });
+          },
+          () => {}
+        );
+        scannerRunningRef.current = false;
+      }, 100);
     } catch (err) {
+      console.error(err);
       alert('Unable to access camera. Please check camera permissions.');
       setIsScanning(false);
     }
   };
 
-  const scheduleScanTick = () => {
-    timeoutRef.current = setTimeout(() => {
-      scanQRCodeTick();
-    }, 150); // Moderate scanning frequency (approx 6-7 frames per second)
-  };
-
-  const scanQRCodeTick = () => {
-    if (!isScanning) return;
-
-    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-
-      if (canvas) {
-        canvas.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'dontInvert',
-          });
-
-          if (code) {
-            stopCameraScanner();
-            verifyAndFetchCheckpoint(code.data);
-            return;
-          }
+  const stopCameraScanner = async () => {
+    if (scannerRef.current) {
+      try {
+        if (scannerRunningRef.current) {
+          await scannerRef.current.stop();
         }
+        await scannerRef.current.clear();
+      } catch (e) {
+        // Ignore cleanup errors
       }
-    }
-    scheduleScanTick();
-  };
-
-  const stopCameraScanner = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((track) => track.stop());
+      scannerRef.current = null;
+      scannerRunningRef.current = false;
     }
     setIsScanning(false);
   };
@@ -242,7 +233,7 @@ export default function MobileScannerPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 font-sans max-w-md mx-auto space-y-4">
-      {/* Top Header Card Matching Screenshot */}
+      {/* Top Header Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2.5">
@@ -267,14 +258,13 @@ export default function MobileScannerPage() {
             <span className="text-[10px] font-mono text-emerald-400">{new Date().toLocaleTimeString()}</span>
           </div>
 
-          {/* Reduced Camera Viewfinder */}
-          {isScanning ? (
-            <div className="relative rounded-xl overflow-hidden bg-black aspect-video mb-3 border border-emerald-500/50">
-              <video ref={videoRef} className="w-full h-full object-cover" />
-              <canvas ref={canvasRef} className="hidden" />
-              <div className="absolute inset-0 border-2 border-dashed border-emerald-400/60 pointer-events-none animate-pulse"></div>
-            </div>
-          ) : (
+          {/* Camera Viewfinder Container */}
+          <div 
+            id="qr-reader" 
+            className={`rounded-xl overflow-hidden bg-black mb-3 border ${isScanning ? 'border-emerald-500/50 block' : 'hidden'}`}
+          ></div>
+
+          {!isScanning && (
             <div 
               onClick={startCameraScanner}
               className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-3 cursor-pointer hover:border-emerald-500/50 transition group"
@@ -289,7 +279,7 @@ export default function MobileScannerPage() {
           {isScanning ? (
             <button
               onClick={stopCameraScanner}
-              className="w-full bg-red-950/80 border border-red-800 text-red-300 font-bold py-3 rounded-xl text-xs uppercase"
+              className="w-full bg-red-950/80 border border-red-800 text-red-300 font-bold py-3 rounded-xl text-xs uppercase cursor-pointer"
             >
               Stop Camera
             </button>
