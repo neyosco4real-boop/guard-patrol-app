@@ -75,6 +75,78 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleExportHTML = () => {
+    const nowStr = new Date().toLocaleString('en-GB');
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Official Patrol Audit & Telemetry Report</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 30px; color: #111; background: #fff; }
+        .header-top { color: #15803d; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        h1 { font-size: 24px; font-black: 900; margin: 0 0 6px 0; font-weight: 900; }
+        .subtitle { font-size: 12px; color: #555; margin-bottom: 24px; }
+        .print-btn { background: #15803d; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 8px; cursor: pointer; float: right; }
+        .print-btn:hover { background: #166534; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+        th, td { border: 1px solid #e2e8f0; padding: 10px 12px; text-align: left; }
+        th { background: #f8fafc; font-weight: 700; color: #334155; text-transform: uppercase; font-size: 10px; font-family: monospace; }
+        tr:nth-child(even) { background: #fbfbfc; }
+        .guard { font-weight: bold; }
+        @media print { .print-btn { display: none; } }
+    </style>
+</head>
+<body>
+    <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+    <div class="header-top">🛡️ TOM SALEM SECURITY GUARD PATROL SYSTEM</div>
+    <h1>OFFICIAL PATROL AUDIT & TELEMETRY REPORT</h1>
+    <div class="subtitle">Generated on: ${nowStr} | Total Logs: ${logs.length}</div>
+    <hr style="border: 0; border-top: 2px solid #111; margin-bottom: 20px;" />
+    <table>
+        <thead>
+            <tr>
+                <th>TIMESTAMP</th>
+                <th>GUARD NAME</th>
+                <th>LOCATION</th>
+                <th>CHECKPOINT</th>
+                <th>PATROL TYPE</th>
+                <th>GPS TELEMETRY</th>
+                <th>EVIDENCE IMAGE</th>
+                <th>INCIDENT NOTES</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${logs.map(log => {
+              const photoData = log.evidence_photo || (log.notes && log.notes.startsWith('data:image') ? log.notes : null);
+              const cleanNotes = log.notes ? log.notes.replace('[Photo Evidence Attached]', '').trim() : 'No reported issues';
+              return `<tr>
+                <td>${new Date(log.created_at).toLocaleString('en-GB')}</td>
+                <td class="guard">${log.guard_name}</td>
+                <td>${log.location}</td>
+                <td>${log.checkpoint}</td>
+                <td>${log.patrol_type || 'Normal Patrol'}</td>
+                <td>${log.latitude},${log.longitude}</td>
+                <td>${photoData ? `<img src="${photoData}" style="width:50px;height:40px;object-fit:cover;border-radius:4px;" />` : '<span style="color:#94a3b8;font-style:italic;">No Image</span>'}</td>
+                <td>${cleanNotes}</td>
+              </tr>`;
+            }).join('')}
+        </tbody>
+    </table>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Patrol_Audit_Report_${new Date().toISOString().slice(0, 10)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -86,6 +158,12 @@ export default function AdminDashboard() {
             <p className="text-xs text-slate-400 mt-1">Real-time monitoring of security guard checkpoint scans and incident logs</p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleExportHTML}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow cursor-pointer"
+            >
+              📥 Export Report (HTML/PDF)
+            </button>
             <a
               href="/admin/qr-codes"
               className="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow"
