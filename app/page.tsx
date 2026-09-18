@@ -104,7 +104,10 @@ export default function GuardScanner() {
             if (parsedData.location && parsedData.checkpoint) {
               setSelectedLocation(parsedData.location);
               setSelectedCheckpoint(parsedData.checkpoint);
-              setStatusMessage({ text: `Successfully scanned: ${parsedData.checkpoint} (${parsedData.location})`, type: 'success' });
+              setStatusMessage({ 
+                text: `Successfully scanned! Location: ${parsedData.location} | Checkpoint: ${parsedData.checkpoint}`, 
+                type: 'success' 
+              });
               stopScanner();
               return;
             }
@@ -134,7 +137,7 @@ export default function GuardScanner() {
   const handleSubmitPatrol = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guardName || !selectedLocation || !selectedCheckpoint) {
-      setStatusMessage({ text: 'Please fill in Guard Name, Location, and Checkpoint.', type: 'error' });
+      setStatusMessage({ text: 'Please fill in Guard Name, Location, and Checkpoint (or scan QR code).', type: 'error' });
       return;
     }
 
@@ -218,7 +221,7 @@ export default function GuardScanner() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 font-sans">
       <div className="max-w-md mx-auto">
         
-        {/* Header */}
+        {/* Header - Strictly Guard Portal with NO Admin link */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6 shadow-xl text-center">
           <div className="flex items-center justify-center gap-2 mb-1">
             <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
@@ -228,11 +231,6 @@ export default function GuardScanner() {
           </div>
           <h1 className="text-lg font-black uppercase text-white">Mobile Checkpoint Scanner</h1>
           <p className="text-xs text-slate-400 mt-0.5">Scan facility QR codes and transmit live GPS telemetry</p>
-          <div className="mt-3">
-            <a href="/admin" target="_blank" className="text-[11px] text-cyan-400 font-bold hover:underline">
-              Switch to Admin Dashboard ↗
-            </a>
-          </div>
         </div>
 
         {/* Status Alert */}
