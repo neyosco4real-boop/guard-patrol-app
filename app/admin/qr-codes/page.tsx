@@ -142,6 +142,7 @@ export default function QRCodesManager() {
               {checkpoints.map((cp) => {
                 const cleanLoc = (cp.location || '').trim();
                 const cleanChk = (cp.checkpoint || cp.name || '').trim();
+                // Encode the precise URL with fully encoded parameters so the mobile scanner URLSearchParams parser extracts them correctly
                 const scanUrl = `${baseUrl}/scan?location=${encodeURIComponent(cleanLoc)}&checkpoint=${encodeURIComponent(cleanChk)}`;
                 const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(scanUrl)}`;
 
