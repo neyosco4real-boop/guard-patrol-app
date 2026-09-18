@@ -24,7 +24,7 @@ export default function MobileScannerPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationFrameRef = useRef<number | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -131,7 +131,8 @@ export default function MobileScannerPage() {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute('playsinline', 'true');
         await videoRef.current.play();
-        requestAnimationFrame(scanQRCodeTick);
+        // Moderate scan loop speed using setTimeout (~150ms intervals) to reduce CPU load & scanning frequency
+        scheduleScanTick();
       }
     } catch (err) {
       alert('Unable to access camera. Please check camera permissions.');
@@ -139,7 +140,15 @@ export default function MobileScannerPage() {
     }
   };
 
+  const scheduleScanTick = () => {
+    timeoutRef.current = setTimeout(() => {
+      scanQRCodeTick();
+    }, 150); // Moderate scanning frequency (approx 6-7 frames per second)
+  };
+
   const scanQRCodeTick = () => {
+    if (!isScanning) return;
+
     if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -163,12 +172,13 @@ export default function MobileScannerPage() {
         }
       }
     }
-    animationFrameRef.current = requestAnimationFrame(scanQRCodeTick);
+    scheduleScanTick();
   };
 
   const stopCameraScanner = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
