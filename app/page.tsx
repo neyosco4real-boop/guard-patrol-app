@@ -48,7 +48,7 @@ export default function GuardPatrolSystem() {
     };
   }, []);
 
-  const handleScannedData = (scannedText: string) => {
+  const handleScannedData = async (scannedText: string) => {
     let decodedText = scannedText.trim();
     
     if (scannerRef.current && scannerRef.current.isScanning) {
@@ -65,6 +65,15 @@ export default function GuardPatrolSystem() {
         const parsed = JSON.parse(decodedText);
         parsedLocation = parsed.location || '';
         parsedCheckpoint = parsed.checkpoint || parsed.name || '';
+      } else if (decodedText.startsWith('http://') || decodedText.startsWith('https://') || decodedText.includes('location=') || decodedText.includes('checkpoint=')) {
+        let urlObj;
+        if (decodedText.startsWith('http')) {
+          urlObj = new URL(decodedText);
+        } else {
+          urlObj = new URL(`https://dummy.com/${decodedText.startsWith('/') ? '' : '/'}${decodedText}`);
+        }
+        parsedLocation = urlObj.searchParams.get('location') || '';
+        parsedCheckpoint = urlObj.searchParams.get('checkpoint') || '';
       } else if (decodedText.includes('|')) {
         const parts = decodedText.split('|');
         parsedLocation = parts[0]?.trim() || '';
@@ -77,35 +86,29 @@ export default function GuardPatrolSystem() {
         const parts = decodedText.split(':');
         parsedLocation = parts[0]?.trim() || '';
         parsedCheckpoint = parts[1]?.trim() || '';
-      } else if (decodedText.includes('location=') || decodedText.includes('checkpoint=')) {
-        let urlObj;
-        if (decodedText.startsWith('http')) {
-          urlObj = new URL(decodedText);
-        } else {
-          urlObj = new URL(`https://dummy.com/${decodedText.startsWith('/') ? '' : '/'}${decodedText}`);
-        }
-        parsedLocation = urlObj.searchParams.get('location') || '';
-        parsedCheckpoint = urlObj.searchParams.get('checkpoint') || '';
       } else {
         parsedCheckpoint = decodedText;
       }
 
+      // If location parameter is empty in URL or missing, query Supabase checkpoints table or use checkpoint name
       if (!parsedLocation && parsedCheckpoint) {
-        supabase
-          .from('checkpoints')
-          .select('location')
-          .or(`name.ilike.${parsedCheckpoint},checkpoint.ilike.${parsedCheckpoint}`)
-          .single()
-          .then(({ data }) => {
-            const loc = data?.location || parsedCheckpoint;
-            setScannedPreview({ location: loc, checkpoint: parsedCheckpoint });
-          });
-      } else {
-        setScannedPreview({
-          location: parsedLocation || parsedCheckpoint,
-          checkpoint: parsedCheckpoint || decodedText
-        });
+        try {
+          const { data } = await supabase
+            .from('checkpoints')
+            .select('location')
+            .or(`name.ilike.${parsedCheckpoint},checkpoint.ilike.${parsedCheckpoint}`)
+            .single();
+          
+          parsedLocation = data?.location || parsedCheckpoint;
+        } catch (err) {
+          parsedLocation = parsedCheckpoint;
+        }
       }
+
+      setScannedPreview({
+        location: parsedLocation || parsedCheckpoint || decodedText,
+        checkpoint: parsedCheckpoint || decodedText
+      });
 
       setStatusMessage({ text: `✅ QR Scanned Successfully! Tap Confirm below.`, type: 'success' });
     } catch (e) {
