@@ -12,6 +12,11 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'feed' | 'manager'>('feed');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [showQrModal, setShowQrModal] = useState(false);
+
+  // QR Code generator states
+  const [qrLocation, setQrLocation] = useState('CR REPUBLIC');
+  const [qrCheckpoint, setQrCheckpoint] = useState('AWOLOWO RD');
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -48,6 +53,11 @@ export default function AdminDashboard() {
     setLogs(prevLogs => prevLogs.filter(log => log.id !== id));
   };
 
+  // Generate dynamic QR code URL using public api (e.g. qrio or qrserver)
+  const appDomain = typeof window !== 'undefined' ? window.location.origin : 'https://guard-patrol-app.vercel.app';
+  const qrPayload = `${appDomain}/scan?location=${encodeURIComponent(qrLocation)}&checkpoint=${encodeURIComponent(qrCheckpoint)}`;
+  const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrPayload)}`;
+
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100 p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -58,7 +68,7 @@ export default function AdminDashboard() {
             <h1 className="text-xl font-black text-white uppercase tracking-wider">ADMIN LIVE PATROL STREAM & AUDIT</h1>
             <p className="text-xs text-slate-400 mt-1">Real-time monitoring of security guard checkpoint scans and incident logs</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={() => alert('Export feature coming soon!')}
               className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer flex items-center gap-2"
@@ -66,7 +76,7 @@ export default function AdminDashboard() {
               📊 Export Report (HTML/PDF)
             </button>
             <button
-              onClick={() => alert('QR Codes modal coming soon!')}
+              onClick={() => setShowQrModal(true)}
               className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b] flex items-center gap-2"
             >
               📷 View Checkpoint QR Codes
@@ -240,6 +250,69 @@ export default function AdminDashboard() {
         </div>
 
       </div>
+
+      {/* QR Codes Modal */}
+      {showQrModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-3xl max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xs font-black uppercase text-white tracking-wider">Checkpoint QR Code Generator</h3>
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="bg-slate-800 text-white w-7 h-7 rounded-full text-xs font-bold hover:bg-slate-700 flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">Enter location and checkpoint name to generate a scannable QR code label for printing and deployment.</p>
+            
+            <div className="space-y-3 pt-2">
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-slate-400 uppercase">Location Name</label>
+                <input
+                  type="text"
+                  value={qrLocation}
+                  onChange={(e) => setQrLocation(e.target.value)}
+                  className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-slate-400 uppercase">Checkpoint Name</label>
+                <input
+                  type="text"
+                  value={qrCheckpoint}
+                  onChange={(e) => setQrCheckpoint(e.target.value)}
+                  className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
+                />
+              </div>
+
+              {/* QR Code Display Card */}
+              <div className="bg-white p-4 rounded-2xl flex flex-col items-center justify-center space-y-2 shadow-inner">
+                <img src={qrCodeImageUrl} alt="Checkpoint QR Code" className="w-48 h-48 object-contain" />
+                <div className="text-center">
+                  <p className="text-xs font-black text-slate-900 uppercase">{qrLocation}</p>
+                  <p className="text-[11px] font-bold text-slate-600 uppercase">📍 {qrCheckpoint}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => window.print()}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                🖨️ Print QR Code
+              </button>
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Image Preview Modal */}
       {selectedImage && (
