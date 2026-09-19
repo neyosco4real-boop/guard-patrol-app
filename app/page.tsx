@@ -90,30 +90,33 @@ export default function GuardPatrolSystem() {
         parsedCheckpoint = decodedText;
       }
 
-      // If location parameter is empty in URL or missing, query Supabase checkpoints table or use checkpoint name
+      // If location parameter is empty or missing, query Supabase checkpoints table to retrieve the correct location
       if (!parsedLocation && parsedCheckpoint) {
         try {
           const { data } = await supabase
             .from('checkpoints')
-            .select('location')
+            .select('location, name, checkpoint')
             .or(`name.ilike.${parsedCheckpoint},checkpoint.ilike.${parsedCheckpoint}`)
-            .single();
-          
-          parsedLocation = data?.location || parsedCheckpoint;
+            .maybeSingle();
+
+          if (data && data.location) {
+            parsedLocation = data.location;
+            parsedCheckpoint = data.name || data.checkpoint || parsedCheckpoint;
+          }
         } catch (err) {
-          parsedLocation = parsedCheckpoint;
+          console.warn('Supabase checkpoint lookup warning:', err);
         }
       }
 
       setScannedPreview({
-        location: parsedLocation || parsedCheckpoint || decodedText,
+        location: parsedLocation || 'Main Facility',
         checkpoint: parsedCheckpoint || decodedText
       });
 
       setStatusMessage({ text: `✅ QR Scanned Successfully! Tap Confirm below.`, type: 'success' });
     } catch (e) {
       setScannedPreview({
-        location: decodedText,
+        location: 'Main Facility',
         checkpoint: decodedText
       });
       setStatusMessage({ text: `✅ Scanned QR: ${decodedText}`, type: 'success' });
@@ -445,7 +448,7 @@ export default function GuardPatrolSystem() {
                   onClick={() => setEvidencePhoto(null)}
                   className="ml-auto text-[10px] text-red-400 font-bold hover:underline"
                 >
-                  Remove
+                  Remove`
                 </button>
               </div>
             )}
