@@ -103,12 +103,10 @@ export default function GuardPatrolSystem() {
       const finalLoc = parsedLocation || 'Main Facility';
       const finalChk = parsedCheckpoint || decodedText;
 
-      // Automatically populate the form fields directly without overlay confirmation box
       setLocation(finalLoc);
       setCheckpoint(finalChk);
       setStatusMessage({ text: `✅ QR Scanned & Auto-Filled Successfully!`, type: 'success' });
       
-      // Stop scanner immediately upon successful capture
       stopScanner();
     } catch (e) {
       setLocation('Main Facility');
@@ -212,8 +210,9 @@ export default function GuardPatrolSystem() {
       }
     }
 
-    const finalNotes = `${notes}${evidencePhoto ? ' [Photo Evidence Attached]' : ''}`;
+    const finalNotes = notes.trim();
 
+    // Removed evidence_photo from payload to match Supabase schema cache error fix
     const { error } = await supabase.from('guard_logs').insert([
       {
         guard_name: guardName.trim(),
@@ -223,8 +222,7 @@ export default function GuardPatrolSystem() {
         latitude,
         longitude,
         geofence_status: 'Verified',
-        notes: finalNotes,
-        evidence_photo: evidencePhoto
+        notes: finalNotes
       }
     ]);
 
@@ -365,21 +363,6 @@ export default function GuardPatrolSystem() {
           <div>
             <div className="flex justify-between items-center mb-1">
               <label className="text-[10px] font-mono text-slate-400 uppercase">Patrol / Incident Notes &</label>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="text-[10px] text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                Snap Evidence
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handlePhotoCapture}
-                className="hidden"
-              />
             </div>
             <textarea
               value={notes}
@@ -388,19 +371,6 @@ export default function GuardPatrolSystem() {
               rows={3}
               className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500"
             ></textarea>
-            {evidencePhoto && (
-              <div className="mt-2 flex items-center gap-2 bg-[#070b14] p-2 rounded-xl border border-[#1e293b]">
-                <img src={evidencePhoto} alt="Evidence Preview" className="w-12 h-12 object-cover rounded-lg" />
-                <span className="text-[10px] text-emerald-400 font-bold">Photo attached successfully</span>
-                <button
-                  type="button"
-                  onClick={() => setEvidencePhoto(null)}
-                  className="ml-auto text-[10px] text-red-400 font-bold hover:underline"
-                >
-                  Remove
-                </button>
-              </div>
-            )}
           </div>
 
           <button
