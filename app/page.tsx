@@ -20,7 +20,6 @@ export default function GuardPatrolSystem() {
   const [currentTime, setCurrentTime] = useState('');
 
   const scannerRef = useRef<any>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const updateClock = () => {
@@ -49,7 +48,6 @@ export default function GuardPatrolSystem() {
 
   const handleScannedData = async (scannedText: string) => {
     let decodedText = scannedText.trim();
-    
     let parsedLocation = '';
     let parsedCheckpoint = '';
 
@@ -136,9 +134,28 @@ export default function GuardPatrolSystem() {
           const html5QrCode = new window.Html5Qrcode("reader-container");
           scannerRef.current = html5QrCode;
 
+          // Directly request environment camera by ID or facingMode to bypass browser device picker dialog overlay
+          let cameraConfig: any = { facingMode: "environment" };
+          try {
+            // @ts-ignore
+            const devices = await window.Html5Qrcode.getCameras();
+            if (devices && devices.length > 0) {
+              // Pick the back camera if available, otherwise the first device
+              const backCamera = devices.find((d: any) => 
+                d.label.toLowerCase().includes('back') || 
+                d.label.toLowerCase().includes('rear') || 
+                d.label.toLowerCase().includes('environment')
+              );
+              cameraConfig = { deviceId: { exact: (backCamera || devices[devices.length - 1]).id } };
+            }
+          } catch (err) {
+            // Fallback to facingMode if getCameras restricted
+            cameraConfig = { facingMode: "environment" };
+          }
+
           await html5QrCode.start(
-            { facingMode: "environment" },
-            { fps: 2, qrbox: { width: 250, height: 250 } },
+            cameraConfig,
+            { fps: 10, qrbox: { width: 250, height: 250 } },
             (decodedText: string) => {
               handleScannedData(decodedText);
             },
@@ -150,8 +167,23 @@ export default function GuardPatrolSystem() {
           setIsScanning(false);
         }
       } catch (err: any) {
-        setIsScanning(false);
-        setStatusMessage({ text: 'Camera access error. Please try again.', type: 'error' });
+        // Fallback retry with simple facingMode if exact deviceId failed
+        try {
+          // @ts-ignore
+          const html5QrCode = new window.Html5Qrcode("reader-container");
+          scannerRef.current = html5QrCode;
+          await html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            (decodedText: string) => { handleScannedData(decodedText); },
+            (errorMessage: string) => {}
+          );
+          setStatusMessage({ text: 'Align QR code within the frame', type: '' });
+          return;
+        } catch (innerErr) {
+          setIsScanning(false);
+          setStatusMessage({ text: 'Camera access error. Please grant permissions.', type: 'error' });
+        }
       }
     }, 400);
   };
@@ -169,17 +201,6 @@ export default function GuardPatrolSystem() {
       scannerRef.current = null;
     }
     setIsScanning(false);
-  };
-
-  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setEvidencePhoto(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -212,7 +233,6 @@ export default function GuardPatrolSystem() {
 
     const finalNotes = notes.trim();
 
-    // Removed evidence_photo from payload to match Supabase schema cache error fix
     const { error } = await supabase.from('guard_logs').insert([
       {
         guard_name: guardName.trim(),
@@ -362,7 +382,7 @@ export default function GuardPatrolSystem() {
 
           <div>
             <div className="flex justify-between items-center mb-1">
-              <label className="text-[10px] font-mono text-slate-400 uppercase">Patrol / Incident Notes &</label>
+              <label className="text-[10px] font-mono text-slate-400 uppercase">Patrol / Incident Notes</label>
             </div>
             <textarea
               value={notes}
