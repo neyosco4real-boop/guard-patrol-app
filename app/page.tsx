@@ -10,7 +10,6 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export default function GuardPatrolSystem() {
   const [activeTab, setActiveTab] = useState<'scanner' | 'feed' | 'checkpoints'>('scanner');
   
-  // Scanner state
   const [guardName, setGuardName] = useState('');
   const [location, setLocation] = useState('');
   const [checkpoint, setCheckpoint] = useState('');
@@ -20,8 +19,8 @@ export default function GuardPatrolSystem() {
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
   const [submitting, setSubmitting] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [currentTime, setCurrentTime] = useState('');
 
-  // Live feed & checkpoints state
   const [guardLogs, setGuardLogs] = useState<any[]>([]);
   const [checkpointsList, setCheckpointsList] = useState<any[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
@@ -31,6 +30,17 @@ export default function GuardPatrolSystem() {
   const qrFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    // Clock interval matching the exact UI clock badge top right
+    const updateClock = () => {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      setCurrentTime(`${hours}:${minutes}:${seconds}`);
+    };
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const loc = params.get('location');
@@ -50,7 +60,6 @@ export default function GuardPatrolSystem() {
     fetchGuardLogs();
     fetchCheckpoints();
 
-    // Setup Supabase Realtime subscription for live feed updates
     const channel = supabase
       .channel('public:guard_logs')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'guard_logs' }, (payload) => {
@@ -59,6 +68,7 @@ export default function GuardPatrolSystem() {
       .subscribe();
 
     return () => {
+      clearInterval(timer);
       stopScanner();
       supabase.removeChannel(channel);
     };
@@ -137,7 +147,7 @@ export default function GuardPatrolSystem() {
 
           await html5QrCode.start(
             { facingMode: "environment" },
-            { fps: 10, qrbox: { width: 250, height: 250 } },
+            { fps: 10, qrbox: { width: 220, height: 220 } },
             (decodedText: string) => {
               handleScannedData(decodedText);
             },
@@ -150,7 +160,7 @@ export default function GuardPatrolSystem() {
         }
       } catch (err: any) {
         setIsScanning(false);
-        setStatusMessage({ text: 'Camera access error. Please use "Snap/Upload QR Photo" below.', type: 'error' });
+        setStatusMessage({ text: 'Camera access error. Please use QR photo upload below.', type: 'error' });
       }
     }, 400);
   };
@@ -246,7 +256,7 @@ export default function GuardPatrolSystem() {
     setSubmitting(false);
 
     if (!error) {
-      setStatusMessage({ text: '✅ Patrol Log Successfully Submitted to Live Feed!', type: 'success' });
+      setStatusMessage({ text: '✅ Patrol Log Successfully Submitted!', type: 'success' });
       setNotes('');
       setEvidencePhoto(null);
       setCheckpoint('');
@@ -258,7 +268,7 @@ export default function GuardPatrolSystem() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 font-sans max-w-md mx-auto">
+    <div className="min-h-screen bg-[#070b14] text-slate-100 p-4 font-sans max-w-md mx-auto">
       <div id="hidden-file-scanner" className="hidden"></div>
       <input
         ref={qrFileInputRef}
@@ -271,13 +281,28 @@ export default function GuardPatrolSystem() {
 
       <div className="space-y-4">
         
-        {/* Header */}
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-3xl shadow-xl text-center">
-          <div className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest mb-1">🛡️ Tom Salem Security</div>
-          <h1 className="text-base font-black text-white uppercase">Guard Patrol System</h1>
-          
-          {/* Navigation Tabs */}
-          <div className="flex bg-slate-950 p-1 rounded-xl mt-3 border border-slate-800">
+        {/* Exact Header matching the screenshot */}
+        <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-3xl shadow-xl relative">
+          <div className="flex justify-between items-start">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-red-950/80 border border-red-800 flex items-center justify-center shadow">
+                🛡️
+              </div>
+              <div>
+                <h1 className="text-sm font-black text-white uppercase tracking-wide">Guard Patrol</h1>
+                <h1 className="text-sm font-black text-white uppercase tracking-wide">Scanner</h1>
+              </div>
+            </div>
+
+            {/* Live Feed Connected Badge */}
+            <div className="bg-[#070b14] border border-[#1e293b] px-3 py-1.5 rounded-full flex items-center gap-2 shadow">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-[10px] font-bold text-emerald-400">Live Feed Connected</span>
+            </div>
+          </div>
+
+          {/* Navigation Tab Switcher */}
+          <div className="flex bg-[#070b14] p-1 rounded-xl mt-4 border border-[#1e293b]">
             <button
               onClick={() => setActiveTab('scanner')}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${activeTab === 'scanner' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}
@@ -304,21 +329,24 @@ export default function GuardPatrolSystem() {
           <div className={`p-3 rounded-2xl text-xs font-bold text-center border ${
             statusMessage.type === 'success' ? 'bg-emerald-950/80 border-emerald-800 text-emerald-300' :
             statusMessage.type === 'error' ? 'bg-red-950/80 border-red-800 text-red-300' :
-            'bg-slate-900 border-slate-800 text-slate-300'
+            'bg-[#0f172a] border-[#1e293b] text-slate-300'
           }`}>
             {statusMessage.text}
           </div>
         )}
 
-        {/* TAB 1: SCANNER */}
+        {/* TAB 1: EXACT UI SCANNER */}
         {activeTab === 'scanner' && (
           <div className="space-y-4">
-            {/* Scanner Box */}
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl text-center space-y-3">
-              <div className="text-xs font-black uppercase text-slate-300">QR Code Checkpoint Scanner</div>
+            {/* Exact Scanner Box */}
+            <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl p-4 shadow-xl space-y-3">
+              <div className="flex justify-between items-center text-xs font-black uppercase text-slate-300">
+                <span>QR CODE CHECKPOINT SCANNER</span>
+                <span className="text-emerald-400 font-mono text-[11px]">{currentTime}</span>
+              </div>
               
               {isScanning ? (
-                <div className="relative rounded-2xl overflow-hidden bg-black p-2">
+                <div className="relative rounded-2xl overflow-hidden bg-black p-2 text-center">
                   <div id="reader-container" className="w-full"></div>
                   <button
                     type="button"
@@ -329,27 +357,33 @@ export default function GuardPatrolSystem() {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="relative rounded-2xl overflow-hidden bg-[#070b14] border border-[#1e293b] p-6 text-center space-y-4">
+                  <div className="w-14 h-14 mx-auto rounded-full bg-emerald-950/80 border border-emerald-800/80 flex items-center justify-center shadow-inner">
+                    <span className="text-xl">📷</span>
+                  </div>
+                  <p className="text-xs text-slate-400">Open scanner to read checkpoint QR code</p>
+
                   <button
                     type="button"
                     onClick={startScanner}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-2 shadow cursor-pointer"
+                    className="w-full bg-[#10b981] hover:bg-emerald-500 text-[#070b14] font-black py-3 rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-lg cursor-pointer uppercase tracking-wider"
                   >
-                    📷 Open Live QR Scanner Camera
+                    <span>📷</span> OPEN QR SCANNER CAMERA
                   </button>
+
                   <button
                     type="button"
                     onClick={() => qrFileInputRef.current?.click()}
-                    className="w-full bg-slate-800 hover:bg-slate-700 text-cyan-400 py-2.5 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-2 border border-slate-700 shadow cursor-pointer"
+                    className="w-full bg-[#1e293b] hover:bg-slate-700 text-cyan-400 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 border border-slate-700 shadow cursor-pointer"
                   >
-                    📸 Snap/Upload QR Photo (100% Guaranteed)
+                    📸 Snap/Upload QR Photo (Guaranteed)
                   </button>
                 </div>
               )}
             </div>
 
-            {/* Patrol Submission Form */}
-            <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
+            {/* Patrol Form */}
+            <form onSubmit={handleSubmit} className="bg-[#0f172a] border border-[#1e293b] rounded-3xl p-5 space-y-4 shadow-xl">
               <div>
                 <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Guard Name *</label>
                 <input
@@ -357,19 +391,19 @@ export default function GuardPatrolSystem() {
                   value={guardName}
                   onChange={(e) => setGuardName(e.target.value)}
                   placeholder="Enter your full name..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Location (Editable / Auto-Filled)</label>
+                <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Location (Auto-Filled by QR) *</label>
                 <input
                   type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Enter or scan location..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
+                  placeholder="Awaiting QR scan..."
+                  className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 placeholder:text-slate-600"
                 />
               </div>
 
@@ -379,8 +413,8 @@ export default function GuardPatrolSystem() {
                   type="text"
                   value={checkpoint}
                   onChange={(e) => setCheckpoint(e.target.value)}
-                  placeholder="Scan QR code to populate checkpoint"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
+                  placeholder="Awaiting QR scan..."
+                  className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 placeholder:text-slate-600"
                   required
                 />
               </div>
@@ -390,7 +424,7 @@ export default function GuardPatrolSystem() {
                 <select
                   value={patrolType}
                   onChange={(e) => setPatrolType(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
                 >
                   <option value="Normal Patrol">Normal Patrol</option>
                   <option value="Routine Inspection">Routine Inspection</option>
@@ -406,7 +440,7 @@ export default function GuardPatrolSystem() {
                     onClick={() => fileInputRef.current?.click()}
                     className="text-[10px] text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    📸 Snap Evidence Photo
+                    📸 Snap Evidence
                   </button>
                   <input
                     ref={fileInputRef}
@@ -422,10 +456,10 @@ export default function GuardPatrolSystem() {
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Type observations or incident notes here..."
                   rows={3}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500"
                 ></textarea>
                 {evidencePhoto && (
-                  <div className="mt-2 flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
+                  <div className="mt-2 flex items-center gap-2 bg-[#070b14] p-2 rounded-xl border border-[#1e293b]">
                     <img src={evidencePhoto} alt="Evidence Preview" className="w-12 h-12 object-cover rounded-lg" />
                     <span className="text-[10px] text-emerald-400 font-bold">Photo attached successfully</span>
                     <button
@@ -452,12 +486,12 @@ export default function GuardPatrolSystem() {
 
         {/* TAB 2: LIVE FEED */}
         {activeTab === 'feed' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl space-y-3">
+          <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl p-4 shadow-xl space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-xs font-black uppercase text-slate-300">📡 Live Patrol Feed</span>
               <button
                 onClick={fetchGuardLogs}
-                className="text-[10px] bg-slate-800 text-emerald-400 px-3 py-1 rounded-lg border border-slate-700 hover:bg-slate-700 cursor-pointer font-bold"
+                className="text-[10px] bg-[#070b14] text-emerald-400 px-3 py-1 rounded-lg border border-[#1e293b] hover:bg-slate-800 cursor-pointer font-bold"
               >
                 🔄 Refresh
               </button>
@@ -470,7 +504,7 @@ export default function GuardPatrolSystem() {
             ) : (
               <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
                 {guardLogs.map((log, index) => (
-                  <div key={log.id || index} className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2">
+                  <div key={log.id || index} className="bg-[#070b14] border border-[#1e293b] rounded-2xl p-3.5 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="text-xs font-black text-white">{log.guard_name}</div>
@@ -482,18 +516,18 @@ export default function GuardPatrolSystem() {
                     </div>
 
                     {log.notes && (
-                      <p className="text-[11px] text-slate-300 bg-slate-900/80 p-2 rounded-xl border border-slate-800/80">
+                      <p className="text-[11px] text-slate-300 bg-[#0f172a]/80 p-2 rounded-xl border border-[#1e293b]">
                         {log.notes}
                       </p>
                     )}
 
                     {log.evidence_photo && (
                       <div className="mt-2">
-                        <img src={log.evidence_photo} alt="Evidence" className="w-full h-32 object-cover rounded-xl border border-slate-800" />
+                        <img src={log.evidence_photo} alt="Evidence" className="w-full h-32 object-cover rounded-xl border border-[#1e293b]" />
                       </div>
                     )}
 
-                    <div className="flex justify-between items-center text-[9px] text-slate-500 font-mono pt-1 border-t border-slate-900">
+                    <div className="flex justify-between items-center text-[9px] text-slate-500 font-mono pt-1 border-t border-[#0f172a]">
                       <span>📍 {log.latitude}, {log.longitude}</span>
                       <span>{new Date(log.created_at || Date.now()).toLocaleTimeString()}</span>
                     </div>
@@ -506,14 +540,14 @@ export default function GuardPatrolSystem() {
 
         {/* TAB 3: CHECKPOINTS */}
         {activeTab === 'checkpoints' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl space-y-3">
+          <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl p-4 shadow-xl space-y-3">
             <div className="text-xs font-black uppercase text-slate-300">📍 Registered Checkpoints</div>
             {checkpointsList.length === 0 ? (
               <div className="text-center py-8 text-xs text-slate-500">No checkpoints registered in database.</div>
             ) : (
               <div className="space-y-2">
                 {checkpointsList.map((cp, idx) => (
-                  <div key={cp.id || idx} className="bg-slate-950 border border-slate-800 p-3 rounded-2xl flex justify-between items-center">
+                  <div key={cp.id || idx} className="bg-[#070b14] border border-[#1e293b] p-3 rounded-2xl flex justify-between items-center">
                     <div>
                       <div className="text-xs font-bold text-white">{cp.name || cp.checkpoint}</div>
                       <div className="text-[10px] text-slate-400">{cp.location}</div>
