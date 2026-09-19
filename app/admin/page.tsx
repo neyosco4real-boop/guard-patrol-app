@@ -10,360 +10,170 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export default function AdminDashboard() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'feed' | 'manager'>('feed');
 
-  // Stats
-  const [totalLogs, setTotalLogs] = useState(0);
-  const [activeIncidents, setActiveIncidents] = useState(0);
-  const [activeLocations, setActiveLocations] = useState(0);
-  const [totalCheckpoints, setTotalCheckpoints] = useState(0);
-
-  useEffect(() => {
-    fetchLogs();
-    fetchStats();
-
-    // Auto-refresh interval every 15 seconds with smooth transition state
-    const interval = setInterval(() => {
-      handleAutoRefresh();
-    }, 15000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchLogs = async (isBackground = false) => {
-    if (!isBackground) setLoading(true);
+  const fetchLogs = async () => {
+    setLoading(true);
     const { data, error } = await supabase
       .from('guard_logs')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (data) {
+    if (!error && data) {
       setLogs(data);
-      setTotalLogs(data.length);
-      const incidents = data.filter((l) => l.notes && l.notes.trim() !== '' && !l.notes.includes('No reported issues')).length;
-      setActiveIncidents(incidents);
-      const uniqueLocs = new Set(data.map((l) => l.location)).size;
-      setActiveLocations(uniqueLocs);
     }
-    if (!isBackground) setLoading(false);
+    setLoading(false);
   };
 
-  const handleAutoRefresh = async () => {
-    setIsRefreshing(true);
-    await fetchLogs(true);
-    setTimeout(() => setIsRefreshing(false), 600);
-  };
+  useEffect(() => {
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 15000); // Auto-refresh every 15s
+    return () => clearInterval(interval);
+  }, []);
 
-  const fetchStats = async () => {
-    const { data } = await supabase.from('checkpoints').select('*');
-    if (data) {
-      setTotalCheckpoints(data.length);
+  const handleDeleteLog = async (id: string | number) => {
+    if (!confirm('Are you sure you want to permanently delete this patrol log?')) return;
+
+    // Permanently delete from Supabase database
+    const { error } = await supabase
+      .from('guard_logs')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('Failed to delete log: ' + error.message);
+      return;
     }
-  };
 
-  const handleDeleteLog = async (id: string, guardName: string) => {
-    if (confirm(`Are you sure you want to delete the patrol log for "${guardName}"?`)) {
-      const { error } = await supabase.from('guard_logs').delete().eq('id', id);
-      if (!error) {
-        setLogs(logs.filter((l) => l.id !== id));
-        setTotalLogs((prev) => prev - 1);
-      } else {
-        alert('Error deleting log: ' + error.message);
-      }
-    }
-  };
-
-  const handleExportHTML = () => {
-    const nowStr = new Date().toLocaleString('en-GB');
-    const htmlContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Official Patrol Audit & Telemetry Report</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 30px; color: #111; background: #fff; }
-        .header-top { color: #15803d; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
-        h1 { font-size: 24px; font-black: 900; margin: 0 0 6px 0; font-weight: 900; }
-        .subtitle { font-size: 12px; color: #555; margin-bottom: 24px; }
-        .print-btn { background: #15803d; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 8px; cursor: pointer; float: right; }
-        .print-btn:hover { background: #166534; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
-        th, td { border: 1px solid #e2e8f0; padding: 10px 12px; text-align: left; }
-        th { background: #f8fafc; font-weight: 700; color: #334155; text-transform: uppercase; font-size: 10px; font-family: monospace; }
-        tr:nth-child(even) { background: #fbfbfc; }
-        .guard { font-weight: bold; }
-        @media print { .print-btn { display: none; } }
-    </style>
-</head>
-<body>
-    <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
-    <div class="header-top">🛡️ TOM SALEM SECURITY GUARD PATROL SYSTEM</div>
-    <h1>OFFICIAL PATROL AUDIT & TELEMETRY REPORT</h1>
-    <div class="subtitle">Generated on: ${nowStr} | Total Logs: ${logs.length}</div>
-    <hr style="border: 0; border-top: 2px solid #111; margin-bottom: 20px;" />
-    <table>
-        <thead>
-            <tr>
-                <th>TIMESTAMP</th>
-                <th>GUARD NAME</th>
-                <th>LOCATION</th>
-                <th>CHECKPOINT</th>
-                <th>PATROL TYPE</th>
-                <th>GPS TELEMETRY</th>
-                <th>EVIDENCE IMAGE</th>
-                <th>INCIDENT NOTES</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${logs.map(log => {
-              const photoData = log.evidence_photo || (log.notes && log.notes.startsWith('data:image') ? log.notes : null);
-              const cleanNotes = log.notes ? log.notes.replace('[Photo Evidence Attached]', '').trim() : 'No reported issues';
-              return `<tr>
-                <td>${new Date(log.created_at).toLocaleString('en-GB')}</td>
-                <td class="guard">${log.guard_name}</td>
-                <td>${log.location}</td>
-                <td>${log.checkpoint}</td>
-                <td>${log.patrol_type || 'Normal Patrol'}</td>
-                <td>${log.latitude},${log.longitude}</td>
-                <td>${photoData ? `<img src="${photoData}" style="width:50px;height:40px;object-fit:cover;border-radius:4px;" />` : '<span style="color:#94a3b8;font-style:italic;">No Image</span>'}</td>
-                <td>${cleanNotes}</td>
-              </tr>`;
-            }).join('')}
-        </tbody>
-    </table>
-</body>
-</html>`;
-
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Patrol_Audit_Report_${new Date().toISOString().slice(0, 10)}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Update local state immediately so it disappears without needing manual refresh
+    setLogs(prevLogs => prevLogs.filter(log => log.id !== id));
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 font-sans">
+    <div className="min-h-screen bg-[#070b14] text-slate-100 p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Top Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl gap-4">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-[#0f172a] border border-[#1e293b] p-6 rounded-3xl shadow-xl gap-4">
           <div>
-            <h1 className="text-xl font-black tracking-wide text-white uppercase">Admin Live Patrol Stream & Audit</h1>
+            <h1 className="text-xl font-black text-white uppercase tracking-wider">ADMIN LIVE PATROL STREAM & AUDIT</h1>
             <p className="text-xs text-slate-400 mt-1">Real-time monitoring of security guard checkpoint scans and incident logs</p>
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={handleExportHTML}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow cursor-pointer"
+              onClick={fetchLogs}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b]"
             >
-              📥 Export Report (HTML/PDF)
+              🔄 Refresh Feed
             </button>
             <a
-              href="/admin/qr-codes"
-              className="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow"
-            >
-              📷 View Checkpoint QR Codes
-            </a>
-            <a
-              href="/scan"
+              href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer"
             >
               Open Mobile Scanner ↗
             </a>
           </div>
         </div>
 
-        {/* Top Stats Grid */}
+        {/* Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-xl flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Total Logs</p>
-              <h3 className="text-2xl font-black text-white mt-1">{totalLogs}</h3>
-            </div>
-            <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center text-cyan-400 font-bold">📊</div>
+          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-2xl shadow-xl">
+            <p className="text-[10px] font-mono text-slate-400 uppercase">Total Logs</p>
+            <h2 className="text-2xl font-black text-white mt-1">{logs.length}</h2>
           </div>
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-xl flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Active Incidents</p>
-              <h3 className="text-2xl font-black text-red-400 mt-1">{activeIncidents}</h3>
-            </div>
-            <div className="w-10 h-10 rounded-2xl bg-red-950/60 border border-red-900/50 flex items-center justify-center text-red-400 font-bold">🚨</div>
+          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-2xl shadow-xl">
+            <p className="text-[10px] font-mono text-slate-400 uppercase">Active Incidents / Notes</p>
+            <h2 className="text-2xl font-black text-amber-400 mt-1">{logs.filter(l => l.notes && l.notes.trim() !== '').length}</h2>
           </div>
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-xl flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Active Locations</p>
-              <h3 className="text-2xl font-black text-white mt-1">{activeLocations}</h3>
-            </div>
-            <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center text-emerald-400 font-bold">🏢</div>
+          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-2xl shadow-xl">
+            <p className="text-[10px] font-mono text-slate-400 uppercase">Active Locations</p>
+            <h2 className="text-2xl font-black text-cyan-400 mt-1">{new Set(logs.map(l => l.location)).size}</h2>
           </div>
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-xl flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Total Checkpoints</p>
-              <h3 className="text-2xl font-black text-white mt-1">{totalCheckpoints}</h3>
-            </div>
-            <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center text-purple-400 font-bold">📍</div>
+          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-2xl shadow-xl">
+            <p className="text-[10px] font-mono text-slate-400 uppercase">Checkpoints Scanned</p>
+            <h2 className="text-2xl font-black text-emerald-400 mt-1">{new Set(logs.map(l => l.checkpoint)).size}</h2>
           </div>
         </div>
 
-        {/* Navigation Tabs Bar */}
-        <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-3xl shadow-xl gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('feed')}
-              className={`px-4 py-2 rounded-2xl text-xs font-black transition flex items-center gap-2 cursor-pointer ${
-                activeTab === 'feed'
-                  ? 'bg-emerald-600/20 border border-emerald-500/40 text-emerald-400'
-                  : 'bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className={`w-2.5 h-2.5 rounded-full ${activeTab === 'feed' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`}></span>
-              Live Patrol Telemetry Feed
-            </button>
-            <button
-              onClick={() => setActiveTab('manager')}
-              className={`px-4 py-2 rounded-2xl text-xs font-black transition flex items-center gap-2 cursor-pointer ${
-                activeTab === 'manager'
-                  ? 'bg-emerald-600/20 border border-emerald-500/40 text-emerald-400'
-                  : 'bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              🏢 Site & Checkpoint Manager
-            </button>
+        {/* Patrol Log Table */}
+        <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl shadow-xl overflow-hidden">
+          <div className="p-5 border-b border-[#1e293b] flex justify-between items-center">
+            <h3 className="text-xs font-black uppercase text-white tracking-wider">LIVE PATROL FEED & AUDIT TRAIL</h3>
+            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-3 py-1 rounded-full">Auto-refresh active (15s)</span>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
-              <span className={`w-2 h-2 rounded-full ${isRefreshing ? 'bg-amber-400 animate-ping' : 'bg-emerald-500'}`}></span>
-              {isRefreshing ? 'Syncing feed...' : 'Auto-refresh active (15s)'}
-            </div>
-            <button
-              onClick={() => fetchLogs(false)}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
-            >
-              🔄 Refresh Feed
-            </button>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#070b14] border-b border-[#1e293b] text-slate-400 font-mono text-[10px] uppercase">
+                  <th className="p-4">Date/Time</th>
+                  <th className="p-4">Guard Name</th>
+                  <th className="p-4">Location</th>
+                  <th className="p-4">Checkpoint</th>
+                  <th className="p-4">GPS</th>
+                  <th className="p-4">Geofence</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4">Incident Note & Attachment</th>
+                  <th className="p-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1e293b]">
+                {loading && logs.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-slate-500">Loading live patrol telemetry...</td>
+                  </tr>
+                ) : logs.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-slate-500">No patrol logs found yet. Start scanning from the mobile app!</td>
+                  </tr>
+                ) : (
+                  logs.map((log) => {
+                    const dateObj = new Date(log.created_at || Date.now());
+                    const formattedDate = `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
+                    const formattedTime = `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:${String(dateObj.getSeconds()).padStart(2, '0')}`;
+
+                    return (
+                      <tr key={log.id} className="hover:bg-[#131d35] transition">
+                        <td className="p-4 font-mono text-slate-300 whitespace-nowrap">
+                          {formattedDate}<br/>
+                          <span className="text-[10px] text-slate-500">{formattedTime}</span>
+                        </td>
+                        <td className="p-4 font-bold text-white">{log.guard_name}</td>
+                        <td className="p-4 font-bold text-emerald-400">{log.location}</td>
+                        <td className="p-4 font-bold text-slate-200">{log.checkpoint}</td>
+                        <td className="p-4 font-mono text-[11px] text-slate-400">{log.latitude}, {log.longitude}</td>
+                        <td className="p-4">
+                          <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                            {log.geofence_status || 'Verified'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                            Successful Scan
+                          </span>
+                        </td>
+                        <td className="p-4 max-w-xs truncate text-slate-300">
+                          {log.notes || <span className="text-slate-600 italic">No issue</span>}
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={() => handleDeleteLog(log.id)}
+                            className="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-
-        {/* Conditional Tab Content */}
-        {activeTab === 'feed' ? (
-          <div className={`bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-6 transition-opacity duration-300 ${isRefreshing ? 'opacity-85' : 'opacity-100'}`}>
-            <div className="mb-6">
-              <h2 className="text-base font-black tracking-wide text-white uppercase">LIVE PATROL FEED & AUDIT TRAIL</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Review real-time guard checkpoints, incident notes, attachments, and manage entries.</p>
-            </div>
-
-            {loading ? (
-              <div className="p-12 text-center text-xs text-slate-400">Loading audit logs...</div>
-            ) : logs.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-400">No patrol logs found.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-950 text-slate-400 uppercase font-mono text-[10px] border-b border-slate-800">
-                    <tr>
-                      <th className="p-4">DATE/TIME</th>
-                      <th className="p-4">GUARD NAME</th>
-                      <th className="p-4">LOCATION</th>
-                      <th className="p-4">CHECKPOINT</th>
-                      <th className="p-4">GPS</th>
-                      <th className="p-4">GEOFENCE</th>
-                      <th className="p-4">STATUS</th>
-                      <th className="p-4">INCIDENT NOTE & ATTACHMENT</th>
-                      <th className="p-4 text-right">ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {logs.map((log) => {
-                      const isFraud = log.geofence_status && log.geofence_status.toLowerCase().includes('fraud');
-                      const photoData = log.evidence_photo || (log.notes && log.notes.startsWith('data:image') ? log.notes : null);
-                      const cleanNotes = log.notes ? log.notes.replace('[Photo Evidence Attached]', '').trim() : '';
-
-                      return (
-                        <tr key={log.id} className="hover:bg-slate-800/30 transition">
-                          <td className="p-4 font-mono text-slate-300 whitespace-nowrap">
-                            <div>{new Date(log.created_at).toLocaleDateString('en-GB').replace(/\//g, '/')}</div>
-                            <div className="text-[11px] text-slate-400">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</div>
-                          </td>
-                          <td className="p-4 font-bold text-white whitespace-nowrap">{log.guard_name}</td>
-                          <td className="p-4 text-emerald-400 font-bold whitespace-nowrap">{log.location}</td>
-                          <td className="p-4 text-slate-200 font-bold whitespace-nowrap">{log.checkpoint}</td>
-                          <td className="p-4 font-mono text-slate-300 whitespace-nowrap">
-                            {log.latitude}, {log.longitude}
-                          </td>
-                          <td className="p-4 whitespace-nowrap">
-                            <span className="bg-emerald-950 border border-emerald-800 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-bold">
-                              Verified
-                            </span>
-                          </td>
-                          <td className="p-4 whitespace-nowrap">
-                            <span className="bg-emerald-950 border border-emerald-800 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-bold">
-                              {isFraud ? 'Fraudulent Scan' : 'Successful Scan'}
-                            </span>
-                          </td>
-                          <td className="p-4 text-slate-300 max-w-xs">
-                            <div className="font-semibold text-white mb-1">{cleanNotes || 'Incident report'}</div>
-                            {photoData && (
-                              <div className="mt-1">
-                                <img
-                                  src={photoData}
-                                  alt="Attachment"
-                                  onClick={() => setSelectedImage(photoData)}
-                                  className="w-16 h-12 object-cover rounded-lg border border-slate-700 cursor-pointer hover:opacity-80 transition shadow"
-                                />
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-4 text-right whitespace-nowrap">
-                            <button
-                              onClick={() => handleDeleteLog(log.id, log.guard_name)}
-                              className="bg-red-950/80 border border-red-800 text-red-300 hover:bg-red-900 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer shadow"
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-4">
-            <h2 className="text-lg font-bold text-white">Site & Checkpoint Manager</h2>
-            <p className="text-xs text-slate-400">Manage registered locations, security checkpoints, and guard assignments.</p>
-            <a
-              href="/admin/qr-codes"
-              className="inline-block bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl text-xs font-bold transition shadow"
-            >
-              Open Checkpoint Management & QR Codes ↗
-            </a>
-          </div>
-        )}
 
       </div>
-
-      {/* Image Modal Lightbox */}
-      {selectedImage && (
-        <div 
-          onClick={() => setSelectedImage(null)}
-          className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 cursor-pointer"
-        >
-          <div className="relative max-w-2xl w-full bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
-            <img src={selectedImage} alt="Expanded Attachment" className="max-h-[85vh] mx-auto rounded-lg object-contain" />
-            <p className="text-xs text-slate-400 mt-3 font-bold">Click anywhere to close preview</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
