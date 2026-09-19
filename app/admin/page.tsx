@@ -139,12 +139,12 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-3 py-1 rounded-full whitespace-nowrap">
+            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-3 py-1 rounded-full">
               Auto-refresh active (15s)
             </span>
             <button
               onClick={fetchLogs}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b] flex items-center gap-1.5 whitespace-nowrap"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b] flex items-center gap-1.5"
             >
               🔄 Refresh Feed
             </button>
@@ -194,24 +194,24 @@ export default function AdminDashboard() {
                           {formattedDate}<br/>
                           <span className="text-[10px] text-slate-500">{formattedTime}</span>
                         </td>
-                        <td className="p-4 font-bold text-white whitespace-nowrap">{log.guard_name}</td>
-                        <td className="p-4 font-bold text-emerald-400 whitespace-nowrap">{log.location}</td>
-                        <td className="p-4 font-bold text-slate-200 whitespace-nowrap">{log.checkpoint}</td>
-                        <td className="p-4 font-mono text-[11px] text-slate-400 whitespace-nowrap">{log.latitude}, {log.longitude}</td>
-                        <td className="p-4 whitespace-nowrap">
-                          <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold inline-block">
+                        <td className="p-4 font-bold text-white">{log.guard_name}</td>
+                        <td className="p-4 font-bold text-emerald-400">{log.location}</td>
+                        <td className="p-4 font-bold text-slate-200">{log.checkpoint}</td>
+                        <td className="p-4 font-mono text-[11px] text-slate-400">{log.latitude}, {log.longitude}</td>
+                        <td className="p-4">
+                          <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold">
                             {log.geofence_status || 'Verified'}
                           </span>
                         </td>
-                        <td className="p-4 whitespace-nowrap">
-                          <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold inline-block">
+                        <td className="p-4">
+                          <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold">
                             Successful Scan
                           </span>
                         </td>
                         <td className="p-4 max-w-xs truncate text-slate-300">
                           {log.notes || <span className="text-slate-600 italic">No issue</span>}
                         </td>
-                        <td className="p-4 text-right whitespace-nowrap">
+                        <td className="p-4 text-right">
                           <button
                             onClick={() => handleDeleteLog(log.id)}
                             className="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow cursor-pointer"
