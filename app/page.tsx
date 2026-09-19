@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import jsQR from 'jsqr';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -28,6 +29,7 @@ export default function GuardScanner() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     // Update live clock
@@ -50,7 +52,10 @@ export default function GuardScanner() {
       );
     }
 
-    return () => clearInterval(clockInterval);
+    return () => {
+      clearInterval(clockInterval);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
   }, []);
 
   const startScanner = async () => {
@@ -65,6 +70,7 @@ export default function GuardScanner() {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute('playsinline', 'true');
         videoRef.current.play();
+        animFrameRef.current = requestAnimationFrame(scanTick);
       }
     } catch (err) {
       console.error('Camera error:', err);
@@ -74,6 +80,10 @@ export default function GuardScanner() {
   };
 
   const stopScanner = () => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -81,10 +91,53 @@ export default function GuardScanner() {
     setScanning(false);
   };
 
-  const simulateQRScan = () => {
-    setLocation('CR REPUBLIC');
-    setCheckpoint('AWOLOWO RD');
-    stopScanner();
+  const scanTick = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.height = video.videoHeight;
+      canvas.width = video.videoWidth;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'dontInvert',
+        });
+
+        if (code && code.data) {
+          try {
+            // Expected QR format: Location|Checkpoint or JSON {"location": "...", "checkpoint": "..."}
+            let parsedLoc = '';
+            let parsedChk = '';
+            if (code.data.startsWith('{')) {
+              const parsed = JSON.parse(code.data);
+              parsedLoc = parsed.location || '';
+              parsedChk = parsed.checkpoint || '';
+            } else if (code.data.includes('|')) {
+              const parts = code.data.split('|');
+              parsedLoc = parts[0]?.trim() || '';
+              parsedChk = parts[1]?.trim() || '';
+            } else {
+              parsedLoc = 'CR REPUBLIC';
+              parsedChk = code.data.trim();
+            }
+
+            if (parsedLoc && parsedChk) {
+              setLocation(parsedLoc);
+              setCheckpoint(parsedChk);
+              stopScanner();
+              return;
+            }
+          } catch (e) {
+            console.log('QR parse error:', e);
+          }
+        }
+      }
+    }
+    animFrameRef.current = requestAnimationFrame(scanTick);
   };
 
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,14 +242,8 @@ export default function GuardScanner() {
               <canvas ref={canvasRef} className="hidden" />
               <div className="flex gap-2">
                 <button
-                  onClick={simulateQRScan}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
-                >
-                  Simulate Scan OK
-                </button>
-                <button
                   onClick={stopScanner}
-                  className="flex-1 bg-red-950 hover:bg-red-900 border border-red-800 text-red-300 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
+                  className="w-full bg-red-950 hover:bg-red-900 border border-red-800 text-red-300 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
                 >
                   Close Camera
                 </button>
@@ -260,7 +307,7 @@ export default function GuardScanner() {
             </select>
           </div>
 
-          {/* Snap Evidence Camera Box (Added right below Patrol Type) */}
+          {/* Snap Evidence Camera Box */}
           <div className="space-y-1.5 pt-1">
             <label className="text-[10px] font-mono text-slate-400 uppercase">SNAP EVIDENCE CAMERA (OPTIONAL)</label>
             <div className="flex items-center gap-3">
