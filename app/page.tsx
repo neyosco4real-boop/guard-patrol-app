@@ -18,7 +18,6 @@ export default function GuardPatrolSystem() {
   const [submitting, setSubmitting] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
-  const [scannedPreview, setScannedPreview] = useState<{ location: string; checkpoint: string } | null>(null);
 
   const scannerRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -51,12 +50,6 @@ export default function GuardPatrolSystem() {
   const handleScannedData = async (scannedText: string) => {
     let decodedText = scannedText.trim();
     
-    if (scannerRef.current && scannerRef.current.isScanning) {
-      try {
-        scannerRef.current.pause(true);
-      } catch (e) {}
-    }
-
     let parsedLocation = '';
     let parsedCheckpoint = '';
 
@@ -90,7 +83,6 @@ export default function GuardPatrolSystem() {
         parsedCheckpoint = decodedText;
       }
 
-      // If location parameter is empty or missing, query Supabase checkpoints table to retrieve the correct location
       if (!parsedLocation && parsedCheckpoint) {
         try {
           const { data } = await supabase
@@ -108,45 +100,26 @@ export default function GuardPatrolSystem() {
         }
       }
 
-      setScannedPreview({
-        location: parsedLocation || 'Main Facility',
-        checkpoint: parsedCheckpoint || decodedText
-      });
+      const finalLoc = parsedLocation || 'Main Facility';
+      const finalChk = parsedCheckpoint || decodedText;
 
-      setStatusMessage({ text: `✅ QR Scanned Successfully! Tap Confirm below.`, type: 'success' });
+      // Automatically populate the form fields directly without overlay confirmation box
+      setLocation(finalLoc);
+      setCheckpoint(finalChk);
+      setStatusMessage({ text: `✅ QR Scanned & Auto-Filled Successfully!`, type: 'success' });
+      
+      // Stop scanner immediately upon successful capture
+      stopScanner();
     } catch (e) {
-      setScannedPreview({
-        location: 'Main Facility',
-        checkpoint: decodedText
-      });
+      setLocation('Main Facility');
+      setCheckpoint(decodedText);
       setStatusMessage({ text: `✅ Scanned QR: ${decodedText}`, type: 'success' });
+      stopScanner();
     }
-  };
-
-  const confirmScannedData = () => {
-    if (scannedPreview) {
-      setLocation(scannedPreview.location);
-      setCheckpoint(scannedPreview.checkpoint);
-      setStatusMessage({ text: `✅ Location & Checkpoint Auto-Filled!`, type: 'success' });
-    }
-    stopScanner();
-  };
-
-  const retriesScan = async () => {
-    setScannedPreview(null);
-    if (scannerRef.current) {
-      try {
-        scannerRef.current.resume();
-        setStatusMessage({ text: 'Align QR code within the frame', type: '' });
-        return;
-      } catch (e) {}
-    }
-    startScanner();
   };
 
   const startScanner = async () => {
     setIsScanning(true);
-    setScannedPreview(null);
     setStatusMessage({ text: 'Initializing camera...', type: '' });
 
     setTimeout(async () => {
@@ -198,7 +171,6 @@ export default function GuardPatrolSystem() {
       scannerRef.current = null;
     }
     setIsScanning(false);
-    setScannedPreview(null);
   };
 
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -312,29 +284,6 @@ export default function GuardPatrolSystem() {
           {isScanning ? (
             <div className="relative rounded-2xl overflow-hidden bg-black p-2 text-center space-y-2">
               <div id="reader-container" className="w-full"></div>
-              
-              {scannedPreview && (
-                <div className="bg-emerald-950/95 border border-emerald-700 p-3 rounded-xl space-y-2 text-left">
-                  <p className="text-[11px] text-emerald-300 font-bold">📍 Location: {scannedPreview.location}</p>
-                  <p className="text-[11px] text-emerald-300 font-bold">🏷️ Checkpoint: {scannedPreview.checkpoint}</p>
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={confirmScannedData}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg text-xs font-black cursor-pointer uppercase shadow"
-                    >
-                      Confirm & Auto-Fill
-                    </button>
-                    <button
-                      type="button"
-                      onClick={retriesScan}
-                      className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-xs font-bold cursor-pointer"
-                    >
-                      Scan Again
-                    </button>
-                  </div>
-                </div>
-              )}
 
               <button
                 type="button"
@@ -448,7 +397,7 @@ export default function GuardPatrolSystem() {
                   onClick={() => setEvidencePhoto(null)}
                   className="ml-auto text-[10px] text-red-400 font-bold hover:underline"
                 >
-                  Remove`
+                  Remove
                 </button>
               </div>
             )}
