@@ -1,187 +1,84 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import React, { useState } from 'react';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export default function CheckpointQRPage() {
+  const [qrLocation, setQrLocation] = useState('CR REPUBLIC');
+  const [qrCheckpoint, setQrCheckpoint] = useState('AWOLOWO RD');
 
-export default function QRCodesManager() {
-  const [checkpoints, setCheckpoints] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [newLocation, setNewLocation] = useState('TOM SALEM HQ');
-  const [newCheckpoint, setNewCheckpoint] = useState('');
-  const [baseUrl, setBaseUrl] = useState('https://guard-patrol-app.vercel.app');
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setBaseUrl(window.location.origin);
-    }
-    fetchCheckpoints();
-  }, []);
-
-  const fetchCheckpoints = async () => {
-    setLoading(true);
-    const { data } = await supabase.from('checkpoints').select('*').order('created_at', { ascending: false });
-    if (data) {
-      setCheckpoints(data);
-    }
-    setLoading(false);
-  };
-
-  const handleAddCheckpoint = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newLocation.trim() || !newCheckpoint.trim()) {
-      alert('Please enter both location and checkpoint name.');
-      return;
-    }
-
-    const loc = newLocation.trim();
-    const chk = newCheckpoint.trim();
-
-    const { error } = await supabase.from('checkpoints').insert([
-      { location: loc, checkpoint: chk }
-    ]);
-
-    if (!error) {
-      setNewCheckpoint('');
-      fetchCheckpoints();
-    } else {
-      alert('Error adding checkpoint: ' + error.message);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this checkpoint?')) {
-      await supabase.from('checkpoints').delete().eq('id', id);
-      fetchCheckpoints();
-    }
-  };
-
-  const handlePrintAll = () => {
-    window.print();
-  };
+  const appDomain = typeof window !== 'undefined' ? window.location.origin : 'https://guard-patrol-app.vercel.app';
+  const qrPayload = `${appDomain}/?location=${encodeURIComponent(qrLocation)}&checkpoint=${encodeURIComponent(qrCheckpoint)}`;
+  const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrPayload)}`;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 font-sans">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[#070b14] text-slate-100 p-6 font-sans flex flex-col items-center">
+      <div className="w-full max-w-xl space-y-6 pb-12">
         
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl gap-4">
-          <div>
-            <div className="text-emerald-400 font-mono text-[10px] uppercase tracking-wider mb-1">🛡️ Tom Salem Security System</div>
-            <h1 className="text-xl font-black tracking-wide text-white uppercase">Official Deployment QR Codes & Checkpoints</h1>
-            <p className="text-xs text-slate-400 mt-1">Generate and print tamper-evident QR checkpoint badges for security guard patrols.</p>
-          </div>
+        {/* Header Bar */}
+        <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl shadow-xl flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <a
-              href="/admin"
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-bold transition shadow"
-            >
-              ← Back to Admin Dashboard
-            </a>
-            <button
-              onClick={handlePrintAll}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-xl text-xs font-bold transition shadow cursor-pointer print:hidden"
-            >
-              🖨️ Print All QR Badges
-            </button>
+            <div className="w-10 h-10 rounded-2xl bg-emerald-950/80 border border-emerald-800 flex items-center justify-center text-emerald-400 font-black text-lg shadow">
+              🖨️
+            </div>
+            <div>
+              <h1 className="text-xs font-black text-white uppercase tracking-wider">CHECKPOINT QR CODE</h1>
+              <p className="text-[10px] font-mono text-slate-400">Generator & Deployment Station</p>
+            </div>
           </div>
+          <a
+            href="/admin"
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b]"
+          >
+            ← Back to Admin
+          </a>
         </div>
 
-        {/* Add New Checkpoint Form */}
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl print:hidden">
-          <h2 className="text-sm font-black text-white uppercase mb-4">Register New Deployment Checkpoint</h2>
-          <form onSubmit={handleAddCheckpoint} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Site / Location Name</label>
+        {/* Generator Card */}
+        <div className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-3xl shadow-xl space-y-5">
+          <div>
+            <h2 className="text-xs font-black uppercase text-white tracking-wider">Create Site & Checkpoint Code</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">Enter location and checkpoint name to generate a scannable QR code label for physical printing.</p>
+          </div>
+
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono text-slate-400 uppercase">LOCATION NAME</label>
               <input
                 type="text"
-                value={newLocation}
-                onChange={(e) => setNewLocation(e.target.value)}
-                placeholder="e.g. TOM SALEM HQ"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                required
+                value={qrLocation}
+                onChange={(e) => setQrLocation(e.target.value)}
+                placeholder="e.g. CR REPUBLIC"
+                className="w-full bg-[#070b14] border border-[#1e293b] rounded-2xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
               />
             </div>
-            <div>
-              <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Checkpoint Name</label>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono text-slate-400 uppercase">CHECKPOINT NAME</label>
               <input
                 type="text"
-                value={newCheckpoint}
-                onChange={(e) => setNewCheckpoint(e.target.value)}
-                placeholder="e.g. RECEPTION, GATE 1"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                required
+                value={qrCheckpoint}
+                onChange={(e) => setQrCheckpoint(e.target.value)}
+                placeholder="e.g. AWOLOWO RD"
+                className="w-full bg-[#070b14] border border-[#1e293b] rounded-2xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
               />
             </div>
-            <div className="flex items-end">
-              <button
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer"
-              >
-                + Register Checkpoint & Generate QR
-              </button>
+          </div>
+
+          {/* Printable QR Preview Card */}
+          <div className="bg-white p-6 rounded-3xl flex flex-col items-center justify-center space-y-3 shadow-2xl border-4 border-slate-200">
+            <img src={qrCodeImageUrl} alt="Checkpoint QR Code" className="w-56 h-56 object-contain" />
+            <div className="text-center space-y-0.5">
+              <p className="text-sm font-black text-slate-900 uppercase tracking-wide">{qrLocation}</p>
+              <p className="text-xs font-bold text-slate-600 uppercase">📍 {qrCheckpoint}</p>
             </div>
-          </form>
-        </div>
+          </div>
 
-        {/* Checkpoints & QR Cards Grid */}
-        <div className="space-y-4">
-          <h2 className="text-sm font-black text-white uppercase tracking-wider">Active Standard Deployment Badges ({checkpoints.length})</h2>
-          
-          {loading ? (
-            <div className="p-12 text-center text-xs text-slate-400">Loading checkpoints...</div>
-          ) : checkpoints.length === 0 ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center text-xs text-slate-400">
-              No checkpoints registered yet. Use the form above to add one.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {checkpoints.map((cp) => {
-                const cleanLoc = (cp.location || '').trim();
-                const cleanChk = (cp.checkpoint || cp.name || '').trim();
-                // Encode the precise URL with fully encoded parameters so the mobile scanner URLSearchParams parser extracts them correctly
-                const scanUrl = `${baseUrl}/scan?location=${encodeURIComponent(cleanLoc)}&checkpoint=${encodeURIComponent(cleanChk)}`;
-                const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(scanUrl)}`;
-
-                return (
-                  <div key={cp.id} className="bg-white text-slate-900 border-2 border-slate-300 rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center relative page-break-inside-avoid">
-                    {/* Delete button (hidden on print) */}
-                    <button
-                      onClick={() => handleDelete(cp.id)}
-                      className="absolute top-4 right-4 bg-red-100 hover:bg-red-200 text-red-600 px-2.5 py-1 rounded-lg text-[10px] font-bold transition print:hidden cursor-pointer"
-                    >
-                      Delete
-                    </button>
-
-                    <div className="text-[10px] font-black uppercase tracking-widest text-emerald-800 mb-1">
-                      🛡️ TOM SALEM SECURITY
-                    </div>
-                    <div className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-4">
-                      Official Patrol Checkpoint
-                    </div>
-
-                    <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl shadow-inner mb-4">
-                      <img src={qrImageUrl} alt={`QR for ${cleanChk}`} className="w-48 h-48 object-contain mx-auto" />
-                    </div>
-
-                    <div className="w-full space-y-1 mb-4 bg-slate-100 p-3 rounded-xl border border-slate-200">
-                      <div className="text-[10px] font-mono uppercase text-slate-500">Location</div>
-                      <div className="text-sm font-black text-slate-900">{cleanLoc}</div>
-                      <div className="text-[10px] font-mono uppercase text-slate-500 mt-2">Checkpoint</div>
-                      <div className="text-base font-black text-emerald-700">{cleanChk}</div>
-                    </div>
-
-                    <div className="text-[9px] font-mono text-slate-400 break-all px-2">
-                      {scanUrl}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <button
+            onClick={() => window.print()}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 rounded-2xl font-black text-xs shadow-xl transition cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2"
+          >
+            🖨️ PRINT QR CODE LABEL
+          </button>
         </div>
 
       </div>
