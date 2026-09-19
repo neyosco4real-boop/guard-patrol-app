@@ -32,7 +32,6 @@ export default function GuardScanner() {
   const animFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Update live clock
     const updateClock = () => {
       const now = new Date();
       setCurrentTime(now.toTimeString().split(' ')[0]);
@@ -40,7 +39,6 @@ export default function GuardScanner() {
     updateClock();
     const clockInterval = setInterval(updateClock, 1000);
 
-    // Get GPS coordinates on load
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -113,7 +111,6 @@ export default function GuardScanner() {
             let parsedLoc = 'CR REPUBLIC';
             let parsedChk = '';
 
-            // Handle URL query parameters if scanned QR is a web link (e.g. ?location=...&checkpoint=... or ?checkpoint=...)
             if (scannedText.includes('http://') || scannedText.includes('https://')) {
               try {
                 const url = new URL(scannedText);
@@ -124,7 +121,6 @@ export default function GuardScanner() {
                 if (chkParam) {
                   parsedChk = decodeURIComponent(chkParam);
                 } else {
-                  // Fallback: use pathname or domain part if no checkpoint param
                   const pathSegments = url.pathname.split('/').filter(Boolean);
                   parsedChk = pathSegments[pathSegments.length - 1] ? decodeURIComponent(pathSegments[pathSegments.length - 1].replace(/-/g, ' ')) : 'AWOLOWO RD';
                 }
@@ -183,7 +179,8 @@ export default function GuardScanner() {
         location,
         checkpoint,
         patrol_type: patrolType,
-        notes: notes + (evidencePhoto ? ' [Photo Evidence Attached]' : ''),
+        notes: notes || 'No issue',
+        evidence_photo: evidencePhoto, // Storing photo in table column
         latitude: latitude || 6.5244,
         longitude: longitude || 3.3792,
         geofence_status: geofenceStatus,
@@ -222,7 +219,6 @@ export default function GuardScanner() {
           </div>
         </div>
 
-        {/* Success Alert Banner */}
         {successMsg && (
           <div className="bg-emerald-950 border border-emerald-800 text-emerald-300 p-4 rounded-2xl text-center text-xs font-bold shadow-xl animate-bounce">
             ✅ Patrol Log Submitted Successfully!
@@ -272,8 +268,6 @@ export default function GuardScanner() {
 
         {/* Patrol Log Form */}
         <form onSubmit={handleSubmit} className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-3xl shadow-xl space-y-4">
-          
-          {/* Guard Name */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-mono text-slate-400 uppercase">GUARD NAME *</label>
             <input
@@ -286,7 +280,6 @@ export default function GuardScanner() {
             />
           </div>
 
-          {/* Location */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-mono text-slate-400 uppercase">LOCATION (AUTO-FILLED BY QR SCAN) *</label>
             <input
@@ -298,7 +291,6 @@ export default function GuardScanner() {
             />
           </div>
 
-          {/* Checkpoint */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-mono text-slate-400 uppercase">CHECKPOINT (AUTO-FILLED BY QR SCAN) *</label>
             <input
@@ -310,7 +302,6 @@ export default function GuardScanner() {
             />
           </div>
 
-          {/* Patrol Type */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-mono text-slate-400 uppercase">PATROL TYPE *</label>
             <select
@@ -325,7 +316,6 @@ export default function GuardScanner() {
             </select>
           </div>
 
-          {/* Snap Evidence Camera Box */}
           <div className="space-y-1.5 pt-1">
             <label className="text-[10px] font-mono text-slate-400 uppercase">SNAP EVIDENCE CAMERA (OPTIONAL)</label>
             <div className="flex items-center gap-3">
@@ -354,7 +344,6 @@ export default function GuardScanner() {
             </div>
           </div>
 
-          {/* Patrol / Incident Notes */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-mono text-slate-400 uppercase">PATROL / INCIDENT NOTES</label>
             <textarea
@@ -366,7 +355,6 @@ export default function GuardScanner() {
             />
           </div>
 
-          {/* Submit Button */}
           <button
             type="submit"
             disabled={submitting}
@@ -374,7 +362,6 @@ export default function GuardScanner() {
           >
             {submitting ? 'Submitting Log...' : 'SUBMIT PATROL LOG'}
           </button>
-
         </form>
 
       </div>
