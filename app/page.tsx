@@ -109,23 +109,41 @@ export default function GuardScanner() {
 
         if (code && code.data) {
           try {
-            // Expected QR format: Location|Checkpoint or JSON {"location": "...", "checkpoint": "..."}
-            let parsedLoc = '';
+            let scannedText = code.data.trim();
+            let parsedLoc = 'CR REPUBLIC';
             let parsedChk = '';
-            if (code.data.startsWith('{')) {
-              const parsed = JSON.parse(code.data);
-              parsedLoc = parsed.location || '';
-              parsedChk = parsed.checkpoint || '';
-            } else if (code.data.includes('|')) {
-              const parts = code.data.split('|');
-              parsedLoc = parts[0]?.trim() || '';
+
+            // Handle URL query parameters if scanned QR is a web link (e.g. ?location=...&checkpoint=... or ?checkpoint=...)
+            if (scannedText.includes('http://') || scannedText.includes('https://')) {
+              try {
+                const url = new URL(scannedText);
+                const locParam = url.searchParams.get('location') || url.searchParams.get('loc');
+                const chkParam = url.searchParams.get('checkpoint') || url.searchParams.get('chk') || url.searchParams.get('name');
+                
+                if (locParam) parsedLoc = decodeURIComponent(locParam);
+                if (chkParam) {
+                  parsedChk = decodeURIComponent(chkParam);
+                } else {
+                  // Fallback: use pathname or domain part if no checkpoint param
+                  const pathSegments = url.pathname.split('/').filter(Boolean);
+                  parsedChk = pathSegments[pathSegments.length - 1] ? decodeURIComponent(pathSegments[pathSegments.length - 1].replace(/-/g, ' ')) : 'AWOLOWO RD';
+                }
+              } catch (err) {
+                parsedChk = scannedText;
+              }
+            } else if (scannedText.startsWith('{')) {
+              const parsed = JSON.parse(scannedText);
+              parsedLoc = parsed.location || parsed.loc || 'CR REPUBLIC';
+              parsedChk = parsed.checkpoint || parsed.name || parsed.chk || '';
+            } else if (scannedText.includes('|')) {
+              const parts = scannedText.split('|');
+              parsedLoc = parts[0]?.trim() || 'CR REPUBLIC';
               parsedChk = parts[1]?.trim() || '';
             } else {
-              parsedLoc = 'CR REPUBLIC';
-              parsedChk = code.data.trim();
+              parsedChk = scannedText;
             }
 
-            if (parsedLoc && parsedChk) {
+            if (parsedChk) {
               setLocation(parsedLoc);
               setCheckpoint(parsedChk);
               stopScanner();
