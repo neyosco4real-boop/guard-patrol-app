@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function GuardPatrolSystem() {
   const [guardName, setGuardName] = useState('');
-  const [location, setLocation] = useState('');
+  const [location, setLocation] = useState('Main Facility / Headquarters');
   const [checkpoint, setCheckpoint] = useState('');
   const [patrolType, setPatrolType] = useState('Normal Patrol');
   const [notes, setNotes] = useState('');
@@ -18,6 +18,7 @@ export default function GuardPatrolSystem() {
   const [submitting, setSubmitting] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
+  const [scannedPreview, setScannedPreview] = useState<string | null>(null);
 
   const scannerRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -32,14 +33,6 @@ export default function GuardPatrolSystem() {
     };
     updateClock();
     const timer = setInterval(updateClock, 1000);
-
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const loc = params.get('location');
-      const chk = params.get('checkpoint');
-      if (loc) setLocation(decodeURIComponent(loc));
-      if (chk) setCheckpoint(decodeURIComponent(chk));
-    }
 
     if (typeof window !== 'undefined' && !document.getElementById('html5-qrcode-script')) {
       const script = document.createElement('script');
@@ -56,75 +49,66 @@ export default function GuardPatrolSystem() {
   }, []);
 
   const handleScannedData = (scannedText: string) => {
+    let decodedText = scannedText.trim();
+    setScannedPreview(decodedText);
+    
+    // Pause scanner upon detection so it doesn't keep scanning rapidly
+    if (scannerRef.current && scannerRef.current.isScanning) {
+      scannerRef.current.pause(true);
+    }
+
     try {
-      let decodedText = scannedText.trim();
-      
-      // Check if it's a JSON string representing location and checkpoint
       if (decodedText.startsWith('{') && decodedText.endsWith('}')) {
-        try {
-          const parsed = JSON.parse(decodedText);
-          if (parsed.location) setLocation(parsed.location);
-          if (parsed.checkpoint || parsed.name) setCheckpoint(parsed.checkpoint || parsed.name);
-          setStatusMessage({ text: `✅ Location & Checkpoint Scanned Successfully!`, type: 'success' });
-          stopScanner();
-          return;
-        } catch (e) {
-          // not valid json, fallback
-        }
-      }
-
-      // Check if it contains URL parameters or pipe separators
-      if (decodedText.includes('location=') || decodedText.includes('checkpoint=')) {
-        let urlObj;
-        if (decodedText.startsWith('http')) {
-          urlObj = new URL(decodedText);
-        } else {
-          urlObj = new URL(`https://dummy.com/${decodedText.startsWith('/') ? '' : '/'}${decodedText}`);
-        }
-        const loc = urlObj.searchParams.get('location');
-        const chk = urlObj.searchParams.get('checkpoint');
-
-        if (loc) setLocation(decodeURIComponent(loc));
-        if (chk) setCheckpoint(decodeURIComponent(chk));
-
-        if (!loc && !chk) {
-          setCheckpoint(decodedText);
-          setLocation('Main Facility');
-        }
+        const parsed = JSON.parse(decodedText);
+        if (parsed.location) setLocation(parsed.location);
+        if (parsed.checkpoint || parsed.name) setCheckpoint(parsed.checkpoint || parsed.name);
       } else if (decodedText.includes('|')) {
         const parts = decodedText.split('|');
         if (parts[0]) setLocation(parts[0].trim());
         if (parts[1]) setCheckpoint(parts[1].trim());
+      } else if (decodedText.includes(':')) {
+        const parts = decodedText.split(':');
+        if (parts[0]) setLocation(parts[0].trim());
+        if (parts[1]) setCheckpoint(parts[1].trim());
       } else {
-        // If only a single string/checkpoint is scanned, auto-assign a default Location if empty, 
-        // or check if we can query Supabase checkpoints table to find its location!
+        // If QR only contains the checkpoint name (e.g. "RECEPTION"), 
+        // we capture it as checkpoint and keep/assign Location properly.
         setCheckpoint(decodedText);
-        
-        // Lookup checkpoint in Supabase to find its location automatically
-        supabase
-          .from('checkpoints')
-          .select('*')
-          .or(`name.ilike.${decodedText},checkpoint.ilike.${decodedText}`)
-          .single()
-          .then(({ data }) => {
-            if (data && data.location) {
-              setLocation(data.location);
-            } else if (!location) {
-              setLocation('Main Facility');
-            }
-          });
+        // Ensure location has a valid captured value
+        if (!location || location === 'Awaiting QR scan...') {
+          setLocation('Main Facility / Headquarters');
+        }
       }
-      setStatusMessage({ text: `✅ Checkpoint Scanned Successfully!`, type: 'success' });
+      setStatusMessage({ text: `✅ QR Code Captured Successfully! Tap Confirm to apply.`, type: 'success' });
     } catch (e) {
-      setCheckpoint(scannedText);
-      if (!location) setLocation('Main Facility');
-      setStatusMessage({ text: `✅ Captured Checkpoint: ${scannedText}`, type: 'success' });
+      setCheckpoint(decodedText);
+      if (!location || location === 'Awaiting QR scan...') {
+        setLocation('Main Facility / Headquarters');
+      }
+      setStatusMessage({ text: `✅ Captured: ${decodedText}`, type: 'success' });
     }
+  };
+
+  const confirmScannedData = () => {
     stopScanner();
+    setStatusMessage({ text: `✅ Location & Checkpoint Applied Successfully!`, type: 'success' });
+  };
+
+  const retriesScan = async () => {
+    setScannedPreview(null);
+    if (scannerRef.current) {
+      try {
+        scannerRef.current.resume();
+        setStatusMessage({ text: 'Align QR code within the frame', type: '' });
+        return;
+      } catch (e) {}
+    }
+    startScanner();
   };
 
   const startScanner = async () => {
     setIsScanning(true);
+    setScannedPreview(null);
     setStatusMessage({ text: 'Initializing camera...', type: '' });
 
     setTimeout(async () => {
@@ -143,10 +127,10 @@ export default function GuardPatrolSystem() {
           const html5QrCode = new window.Html5Qrcode("reader-container");
           scannerRef.current = html5QrCode;
 
-          // Reduced fps to 3 for moderate scanning speed so it doesn't trigger instantly before alignment
+          // fps: 2 for calm, moderate scanning speed
           await html5QrCode.start(
             { facingMode: "environment" },
-            { fps: 3, qrbox: { width: 240, height: 240 } },
+            { fps: 2, qrbox: { width: 250, height: 250 } },
             (decodedText: string) => {
               handleScannedData(decodedText);
             },
@@ -177,6 +161,7 @@ export default function GuardPatrolSystem() {
       scannerRef.current = null;
     }
     setIsScanning(false);
+    setScannedPreview(null);
   };
 
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -223,7 +208,7 @@ export default function GuardPatrolSystem() {
     const { error } = await supabase.from('guard_logs').insert([
       {
         guard_name: guardName.trim(),
-        location: location.trim() || 'Main Facility',
+        location: location.trim() || 'Main Facility / Headquarters',
         checkpoint: checkpoint.trim(),
         patrol_type: patrolType,
         latitude,
@@ -241,7 +226,7 @@ export default function GuardPatrolSystem() {
       setNotes('');
       setEvidencePhoto(null);
       setCheckpoint('');
-      setLocation('');
+      setLocation('Main Facility / Headquarters');
     } else {
       setStatusMessage({ text: 'Submission Error: ' + error.message, type: 'error' });
     }
@@ -280,7 +265,7 @@ export default function GuardPatrolSystem() {
           </div>
         )}
 
-        {/* Scanner Container with Moderate Speed (fps: 3) */}
+        {/* Scanner Container with Confirmation & Moderate Speed */}
         <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl p-4 shadow-xl space-y-3">
           <div className="flex justify-between items-center text-xs font-black uppercase text-slate-300">
             <span>QR CODE CHECKPOINT SCANNER</span>
@@ -288,12 +273,35 @@ export default function GuardPatrolSystem() {
           </div>
           
           {isScanning ? (
-            <div className="relative rounded-2xl overflow-hidden bg-black p-2 text-center">
+            <div className="relative rounded-2xl overflow-hidden bg-black p-2 text-center space-y-2">
               <div id="reader-container" className="w-full"></div>
+              
+              {scannedPreview && (
+                <div className="bg-emerald-950/90 border border-emerald-700 p-3 rounded-xl space-y-2">
+                  <p className="text-[11px] text-emerald-300 font-bold">Scanned: {scannedPreview}</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={confirmScannedData}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg text-xs font-black cursor-pointer uppercase"
+                    >
+                      Confirm & Use
+                    </button>
+                    <button
+                      type="button"
+                      onClick={retriesScan}
+                      className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-xs font-bold cursor-pointer"
+                    >
+                      Scan Again
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={stopScanner}
-                className="mt-3 bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-xl text-xs font-bold shadow cursor-pointer"
+                className="mt-2 bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-xl text-xs font-bold shadow cursor-pointer"
               >
                 Close Camera
               </button>
@@ -372,7 +380,7 @@ export default function GuardPatrolSystem() {
               <label className="text-[10px] font-mono text-slate-400 uppercase">Patrol / Incident Notes &</label>
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.link ? null : fileInputRef.current?.click()}
+                onClick={() => fileInputRef.current?.click()}
                 className="text-[10px] text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
               >
                 Snap Evidence
