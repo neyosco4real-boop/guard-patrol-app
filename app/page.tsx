@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function GuardPatrolSystem() {
   const [guardName, setGuardName] = useState('');
-  const [location, setLocation] = useState('Main Facility / Headquarters');
+  const [location, setLocation] = useState('');
   const [checkpoint, setCheckpoint] = useState('');
   const [patrolType, setPatrolType] = useState('Normal Patrol');
   const [notes, setNotes] = useState('');
@@ -18,7 +18,7 @@ export default function GuardPatrolSystem() {
   const [submitting, setSubmitting] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
-  const [scannedPreview, setScannedPreview] = useState<string | null>(null);
+  const [scannedPreview, setScannedPreview] = useState<{ location: string; checkpoint: string } | null>(null);
 
   const scannerRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -50,48 +50,83 @@ export default function GuardPatrolSystem() {
 
   const handleScannedData = (scannedText: string) => {
     let decodedText = scannedText.trim();
-    setScannedPreview(decodedText);
     
-    // Pause scanner upon detection so it doesn't keep scanning rapidly
+    // Pause scanner upon detection
     if (scannerRef.current && scannerRef.current.isScanning) {
-      scannerRef.current.pause(true);
+      try {
+        scannerRef.current.pause(true);
+      } catch (e) {}
     }
+
+    let parsedLocation = '';
+    let parsedCheckpoint = '';
 
     try {
       if (decodedText.startsWith('{') && decodedText.endsWith('}')) {
         const parsed = JSON.parse(decodedText);
-        if (parsed.location) setLocation(parsed.location);
-        if (parsed.checkpoint || parsed.name) setCheckpoint(parsed.checkpoint || parsed.name);
+        parsedLocation = parsed.location || '';
+        parsedCheckpoint = parsed.checkpoint || parsed.name || '';
       } else if (decodedText.includes('|')) {
         const parts = decodedText.split('|');
-        if (parts[0]) setLocation(parts[0].trim());
-        if (parts[1]) setCheckpoint(parts[1].trim());
+        parsedLocation = parts[0]?.trim() || '';
+        parsedCheckpoint = parts[1]?.trim() || '';
+      } else if (decodedText.includes(' - ')) {
+        const parts = decodedText.split(' - ');
+        parsedLocation = parts[0]?.trim() || '';
+        parsedCheckpoint = parts[1]?.trim() || '';
       } else if (decodedText.includes(':')) {
         const parts = decodedText.split(':');
-        if (parts[0]) setLocation(parts[0].trim());
-        if (parts[1]) setCheckpoint(parts[1].trim());
-      } else {
-        // If QR only contains the checkpoint name (e.g. "RECEPTION"), 
-        // we capture it as checkpoint and keep/assign Location properly.
-        setCheckpoint(decodedText);
-        // Ensure location has a valid captured value
-        if (!location || location === 'Awaiting QR scan...') {
-          setLocation('Main Facility / Headquarters');
+        parsedLocation = parts[0]?.trim() || '';
+        parsedCheckpoint = parts[1]?.trim() || '';
+      } else if (decodedText.includes('location=') || decodedText.includes('checkpoint=')) {
+        let urlObj;
+        if (decodedText.startsWith('http')) {
+          urlObj = new URL(decodedText);
+        } else {
+          urlObj = new URL(`https://dummy.com/${decodedText.startsWith('/') ? '' : '/'}${decodedText}`);
         }
+        parsedLocation = urlObj.searchParams.get('location') || '';
+        parsedCheckpoint = urlObj.searchParams.get('checkpoint') || '';
+      } else {
+        // If it's just a single string, check if Supabase has a matching checkpoint or location record
+        parsedCheckpoint = decodedText;
       }
-      setStatusMessage({ text: `✅ QR Code Captured Successfully! Tap Confirm to apply.`, type: 'success' });
+
+      // If location is missing from string format, query Supabase checkpoints table
+      if (!parsedLocation && parsedCheckpoint) {
+        supabase
+          .from('checkpoints')
+          .select('location')
+          .or(`name.ilike.${parsedCheckpoint},checkpoint.ilike.${parsedCheckpoint}`)
+          .single()
+          .then(({ data }) => {
+            const loc = data?.location || parsedCheckpoint;
+            setScannedPreview({ location: loc, checkpoint: parsedCheckpoint });
+          });
+      } else {
+        setScannedPreview({
+          location: parsedLocation || parsedCheckpoint,
+          checkpoint: parsedCheckpoint || decodedText
+        });
+      }
+
+      setStatusMessage({ text: `✅ QR Scanned Successfully! Tap Confirm below.`, type: 'success' });
     } catch (e) {
-      setCheckpoint(decodedText);
-      if (!location || location === 'Awaiting QR scan...') {
-        setLocation('Main Facility / Headquarters');
-      }
-      setStatusMessage({ text: `✅ Captured: ${decodedText}`, type: 'success' });
+      setScannedPreview({
+        location: decodedText,
+        checkpoint: decodedText
+      });
+      setStatusMessage({ text: `✅ Scanned QR: ${decodedText}`, type: 'success' });
     }
   };
 
   const confirmScannedData = () => {
+    if (scannedPreview) {
+      setLocation(scannedPreview.location);
+      setCheckpoint(scannedPreview.checkpoint);
+      setStatusMessage({ text: `✅ Location & Checkpoint Auto-Filled!`, type: 'success' });
+    }
     stopScanner();
-    setStatusMessage({ text: `✅ Location & Checkpoint Applied Successfully!`, type: 'success' });
   };
 
   const retriesScan = async () => {
@@ -127,7 +162,7 @@ export default function GuardPatrolSystem() {
           const html5QrCode = new window.Html5Qrcode("reader-container");
           scannerRef.current = html5QrCode;
 
-          // fps: 2 for calm, moderate scanning speed
+          // Moderate speed (fps: 2)
           await html5QrCode.start(
             { facingMode: "environment" },
             { fps: 2, qrbox: { width: 250, height: 250 } },
@@ -181,8 +216,8 @@ export default function GuardPatrolSystem() {
       setStatusMessage({ text: 'Error: Please enter your Guard Name.', type: 'error' });
       return;
     }
-    if (!checkpoint.trim()) {
-      setStatusMessage({ text: 'Error: Checkpoint must be populated via QR scan.', type: 'error' });
+    if (!checkpoint.trim() || !location.trim()) {
+      setStatusMessage({ text: 'Error: Both Location and Checkpoint must be auto-filled via QR scan.', type: 'error' });
       return;
     }
 
@@ -208,7 +243,7 @@ export default function GuardPatrolSystem() {
     const { error } = await supabase.from('guard_logs').insert([
       {
         guard_name: guardName.trim(),
-        location: location.trim() || 'Main Facility / Headquarters',
+        location: location.trim(),
         checkpoint: checkpoint.trim(),
         patrol_type: patrolType,
         latitude,
@@ -226,7 +261,7 @@ export default function GuardPatrolSystem() {
       setNotes('');
       setEvidencePhoto(null);
       setCheckpoint('');
-      setLocation('Main Facility / Headquarters');
+      setLocation('');
     } else {
       setStatusMessage({ text: 'Submission Error: ' + error.message, type: 'error' });
     }
@@ -265,7 +300,7 @@ export default function GuardPatrolSystem() {
           </div>
         )}
 
-        {/* Scanner Container with Confirmation & Moderate Speed */}
+        {/* Scanner Container */}
         <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl p-4 shadow-xl space-y-3">
           <div className="flex justify-between items-center text-xs font-black uppercase text-slate-300">
             <span>QR CODE CHECKPOINT SCANNER</span>
@@ -277,15 +312,16 @@ export default function GuardPatrolSystem() {
               <div id="reader-container" className="w-full"></div>
               
               {scannedPreview && (
-                <div className="bg-emerald-950/90 border border-emerald-700 p-3 rounded-xl space-y-2">
-                  <p className="text-[11px] text-emerald-300 font-bold">Scanned: {scannedPreview}</p>
-                  <div className="flex gap-2">
+                <div className="bg-emerald-950/95 border border-emerald-700 p-3 rounded-xl space-y-2 text-left">
+                  <p className="text-[11px] text-emerald-300 font-bold">📍 Location: {scannedPreview.location}</p>
+                  <p className="text-[11px] text-emerald-300 font-bold">🏷️ Checkpoint: {scannedPreview.checkpoint}</p>
+                  <div className="flex gap-2 pt-1">
                     <button
                       type="button"
                       onClick={confirmScannedData}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg text-xs font-black cursor-pointer uppercase"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg text-xs font-black cursor-pointer uppercase shadow"
                     >
-                      Confirm & Use
+                      Confirm & Auto-Fill
                     </button>
                     <button
                       type="button"
@@ -311,7 +347,7 @@ export default function GuardPatrolSystem() {
               <div className="w-14 h-14 mx-auto rounded-full bg-emerald-950/80 border border-emerald-800/80 flex items-center justify-center shadow-inner">
                 <span className="text-xl">📷</span>
               </div>
-              <p className="text-xs text-slate-300">Open scanner to read checkpoint QR code</p>
+              <p className="text-xs text-slate-300">Open scanner to read location & checkpoint QR code</p>
 
               <button
                 type="button"
@@ -339,25 +375,25 @@ export default function GuardPatrolSystem() {
           </div>
 
           <div>
-            <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Location (Auto-Filled by QR) *</label>
+            <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Location (Auto-Filled by QR Scan) *</label>
             <input
               type="text"
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
+              readOnly
               placeholder="Awaiting QR scan..."
-              className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 placeholder:text-slate-600"
+              className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none cursor-not-allowed placeholder:text-slate-600"
               required
             />
           </div>
 
           <div>
-            <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Checkpoint (Auto-Filled by QR) *</label>
+            <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">Checkpoint (Auto-Filled by QR Scan) *</label>
             <input
               type="text"
               value={checkpoint}
-              onChange={(e) => setCheckpoint(e.target.value)}
+              readOnly
               placeholder="Awaiting QR scan..."
-              className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 placeholder:text-slate-600"
+              className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none cursor-not-allowed placeholder:text-slate-600"
               required
             />
           </div>
