@@ -58,6 +58,22 @@ export default function GuardPatrolSystem() {
   const handleScannedData = (scannedText: string) => {
     try {
       let decodedText = scannedText.trim();
+      
+      // Check if it's a JSON string representing location and checkpoint
+      if (decodedText.startsWith('{') && decodedText.endsWith('}')) {
+        try {
+          const parsed = JSON.parse(decodedText);
+          if (parsed.location) setLocation(parsed.location);
+          if (parsed.checkpoint || parsed.name) setCheckpoint(parsed.checkpoint || parsed.name);
+          setStatusMessage({ text: `✅ Location & Checkpoint Scanned Successfully!`, type: 'success' });
+          stopScanner();
+          return;
+        } catch (e) {
+          // not valid json, fallback
+        }
+      }
+
+      // Check if it contains URL parameters or pipe separators
       if (decodedText.includes('location=') || decodedText.includes('checkpoint=')) {
         let urlObj;
         if (decodedText.startsWith('http')) {
@@ -73,13 +89,35 @@ export default function GuardPatrolSystem() {
 
         if (!loc && !chk) {
           setCheckpoint(decodedText);
+          setLocation('Main Facility');
         }
+      } else if (decodedText.includes('|')) {
+        const parts = decodedText.split('|');
+        if (parts[0]) setLocation(parts[0].trim());
+        if (parts[1]) setCheckpoint(parts[1].trim());
       } else {
+        // If only a single string/checkpoint is scanned, auto-assign a default Location if empty, 
+        // or check if we can query Supabase checkpoints table to find its location!
         setCheckpoint(decodedText);
+        
+        // Lookup checkpoint in Supabase to find its location automatically
+        supabase
+          .from('checkpoints')
+          .select('*')
+          .or(`name.ilike.${decodedText},checkpoint.ilike.${decodedText}`)
+          .single()
+          .then(({ data }) => {
+            if (data && data.location) {
+              setLocation(data.location);
+            } else if (!location) {
+              setLocation('Main Facility');
+            }
+          });
       }
       setStatusMessage({ text: `✅ Checkpoint Scanned Successfully!`, type: 'success' });
     } catch (e) {
       setCheckpoint(scannedText);
+      if (!location) setLocation('Main Facility');
       setStatusMessage({ text: `✅ Captured Checkpoint: ${scannedText}`, type: 'success' });
     }
     stopScanner();
@@ -105,9 +143,10 @@ export default function GuardPatrolSystem() {
           const html5QrCode = new window.Html5Qrcode("reader-container");
           scannerRef.current = html5QrCode;
 
+          // Reduced fps to 3 for moderate scanning speed so it doesn't trigger instantly before alignment
           await html5QrCode.start(
             { facingMode: "environment" },
-            { fps: 10, qrbox: { width: 220, height: 220 } },
+            { fps: 3, qrbox: { width: 240, height: 240 } },
             (decodedText: string) => {
               handleScannedData(decodedText);
             },
@@ -202,6 +241,7 @@ export default function GuardPatrolSystem() {
       setNotes('');
       setEvidencePhoto(null);
       setCheckpoint('');
+      setLocation('');
     } else {
       setStatusMessage({ text: 'Submission Error: ' + error.message, type: 'error' });
     }
@@ -211,7 +251,7 @@ export default function GuardPatrolSystem() {
     <div className="min-h-screen bg-[#070b14] text-slate-100 p-4 font-sans max-w-md mx-auto">
       <div className="space-y-4">
         
-        {/* Header matching Screenshot B exactly */}
+        {/* Header */}
         <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-3xl shadow-xl flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-red-950/80 border border-red-800 flex items-center justify-center shadow">
@@ -240,7 +280,7 @@ export default function GuardPatrolSystem() {
           </div>
         )}
 
-        {/* Scanner Container matching Screenshot B */}
+        {/* Scanner Container with Moderate Speed (fps: 3) */}
         <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl p-4 shadow-xl space-y-3">
           <div className="flex justify-between items-center text-xs font-black uppercase text-slate-300">
             <span>QR CODE CHECKPOINT SCANNER</span>
@@ -298,6 +338,7 @@ export default function GuardPatrolSystem() {
               onChange={(e) => setLocation(e.target.value)}
               placeholder="Awaiting QR scan..."
               className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 placeholder:text-slate-600"
+              required
             />
           </div>
 
@@ -331,7 +372,7 @@ export default function GuardPatrolSystem() {
               <label className="text-[10px] font-mono text-slate-400 uppercase">Patrol / Incident Notes &</label>
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => fileInputRef.current?.link ? null : fileInputRef.current?.click()}
                 className="text-[10px] text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
               >
                 Snap Evidence
