@@ -51,7 +51,6 @@ export default function GuardPatrolSystem() {
   const handleScannedData = (scannedText: string) => {
     let decodedText = scannedText.trim();
     
-    // Pause scanner upon detection
     if (scannerRef.current && scannerRef.current.isScanning) {
       try {
         scannerRef.current.pause(true);
@@ -88,11 +87,9 @@ export default function GuardPatrolSystem() {
         parsedLocation = urlObj.searchParams.get('location') || '';
         parsedCheckpoint = urlObj.searchParams.get('checkpoint') || '';
       } else {
-        // If it's just a single string, check if Supabase has a matching checkpoint or location record
         parsedCheckpoint = decodedText;
       }
 
-      // If location is missing from string format, query Supabase checkpoints table
       if (!parsedLocation && parsedCheckpoint) {
         supabase
           .from('checkpoints')
@@ -162,7 +159,6 @@ export default function GuardPatrolSystem() {
           const html5QrCode = new window.Html5Qrcode("reader-container");
           scannerRef.current = html5QrCode;
 
-          // Moderate speed (fps: 2)
           await html5QrCode.start(
             { facingMode: "environment" },
             { fps: 2, qrbox: { width: 250, height: 250 } },
@@ -257,7 +253,7 @@ export default function GuardPatrolSystem() {
     setSubmitting(false);
 
     if (!error) {
-      setStatusMessage({ text: '✅ Patrol Log Successfully Submitted!', type: 'success' });
+      setStatusMessage({ text: '✅ Patrol Log Successfully Synced to Admin Feed!', type: 'success' });
       setNotes('');
       setEvidencePhoto(null);
       setCheckpoint('');
@@ -457,7 +453,7 @@ export default function GuardPatrolSystem() {
             disabled={submitting}
             className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3.5 rounded-2xl text-xs font-black transition shadow cursor-pointer uppercase tracking-wider disabled:opacity-50"
           >
-            {submitting ? 'Submitting Log...' : 'Submit Patrol Log'}
+            {submitting ? 'Syncing to Admin Feed...' : 'Submit Patrol Log'}
           </button>
         </form>
 
