@@ -59,12 +59,12 @@ export default function AdminDashboard() {
             <p className="text-xs text-slate-400 mt-1">Real-time monitoring of security guard checkpoint scans and incident logs</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={() => alert('Export feature coming soon!')}
+            <a
+              href="/admin/export"
               className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer flex items-center gap-2"
             >
-              📊 Export Report (HTML/PDF)
-            </button>
+              📊 Export Report (HTML/PDF) ↗
+            </a>
             <a
               href="/admin/qr-codes"
               className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b] flex items-center gap-2"
