@@ -83,12 +83,17 @@ export default function AdminDashboard() {
         
         {/* Top Control Banner */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-[#0f172a]/90 backdrop-blur border border-[#1e293b] p-6 rounded-3xl shadow-2xl gap-4 transition-all duration-300 hover:border-slate-700">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-              <h1 className="text-lg font-black text-white tracking-wider uppercase">Admin Live Patrol Stream & Audit</h1>
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 bg-emerald-950/80 border border-emerald-800 text-emerald-400 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">
+              <span>🛡️</span> Tom Salem Security
             </div>
-            <p className="text-xs text-slate-400">Real-time monitoring of security guard checkpoint scans and incident telemetry.</p>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                <h1 className="text-lg font-black text-white tracking-wider uppercase">Admin Live Patrol Stream & Audit</h1>
+              </div>
+              <p className="text-xs text-slate-400">Real-time monitoring of security guard checkpoint scans and incident telemetry.</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
