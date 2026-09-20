@@ -10,8 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export default function AdminDashboard() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'feed' | 'manager'>('feed');
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [autoRefreshTime, setAutoRefreshTime] = useState(15);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -28,134 +27,136 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 15000);
+
+    // Auto-refresh interval countdown timer
+    const interval = setInterval(() => {
+      setAutoRefreshTime((prev) => {
+        if (prev <= 1) {
+          fetchLogs();
+          return 15;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
     return () => clearInterval(interval);
   }, []);
 
-  const handleDeleteLog = async (id: string | number) => {
-    if (!confirm('Are you sure you want to permanently delete this patrol log?')) return;
-
-    const { error } = await supabase
-      .from('guard_logs')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this log entry?')) return;
+    const { error } = await supabase.from('guard_logs').delete().eq('id', id);
+    if (!error) {
+      setLogs(logs.filter((log) => log.id !== id));
+    } else {
       alert('Failed to delete log: ' + error.message);
-      return;
     }
-
-    setLogs(prevLogs => prevLogs.filter(log => log.id !== id));
   };
 
+  const totalLogs = logs.length;
+  const activeIncidents = logs.filter(l => l.notes && l.notes.toLowerCase().includes('issue') && !l.notes.toLowerCase().includes('no issue')).length;
+  const uniqueLocations = Array.from(new Set(logs.map(l => l.location))).filter(Boolean).length;
+  const uniqueCheckpoints = Array.from(new Set(logs.map(l => l.checkpoint))).filter(Boolean).length;
+
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 p-6 font-sans">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[#070b14] text-slate-100 p-6 font-sans selection:bg-emerald-500 selection:text-white">
+      <div className="max-w-7xl mx-auto space-y-6 animate-fadeIn">
         
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-[#0f172a] border border-[#1e293b] p-6 rounded-3xl shadow-xl gap-4">
-          <div>
-            <h1 className="text-xl font-black text-white uppercase tracking-wider">ADMIN LIVE PATROL STREAM & AUDIT</h1>
-            <p className="text-xs text-slate-400 mt-1">Real-time monitoring of security guard checkpoint scans and incident logs</p>
+        {/* Top Control Banner with Glow & Hover Transitions */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-[#0f172a]/90 backdrop-blur border border-[#1e293b] p-6 rounded-3xl shadow-2xl gap-4 transition-all duration-300 hover:border-slate-700">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+              <h1 className="text-lg font-black text-white tracking-wider uppercase">Admin Live Patrol Stream & Audit</h1>
+            </div>
+            <p className="text-xs text-slate-400">Real-time monitoring of security guard checkpoint scans and incident telemetry.</p>
           </div>
+
           <div className="flex items-center gap-3 flex-wrap">
             <a
               href="/admin/export"
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer flex items-center gap-2"
+              className="bg-indigo-600/90 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 shadow-lg hover:shadow-indigo-500/25 flex items-center gap-2 transform hover:-translate-y-0.5 cursor-pointer"
             >
-              📊 Export Report (HTML/PDF) ↗
+              <span>📊</span> Export Report (HTML/PDF) ↗
             </a>
             <a
               href="/admin/qr-codes"
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b] flex items-center gap-2"
+              className="bg-cyan-600/90 hover:bg-cyan-500 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 shadow-lg hover:shadow-cyan-500/25 flex items-center gap-2 transform hover:-translate-y-0.5 cursor-pointer"
             >
-              📷 View Checkpoint QR Codes ↗
+              <span>🖨️</span> View Checkpoint QR Codes ↗
             </a>
             <a
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer"
+              className="bg-emerald-600/90 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 shadow-lg hover:shadow-emerald-500/25 flex items-center gap-2 transform hover:-translate-y-0.5 cursor-pointer"
             >
-              Open Mobile Scanner ↗
+              <span>📱</span> Open Mobile Scanner ↗
             </a>
           </div>
         </div>
 
-        {/* Stats Row */}
+        {/* Metric Cards with Smooth Hover Zoom */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-2xl shadow-xl flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-mono text-slate-400 uppercase">Total Logs</p>
-              <h2 className="text-2xl font-black text-white mt-1">{logs.length}</h2>
+          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl shadow-xl transition-all duration-300 hover:scale-[1.02] hover:border-emerald-500/50 group">
+            <p className="text-[10px] font-mono uppercase text-slate-400 tracking-wider">Total Logs</p>
+            <div className="flex justify-between items-end mt-2">
+              <h3 className="text-3xl font-black text-white">{totalLogs}</h3>
+              <div className="w-10 h-10 rounded-2xl bg-emerald-950/50 border border-emerald-800/50 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition duration-300">📈</div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-indigo-950/50 border border-indigo-900/50 flex items-center justify-center text-indigo-400">📊</div>
           </div>
-          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-2xl shadow-xl flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-mono text-slate-400 uppercase">Active Incidents</p>
-              <h2 className="text-2xl font-black text-amber-400 mt-1">{logs.filter(l => l.notes && l.notes.trim() !== 'No issue').length}</h2>
+
+          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl shadow-xl transition-all duration-300 hover:scale-[1.02] hover:border-rose-500/50 group">
+            <p className="text-[10px] font-mono uppercase text-slate-400 tracking-wider">Active Incidents</p>
+            <div className="flex justify-between items-end mt-2">
+              <h3 className="text-3xl font-black text-rose-400">{activeIncidents}</h3>
+              <div className="w-10 h-10 rounded-2xl bg-rose-950/50 border border-rose-800/50 flex items-center justify-center text-rose-400 group-hover:scale-110 transition duration-300 animate-pulse">🚨</div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-950/50 border border-amber-900/50 flex items-center justify-center text-amber-400">🚨</div>
           </div>
-          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-2xl shadow-xl flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-mono text-slate-400 uppercase">Active Locations</p>
-              <h2 className="text-2xl font-black text-cyan-400 mt-1">{new Set(logs.map(l => l.location)).size}</h2>
+
+          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl shadow-xl transition-all duration-300 hover:scale-[1.02] hover:border-cyan-500/50 group">
+            <p className="text-[10px] font-mono uppercase text-slate-400 tracking-wider">Active Locations</p>
+            <div className="flex justify-between items-end mt-2">
+              <h3 className="text-3xl font-black text-cyan-400">{uniqueLocations}</h3>
+              <div className="w-10 h-10 rounded-2xl bg-cyan-950/50 border border-cyan-800/50 flex items-center justify-center text-cyan-400 group-hover:scale-110 transition duration-300">📍</div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-cyan-950/50 border border-cyan-900/50 flex items-center justify-center text-cyan-400">🏢</div>
           </div>
-          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-2xl shadow-xl flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-mono text-slate-400 uppercase">Total Checkpoints</p>
-              <h2 className="text-2xl font-black text-emerald-400 mt-1">{new Set(logs.map(l => l.checkpoint)).size}</h2>
+
+          <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl shadow-xl transition-all duration-300 hover:scale-[1.02] hover:border-amber-500/50 group">
+            <p className="text-[10px] font-mono uppercase text-slate-400 tracking-wider">Total Checkpoints</p>
+            <div className="flex justify-between items-end mt-2">
+              <h3 className="text-3xl font-black text-amber-400">{uniqueCheckpoints}</h3>
+              <div className="w-10 h-10 rounded-2xl bg-amber-950/50 border border-amber-800/50 flex items-center justify-center text-amber-400 group-hover:scale-110 transition duration-300">🏁</div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-950/50 border border-emerald-900/50 flex items-center justify-center text-emerald-400">📍</div>
           </div>
         </div>
 
-        {/* Navigation Tabs Bar */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#0f172a] border border-[#1e293b] px-5 py-3 rounded-2xl gap-4">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('feed')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-2 ${
-                activeTab === 'feed'
-                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800 shadow'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              🟢 Live Patrol Telemetry Feed
-            </button>
-            <button
-              onClick={() => setActiveTab('manager')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-2 ${
-                activeTab === 'manager'
-                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800 shadow'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              🏢 Site & Checkpoint Manager
-            </button>
+        {/* Status Bar */}
+        <div className="bg-[#0f172a] border border-[#1e293b] px-6 py-4 rounded-2xl shadow-lg flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">Live Patrol Telemetry Stream Active</span>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-3 py-1 rounded-full whitespace-nowrap">
-              Auto-refresh active (15s)
+          <div className="flex items-center gap-4">
+            <span className="text-[11px] font-mono text-slate-400 bg-[#070b14] px-3 py-1.5 rounded-xl border border-[#1e293b]">
+              Auto-refresh in <strong className="text-emerald-400">{autoRefreshTime}s</strong>
             </span>
             <button
               onClick={fetchLogs}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b] flex items-center gap-1.5 whitespace-nowrap"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-1.5 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b] flex items-center gap-2 active:scale-95"
             >
-              🔄 Refresh Feed
+              <span className={loading ? 'animate-spin' : ''}>🔄</span> Refresh Feed
             </button>
           </div>
         </div>
 
-        {/* Patrol Log Table */}
-        <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl shadow-xl overflow-hidden">
-          <div className="p-5 border-b border-[#1e293b]">
-            <h3 className="text-xs font-black uppercase text-white tracking-wider">LIVE PATROL FEED & AUDIT TRAIL</h3>
+        {/* Live Patrol Feed Table */}
+        <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl shadow-2xl overflow-hidden">
+          <div className="p-6 border-b border-[#1e293b]">
+            <h2 className="text-xs font-black uppercase text-white tracking-wider">Live Patrol Feed & Audit Trail</h2>
             <p className="text-[11px] text-slate-400 mt-0.5">Review real-time guard checkpoints, incident notes, attachments, and manage entries.</p>
           </div>
 
@@ -177,55 +178,57 @@ export default function AdminDashboard() {
               <tbody className="divide-y divide-[#1e293b]">
                 {loading && logs.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-slate-500">Loading live patrol telemetry...</td>
+                    <td colSpan={9} className="p-12 text-center text-slate-500">Loading live telemetry stream...</td>
                   </tr>
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-slate-500">No patrol logs found yet. Start scanning from the mobile app!</td>
+                    <td colSpan={9} className="p-12 text-center text-slate-500">No patrol logs recorded yet.</td>
                   </tr>
                 ) : (
-                  logs.map((log) => {
-                    const dateObj = new Date(log.created_at || Date.now());
-                    const formattedDate = `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
-                    const formattedTime = `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:${String(dateObj.getSeconds()).padStart(2, '0')}`;
+                  logs.map((log, index) => {
+                    const d = new Date(log.created_at || Date.now());
+                    const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
                     return (
-                      <tr key={log.id} className="hover:bg-[#131d35] transition">
-                        <td className="p-4 font-mono text-slate-300 whitespace-nowrap">
-                          {formattedDate}<br/>
-                          <span className="text-[10px] text-slate-500">{formattedTime}</span>
-                        </td>
+                      <tr 
+                        key={log.id} 
+                        className="hover:bg-[#131d35]/60 transition duration-200 animate-fadeIn"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <td className="p-4 font-mono text-slate-300 whitespace-nowrap">{dateStr}</td>
                         <td className="p-4 font-bold text-white whitespace-nowrap">{log.guard_name}</td>
                         <td className="p-4 font-bold text-emerald-400 whitespace-nowrap">{log.location}</td>
-                        <td className="p-4 font-bold text-slate-200 whitespace-nowrap">{log.checkpoint}</td>
+                        <td className="p-4 font-bold text-cyan-400 whitespace-nowrap">{log.checkpoint}</td>
                         <td className="p-4 font-mono text-[11px] text-slate-400 whitespace-nowrap">{log.latitude}, {log.longitude}</td>
                         <td className="p-4 whitespace-nowrap">
-                          <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold inline-block">
+                          <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold">
                             {log.geofence_status || 'Verified'}
                           </span>
                         </td>
                         <td className="p-4 whitespace-nowrap">
-                          <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold inline-block">
+                          <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold">
                             Successful Scan
                           </span>
                         </td>
-                        <td className="p-4 max-w-xs">
-                          <div className="space-y-1">
-                            <p className="text-slate-300">{log.notes || <span className="text-slate-600 italic">No issue</span>}</p>
-                            {log.evidence_photo && (
-                              <button
-                                onClick={() => setSelectedImage(log.evidence_photo)}
-                                className="inline-flex items-center gap-1.5 bg-indigo-950/80 border border-indigo-800 text-indigo-300 px-2 py-1 rounded-lg text-[10px] font-bold hover:bg-indigo-900 transition cursor-pointer"
+                        <td className="p-4 max-w-xs text-slate-300">
+                          <div>{log.notes || 'No issue'}</div>
+                          {log.evidence_photo && (
+                            <div className="mt-2">
+                              <a
+                                href={log.evidence_photo}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700 text-indigo-300 px-2.5 py-1 rounded-lg text-[10px] font-bold transition shadow"
                               >
-                                <span>📸 View Evidence Photo</span>
-                              </button>
-                            )}
-                          </div>
+                                <span>📷</span> View Evidence Photo
+                              </a>
+                            </div>
+                          )}
                         </td>
                         <td className="p-4 text-right whitespace-nowrap">
                           <button
-                            onClick={() => handleDeleteLog(log.id)}
-                            className="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow cursor-pointer"
+                            onClick={() => handleDelete(log.id)}
+                            className="bg-rose-950/50 hover:bg-rose-900 border border-rose-800/80 text-rose-300 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow cursor-pointer active:scale-95"
                           >
                             Delete
                           </button>
@@ -240,32 +243,6 @@ export default function AdminDashboard() {
         </div>
 
       </div>
-
-      {/* Image Preview Modal */}
-      {selectedImage && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-3xl max-w-lg w-full space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xs font-black uppercase text-white tracking-wider">Evidence Photo Preview</h3>
-              <button
-                onClick={() => setSelectedImage(null)}
-                className="bg-slate-800 text-white w-7 h-7 rounded-full text-xs font-bold hover:bg-slate-700 flex items-center justify-center cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="rounded-2xl overflow-hidden border border-[#1e293b] bg-black max-h-[70vh] flex items-center justify-center">
-              <img src={selectedImage} alt="Patrol Evidence" className="max-h-[65vh] object-contain w-full" />
-            </div>
-            <button
-              onClick={() => setSelectedImage(null)}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
-            >
-              Close Preview
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
