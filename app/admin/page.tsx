@@ -81,8 +81,8 @@ export default function AdminDashboard() {
 
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Top Control Banner */}
-        <div className="flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center bg-[#0f172a]/90 backdrop-blur border border-[#1e293b] p-6 rounded-3xl shadow-2xl gap-4 transition-all duration-300 hover:border-slate-700">
+        {/* Top Control Banner with buttons aligned top-right */}
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-[#0f172a]/90 backdrop-blur border border-[#1e293b] p-6 rounded-3xl shadow-2xl gap-4 transition-all duration-300 hover:border-slate-700">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 bg-emerald-950/80 border border-emerald-800 text-emerald-400 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">
               <span>🛡️</span> Tom Salem Security
@@ -96,27 +96,27 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Action Buttons strictly locked to a single line */}
-          <div className="flex items-center gap-3 flex-wrap">
+          {/* Reduced size action buttons aligned to the top right */}
+          <div className="flex items-center gap-2 flex-wrap xl:justify-end">
             <a
               href="/admin/export"
-              className="bg-indigo-600/90 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 shadow-lg hover:shadow-indigo-500/25 flex items-center gap-2 transform hover:-translate-y-0.5 cursor-pointer whitespace-nowrap"
+              className="bg-indigo-600/90 hover:bg-indigo-500 text-white px-3 py-2 rounded-xl text-[11px] font-black transition-all duration-300 shadow-md hover:shadow-indigo-500/25 flex items-center gap-1.5 transform hover:-translate-y-0.5 cursor-pointer whitespace-nowrap"
             >
-              <span>📊</span> Export Report (HTML/PDF) ↗
+              <span>📊</span> Export Report ↗
             </a>
             <a
               href="/admin/qr-codes"
-              className="bg-cyan-600/90 hover:bg-cyan-500 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 shadow-lg hover:shadow-cyan-500/25 flex items-center gap-2 transform hover:-translate-y-0.5 cursor-pointer whitespace-nowrap"
+              className="bg-cyan-600/90 hover:bg-cyan-500 text-white px-3 py-2 rounded-xl text-[11px] font-black transition-all duration-300 shadow-md hover:shadow-cyan-500/25 flex items-center gap-1.5 transform hover:-translate-y-0.5 cursor-pointer whitespace-nowrap"
             >
-              <span>🖨️</span> View Checkpoint QR Codes ↗
+              <span>🖨️</span> Checkpoint QR ↗
             </a>
             <a
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-emerald-600/90 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 shadow-lg hover:shadow-emerald-500/25 flex items-center gap-2 transform hover:-translate-y-0.5 cursor-pointer whitespace-nowrap"
+              className="bg-emerald-600/90 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-[11px] font-black transition-all duration-300 shadow-md hover:shadow-emerald-500/25 flex items-center gap-1.5 transform hover:-translate-y-0.5 cursor-pointer whitespace-nowrap"
             >
-              <span>📱</span> Open Mobile Scanner ↗
+              <span>📱</span> Mobile Scanner ↗
             </a>
           </div>
         </div>
