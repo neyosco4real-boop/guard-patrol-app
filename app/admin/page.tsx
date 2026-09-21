@@ -82,7 +82,7 @@ export default function AdminDashboard() {
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Top Control Banner */}
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-[#0f172a]/90 backdrop-blur border border-[#1e293b] p-6 rounded-3xl shadow-2xl gap-4 transition-all duration-300 hover:border-slate-700">
+        <div className="flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center bg-[#0f172a]/90 backdrop-blur border border-[#1e293b] p-6 rounded-3xl shadow-2xl gap-4 transition-all duration-300 hover:border-slate-700">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 bg-emerald-950/80 border border-emerald-800 text-emerald-400 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">
               <span>🛡️</span> Tom Salem Security
@@ -96,6 +96,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          {/* Action Buttons strictly locked to a single line */}
           <div className="flex items-center gap-3 flex-wrap">
             <a
               href="/admin/export"
