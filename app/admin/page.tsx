@@ -14,7 +14,6 @@ export default function AdminDashboard() {
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
 
   const fetchLogs = async () => {
-    setLoading(true);
     const { data, error } = await supabase
       .from('guard_logs')
       .select('*')
@@ -96,7 +95,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Reduced size action buttons aligned to the top right */}
+          {/* Action buttons aligned to the top right */}
           <div className="flex items-center gap-2 flex-wrap xl:justify-end">
             <a
               href="/admin/export"
@@ -171,7 +170,7 @@ export default function AdminDashboard() {
               Auto-refresh in <strong className="text-emerald-400">{autoRefreshTime}s</strong>
             </span>
             <button
-              onClick={fetchLogs}
+              onClick={() => { setLoading(true); fetchLogs(); }}
               className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-1.5 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b] flex items-center gap-2 active:scale-95"
             >
               <span className={loading ? 'animate-spin' : ''}>🔄</span> Refresh Feed
@@ -179,7 +178,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Live Patrol Feed Table with Slide-Up Transitions */}
+        {/* Live Patrol Feed Table with Skeleton Shimmer */}
         <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl shadow-2xl overflow-hidden">
           <div className="p-6 border-b border-[#1e293b]">
             <h2 className="text-xs font-black uppercase text-white tracking-wider">Live Patrol Feed & Audit Trail</h2>
@@ -202,10 +201,20 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e293b]">
-                {loading && logs.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="p-12 text-center text-slate-500">Loading live telemetry stream...</td>
-                  </tr>
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td className="p-4"><div className="h-4 bg-slate-800 rounded w-24"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-800 rounded w-20"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-800 rounded w-28"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-800 rounded w-20"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-800 rounded w-32"></div></td>
+                      <td className="p-4"><div className="h-6 bg-slate-800 rounded-full w-16"></div></td>
+                      <td className="p-4"><div className="h-6 bg-slate-800 rounded-full w-24"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-800 rounded w-32"></div></td>
+                      <td className="p-4 text-right"><div className="h-7 bg-slate-800 rounded w-14 ml-auto"></div></td>
+                    </tr>
+                  ))
                 ) : logs.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="p-12 text-center text-slate-500">No patrol logs recorded yet.</td>
