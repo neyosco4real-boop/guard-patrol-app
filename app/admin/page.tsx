@@ -13,6 +13,26 @@ export default function AdminDashboard() {
   const [autoRefreshTime, setAutoRefreshTime] = useState(15);
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
 
+  // Function to play alert sound on new scan log submission
+  const playAlertSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 note
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5 note
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    } catch (e) {
+      console.log('Audio playback prevented or not supported', e);
+    }
+  };
+
   const fetchLogs = async () => {
     const { data, error } = await supabase
       .from('guard_logs')
@@ -28,6 +48,31 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchLogs();
 
+    // Set up Supabase Realtime listener with audio chime
+    const channel = supabase
+      .channel('realtime-guard-logs')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', 
+          schema: 'public',
+          table: 'guard_logs',
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            playAlertSound();
+            setLogs((prevLogs) => [payload.new, ...prevLogs]);
+          } else if (payload.eventType === 'DELETE') {
+            setLogs((prevLogs) => prevLogs.filter((log) => log.id !== payload.old.id));
+          } else if (payload.eventType === 'UPDATE') {
+            setLogs((prevLogs) =>
+              prevLogs.map((log) => (log.id === payload.new.id ? payload.new : log))
+            );
+          }
+        }
+      )
+      .subscribe();
+
     const interval = setInterval(() => {
       setAutoRefreshTime((prev) => {
         if (prev <= 1) {
@@ -38,7 +83,10 @@ export default function AdminDashboard() {
       });
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -178,7 +226,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Live Patrol Feed Table with Skeleton Shimmer */}
+        {/* Live Patrol Feed Table with Realtime Stream & Audio Alert */}
         <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl shadow-2xl overflow-hidden">
           <div className="p-6 border-b border-[#1e293b]">
             <h2 className="text-xs font-black uppercase text-white tracking-wider">Live Patrol Feed & Audit Trail</h2>
