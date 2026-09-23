@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import jsQR from 'jsqr';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -21,9 +22,12 @@ export default function GuardScanner() {
   const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isScanningPaused, setIsScanningPaused] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [scannedFeedback, setScannedFeedback] = useState('');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     fetchLocations();
@@ -72,6 +76,9 @@ export default function GuardScanner() {
       mediaStreamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.play();
+        requestAnimationFrame(tickQRScan);
       }
     } catch (err) {
       console.error('Camera access error:', err);
@@ -85,7 +92,38 @@ export default function GuardScanner() {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
       mediaStreamRef.current = null;
     }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
     setIsCameraActive(false);
+  };
+
+  const tickQRScan = () => {
+    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          canvas.height = video.videoHeight;
+          canvas.width = video.videoWidth;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert',
+          });
+
+          if (code) {
+            // QR Code successfully decoded!
+            setScannedFeedback(`Detected QR: ${code.data}`);
+            setSelectedCheckpoint(code.data); // Auto-assign decoded value to checkpoint
+            stopCamera();
+            return;
+          }
+        }
+      }
+    }
+    animationFrameRef.current = requestAnimationFrame(tickQRScan);
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,7 +146,6 @@ export default function GuardScanner() {
     setLoading(true);
     setSuccessMessage('');
 
-    // Deliberate moderate pause so guards register the capture
     await new Promise((resolve) => setTimeout(resolve, 1200));
 
     const latitude = currentCoords ? currentCoords.lat : 6.5244;
@@ -142,6 +179,7 @@ export default function GuardScanner() {
         setNotes('');
         setEvidencePhoto(null);
         setSelectedCheckpoint('');
+        setScannedFeedback('');
         setIsScanningPaused(false);
       }, 3500);
     }
@@ -150,7 +188,6 @@ export default function GuardScanner() {
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100 p-4 font-sans selection:bg-emerald-500 selection:text-white flex flex-col justify-between relative overflow-x-hidden">
       
-      {/* Controlled Success Modal Overlay */}
       {successMessage && (
         <div className="fixed inset-0 bg-[#070b14]/95 backdrop-blur-sm z-50 flex items-center justify-center p-6 text-center animate-fadeIn">
           <div className="bg-[#0f172a] border border-emerald-500/50 p-6 rounded-3xl shadow-2xl max-w-sm w-full space-y-3">
@@ -166,13 +203,12 @@ export default function GuardScanner() {
 
       <div className="max-w-md w-full mx-auto space-y-6 pb-12">
         
-        {/* Header Branding */}
         <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl shadow-xl text-center space-y-2">
           <div className="inline-flex items-center gap-2 bg-emerald-950/80 border border-emerald-800 text-emerald-400 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">
             <span>🛡️</span> Tom Salem Security
           </div>
           <h1 className="text-xl font-black text-white uppercase tracking-wider">Guard Mobile Scanner</h1>
-          <p className="text-xs text-slate-400">Live Camera QR Viewfinder & Patrol Telemetry</p>
+          <p className="text-xs text-slate-400">Live Auto-Decoding QR Viewfinder</p>
         </div>
 
         {locationError && (
@@ -184,7 +220,7 @@ export default function GuardScanner() {
         {/* Live Camera Viewfinder Box */}
         <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-3xl shadow-xl space-y-3">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">QR Camera Viewfinder</span>
+            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">QR Code Scanner</span>
             {isCameraActive ? (
               <button 
                 type="button" 
@@ -206,21 +242,28 @@ export default function GuardScanner() {
 
           {isCameraActive ? (
             <div className="relative w-full h-52 bg-black rounded-2xl overflow-hidden border border-emerald-500/50 flex items-center justify-center">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <video ref={videoRef} muted className="w-full h-full object-cover" />
+              <canvas ref={canvasRef} className="hidden" />
               <div className="absolute inset-0 border-2 border-dashed border-emerald-400/60 m-8 rounded-xl pointer-events-none flex items-center justify-center">
-                <span className="bg-black/60 text-emerald-300 text-[10px] px-2 py-1 rounded font-mono">Align QR Code Within Frame</span>
+                <span className="bg-black/70 text-emerald-300 text-[10px] px-2.5 py-1 rounded font-mono">Scanning for QR Code...</span>
               </div>
             </div>
           ) : (
             <div className="w-full h-32 bg-[#070b14] border border-[#1e293b] rounded-2xl flex flex-col items-center justify-center text-slate-500 text-xs space-y-2">
-              <span>📷 Camera viewfinder is closed</span>
+              <span>📷 Camera is closed</span>
               <button 
                 type="button" 
                 onClick={startCamera}
                 className="text-emerald-400 font-bold underline text-[11px] cursor-pointer"
               >
-                Tap here to turn on camera
+                Tap here to activate QR scanner
               </button>
+            </div>
+          )}
+
+          {scannedFeedback && (
+            <div className="bg-emerald-950/80 border border-emerald-700 text-emerald-300 p-2.5 rounded-xl text-xs font-mono text-center">
+              ✅ {scannedFeedback}
             </div>
           )}
         </div>
@@ -261,20 +304,15 @@ export default function GuardScanner() {
 
           <div className="space-y-1">
             <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Checkpoint Name</label>
-            <select
+            <input
+              type="text"
               required
               disabled={isScanningPaused}
+              placeholder="Scanned QR or select..."
               value={selectedCheckpoint}
               onChange={(e) => setSelectedCheckpoint(e.target.value)}
-              className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 transition disabled:opacity-50"
-            >
-              <option value="">Select Checkpoint...</option>
-              {checkpoints.map((cp, idx) => (
-                <option key={idx} value={cp.name || cp.checkpoint}>
-                  {cp.name || cp.checkpoint}
-                </option>
-              ))}
-            </select>
+              className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-emerald-500 transition disabled:opacity-50"
+            />
           </div>
 
           <div className="space-y-1">
@@ -287,19 +325,6 @@ export default function GuardScanner() {
               onChange={(e) => setNotes(e.target.value)}
               className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl p-4 text-xs text-white focus:outline-none focus:border-emerald-500 transition resize-none disabled:opacity-50"
             ></textarea>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Evidence Photo (Optional)</label>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              disabled={isScanningPaused}
-              onChange={handlePhotoUpload}
-              className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-950 file:text-emerald-300 hover:file:bg-emerald-900 cursor-pointer disabled:opacity-50"
-            />
-            {evidencePhoto && <p className="text-[10px] text-emerald-400 mt-1">✓ Photo attached successfully</p>}
           </div>
 
           <button
