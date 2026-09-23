@@ -9,8 +9,6 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function GuardScanner() {
-  const [locations, setLocations] = useState<any[]>([]);
-  const [checkpoints, setCheckpoints] = useState<any[]>([]);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [selectedCheckpoint, setSelectedCheckpoint] = useState('');
   const [guardName, setGuardName] = useState('');
@@ -30,10 +28,7 @@ export default function GuardScanner() {
   const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    fetchLocations();
-    fetchCheckpoints();
     requestLocation();
-
     return () => {
       stopCamera();
     };
@@ -55,16 +50,6 @@ export default function GuardScanner() {
     } else {
       setLocationError('Geolocation is not supported by your browser.');
     }
-  };
-
-  const fetchLocations = async () => {
-    const { data } = await supabase.from('sites').select('*');
-    if (data && data.length > 0) setLocations(data);
-  };
-
-  const fetchCheckpoints = async () => {
-    const { data } = await supabase.from('checkpoints').select('*');
-    if (data) setCheckpoints(data);
   };
 
   const startCamera = async () => {
@@ -114,9 +99,24 @@ export default function GuardScanner() {
           });
 
           if (code) {
-            // QR Code successfully decoded!
-            setScannedFeedback(`Detected QR: ${code.data}`);
-            setSelectedCheckpoint(code.data); // Auto-assign decoded value to checkpoint
+            const rawData = code.data;
+            try {
+              // Try parsing JSON format: {"location":"...","checkpoint":"..."}
+              const parsed = JSON.parse(rawData);
+              if (parsed.location && parsed.checkpoint) {
+                setSelectedLocation(parsed.location);
+                setSelectedCheckpoint(parsed.checkpoint);
+                setScannedFeedback(`Verified: ${parsed.location} -> ${parsed.checkpoint}`);
+              } else {
+                setSelectedCheckpoint(rawData);
+                setScannedFeedback(`Detected Checkpoint: ${rawData}`);
+              }
+            } catch (e) {
+              // Fallback if it's plain text
+              setSelectedCheckpoint(rawData);
+              setScannedFeedback(`Detected Checkpoint: ${rawData}`);
+            }
+
             stopCamera();
             return;
           }
@@ -139,7 +139,7 @@ export default function GuardScanner() {
   const handleSubmitScan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guardName || !selectedLocation || !selectedCheckpoint) {
-      alert('Please fill in your guard name, location, and checkpoint.');
+      alert('Please scan a QR code to auto-fill location and checkpoint, and enter your guard name.');
       return;
     }
 
@@ -178,6 +178,7 @@ export default function GuardScanner() {
         setSuccessMessage('');
         setNotes('');
         setEvidencePhoto(null);
+        setSelectedLocation('');
         setSelectedCheckpoint('');
         setScannedFeedback('');
         setIsScanningPaused(false);
@@ -208,7 +209,7 @@ export default function GuardScanner() {
             <span>🛡️</span> Tom Salem Security
           </div>
           <h1 className="text-xl font-black text-white uppercase tracking-wider">Guard Mobile Scanner</h1>
-          <p className="text-xs text-slate-400">Live Auto-Decoding QR Viewfinder</p>
+          <p className="text-xs text-slate-400">Auto-Decoding QR Viewfinder</p>
         </div>
 
         {locationError && (
@@ -245,7 +246,7 @@ export default function GuardScanner() {
               <video ref={videoRef} muted className="w-full h-full object-cover" />
               <canvas ref={canvasRef} className="hidden" />
               <div className="absolute inset-0 border-2 border-dashed border-emerald-400/60 m-8 rounded-xl pointer-events-none flex items-center justify-center">
-                <span className="bg-black/70 text-emerald-300 text-[10px] px-2.5 py-1 rounded font-mono">Scanning for QR Code...</span>
+                <span className="bg-black/70 text-emerald-300 text-[10px] px-2.5 py-1 rounded font-mono">Scanning QR Code...</span>
               </div>
             </div>
           ) : (
@@ -285,33 +286,28 @@ export default function GuardScanner() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Site Location</label>
-            <select
-              required
-              disabled={isScanningPaused}
-              value={selectedLocation}
-              onChange={(e) => setSelectedLocation(e.target.value)}
-              className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 transition disabled:opacity-50"
-            >
-              <option value="">Select Location...</option>
-              {locations.map((loc, idx) => (
-                <option key={idx} value={loc.name || loc.location}>
-                  {loc.name || loc.location}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Checkpoint Name</label>
+            <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Site Location (Auto-Filled)</label>
             <input
               type="text"
               required
+              readOnly
               disabled={isScanningPaused}
-              placeholder="Scanned QR or select..."
+              placeholder="Will auto-fill upon QR scan..."
+              value={selectedLocation}
+              className="w-full bg-[#070b14]/70 border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-emerald-400 font-mono focus:outline-none cursor-not-allowed"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Checkpoint Name (Auto-Filled)</label>
+            <input
+              type="text"
+              required
+              readOnly
+              disabled={isScanningPaused}
+              placeholder="Will auto-fill upon QR scan..."
               value={selectedCheckpoint}
-              onChange={(e) => setSelectedCheckpoint(e.target.value)}
-              className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-emerald-500 transition disabled:opacity-50"
+              className="w-full bg-[#070b14]/70 border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-emerald-400 font-mono focus:outline-none cursor-not-allowed"
             />
           </div>
 
