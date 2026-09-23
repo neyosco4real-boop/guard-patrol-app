@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -20,11 +20,19 @@ export default function GuardScanner() {
   const [locationError, setLocationError] = useState('');
   const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isScanningPaused, setIsScanningPaused] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     fetchLocations();
     fetchCheckpoints();
     requestLocation();
+
+    return () => {
+      stopCamera();
+    };
   }, []);
 
   const requestLocation = () => {
@@ -55,6 +63,31 @@ export default function GuardScanner() {
     if (data) setCheckpoints(data);
   };
 
+  const startCamera = async () => {
+    setIsCameraActive(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      mediaStreamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error('Camera access error:', err);
+      alert('Unable to access device camera. Please check permissions.');
+      setIsCameraActive(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    setIsCameraActive(false);
+  };
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -75,7 +108,7 @@ export default function GuardScanner() {
     setLoading(true);
     setSuccessMessage('');
 
-    // Deliberate moderate pause (1.2 seconds) so guards register the capture
+    // Deliberate moderate pause so guards register the capture
     await new Promise((resolve) => setTimeout(resolve, 1200));
 
     const latitude = currentCoords ? currentCoords.lat : 6.5244;
@@ -102,8 +135,8 @@ export default function GuardScanner() {
     } else {
       setSuccessMessage('Scan successfully recorded and sent to Tom Salem Security HQ!');
       setIsScanningPaused(true);
+      stopCamera();
       
-      // Reset form after a stable moment
       setTimeout(() => {
         setSuccessMessage('');
         setNotes('');
@@ -139,7 +172,7 @@ export default function GuardScanner() {
             <span>🛡️</span> Tom Salem Security
           </div>
           <h1 className="text-xl font-black text-white uppercase tracking-wider">Guard Mobile Scanner</h1>
-          <p className="text-xs text-slate-400">Controlled scan capture & live telemetry transmission.</p>
+          <p className="text-xs text-slate-400">Live Camera QR Viewfinder & Patrol Telemetry</p>
         </div>
 
         {locationError && (
@@ -147,6 +180,50 @@ export default function GuardScanner() {
             ⚠️ {locationError}
           </div>
         )}
+
+        {/* Live Camera Viewfinder Box */}
+        <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-3xl shadow-xl space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">QR Camera Viewfinder</span>
+            {isCameraActive ? (
+              <button 
+                type="button" 
+                onClick={stopCamera}
+                className="bg-rose-950/80 border border-rose-800 text-rose-300 px-3 py-1 rounded-xl text-[10px] font-bold cursor-pointer"
+              >
+                Close Camera ✕
+              </button>
+            ) : (
+              <button 
+                type="button" 
+                onClick={startCamera}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-xl text-[10px] font-bold cursor-pointer shadow"
+              >
+                Open Camera 📷
+              </button>
+            )}
+          </div>
+
+          {isCameraActive ? (
+            <div className="relative w-full h-52 bg-black rounded-2xl overflow-hidden border border-emerald-500/50 flex items-center justify-center">
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <div className="absolute inset-0 border-2 border-dashed border-emerald-400/60 m-8 rounded-xl pointer-events-none flex items-center justify-center">
+                <span className="bg-black/60 text-emerald-300 text-[10px] px-2 py-1 rounded font-mono">Align QR Code Within Frame</span>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full h-32 bg-[#070b14] border border-[#1e293b] rounded-2xl flex flex-col items-center justify-center text-slate-500 text-xs space-y-2">
+              <span>📷 Camera viewfinder is closed</span>
+              <button 
+                type="button" 
+                onClick={startCamera}
+                className="text-emerald-400 font-bold underline text-[11px] cursor-pointer"
+              >
+                Tap here to turn on camera
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Scan Form */}
         <form onSubmit={handleSubmitScan} className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-3xl shadow-2xl space-y-4">
