@@ -101,7 +101,6 @@ export default function GuardScanner() {
           if (code) {
             const rawData = code.data;
             try {
-              // Try parsing JSON format: {"location":"...","checkpoint":"..."}
               const parsed = JSON.parse(rawData);
               if (parsed.location && parsed.checkpoint) {
                 setSelectedLocation(parsed.location);
@@ -112,7 +111,6 @@ export default function GuardScanner() {
                 setScannedFeedback(`Detected Checkpoint: ${rawData}`);
               }
             } catch (e) {
-              // Fallback if it's plain text
               setSelectedCheckpoint(rawData);
               setScannedFeedback(`Detected Checkpoint: ${rawData}`);
             }
@@ -209,7 +207,7 @@ export default function GuardScanner() {
             <span>🛡️</span> Tom Salem Security
           </div>
           <h1 className="text-xl font-black text-white uppercase tracking-wider">Guard Mobile Scanner</h1>
-          <p className="text-xs text-slate-400">Auto-Decoding QR Viewfinder</p>
+          <p className="text-xs text-slate-400">Auto-Decoding QR Viewfinder & Evidence Capture</p>
         </div>
 
         {locationError && (
@@ -321,6 +319,19 @@ export default function GuardScanner() {
               onChange={(e) => setNotes(e.target.value)}
               className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl p-4 text-xs text-white focus:outline-none focus:border-emerald-500 transition resize-none disabled:opacity-50"
             ></textarea>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Evidence Photo (Optional)</label>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              disabled={isScanningPaused}
+              onChange={handlePhotoUpload}
+              className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-950 file:text-emerald-300 hover:file:bg-emerald-900 cursor-pointer disabled:opacity-50"
+            />
+            {evidencePhoto && <p className="text-[10px] text-emerald-400 mt-1">✓ Photo attached successfully</p>}
           </div>
 
           <button
