@@ -41,10 +41,8 @@ export default function QrCodeManager() {
     setLoading(true);
     const { data, error } = await supabase.from('checkpoints').insert([
       {
-        name: childCheckpoint,
         checkpoint: childCheckpoint,
-        location: parentSite,
-        status: 'Active QR Ready'
+        location: parentSite
       }
     ]).select();
 
@@ -171,10 +169,10 @@ export default function QrCodeManager() {
                         className={`cursor-pointer transition hover:bg-slate-800/50 ${selectedItem?.id === item.id ? 'bg-cyan-950/20 border-l-2 border-cyan-500' : ''}`}
                       >
                         <td className="py-3 px-4 font-bold text-white">{item.location || item.parent_site}</td>
-                        <td className="py-3 px-4 text-cyan-400 font-semibold">{item.name || item.checkpoint}</td>
+                        <td className="py-3 px-4 text-cyan-400 font-semibold">{item.checkpoint || item.name}</td>
                         <td className="py-3 px-4">
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">
-                            {item.status || 'Active QR Ready'}
+                            Active QR Ready
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right space-x-2">
@@ -190,7 +188,7 @@ export default function QrCodeManager() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDelete(item.id, item.name || item.checkpoint);
+                              handleDelete(item.id, item.checkpoint || item.name);
                             }}
                             className="bg-rose-950/80 hover:bg-rose-900 text-rose-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold transition border border-rose-800 cursor-pointer"
                           >
@@ -221,7 +219,7 @@ export default function QrCodeManager() {
                   <div className="w-40 h-40 bg-slate-900 p-2 rounded-xl flex items-center justify-center text-white shadow-inner">
                     <img
                       src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
-                        JSON.stringify({ location: selectedItem.location, checkpoint: selectedItem.name || selectedItem.checkpoint })
+                        JSON.stringify({ location: selectedItem.location, checkpoint: selectedItem.checkpoint || selectedItem.name })
                       )}`}
                       alt="Checkpoint QR"
                       className="w-full h-full object-contain rounded-lg bg-white p-1"
@@ -230,7 +228,7 @@ export default function QrCodeManager() {
 
                   <div>
                     <h3 className="text-xs font-black uppercase text-slate-900 tracking-wide">{selectedItem.location}</h3>
-                    <p className="text-[11px] font-bold text-rose-600 mt-0.5">📍 {selectedItem.name || selectedItem.checkpoint}</p>
+                    <p className="text-[11px] font-bold text-rose-600 mt-0.5">📍 {selectedItem.checkpoint || selectedItem.name}</p>
                   </div>
                 </div>
               ) : (
