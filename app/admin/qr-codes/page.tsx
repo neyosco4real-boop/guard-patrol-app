@@ -1,241 +1,252 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import Link from 'next/link';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
 export default function QrCodeManager() {
-  const [checkpoints, setCheckpoints] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [parentName, setParentName] = useState('');
-  const [childName, setChildName] = useState('');
-  const [selectedCheckpoint, setSelectedCheckpoint] = useState<any>(null);
-
-  const fetchCheckpoints = async () => {
-    setLoading(true);
-    // Fetch from checkpoint_directory table in Supabase
-    let { data, error } = await supabase
-      .from('checkpoint_directory')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    // Fallback if table doesn't exist yet or is empty: seed with default + guard_logs
-    if (error || !data || data.length === 0) {
-      const defaultData = [
-        { id: '1', parent_location: 'TOM SALEM HQ', child_checkpoint: 'RECEPTION' },
-        { id: '2', parent_location: 'CR REPUBLIC', child_checkpoint: 'AWOLOWO RD' }
-      ];
-      setCheckpoints(defaultData);
-      setSelectedCheckpoint(defaultData[0]);
-    } else {
-      setCheckpoints(data);
-      setSelectedCheckpoint(data[0]);
-    }
-    setLoading(false);
-  };
+  const [parentSite, setParentSite] = useState('');
+  const [childCheckpoint, setChildCheckpoint] = useState('');
+  const [directory, setDirectory] = useState<any[]>([]);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchCheckpoints();
+    fetchDirectory();
   }, []);
+
+  const fetchDirectory = async () => {
+    const { data, error } = await supabase
+      .from('checkpoints')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (!error && data) {
+      setDirectory(data);
+      if (data.length > 0 && !selectedItem) {
+        setSelectedItem(data[0]);
+      }
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!parentName.trim() || !childName.trim()) {
-      alert('Please fill in both Parent Site and Child Checkpoint names.');
-      return;
-    }
+    if (!parentSite || !childCheckpoint) return;
 
-    const newEntry = {
-      parent_location: parentName.trim().toUpperCase(),
-      child_checkpoint: childName.trim().toUpperCase(),
-      created_at: new Date().toISOString()
-    };
+    setLoading(true);
+    const { data, error } = await supabase.from('checkpoints').insert([
+      {
+        name: childCheckpoint,
+        checkpoint: childCheckpoint,
+        location: parentSite,
+        status: 'Active QR Ready'
+      }
+    ]).select();
 
-    // Insert into Supabase table
-    const { data, error } = await supabase
-      .from('checkpoint_directory')
-      .insert([newEntry])
-      .select();
+    setLoading(false);
 
     if (error) {
-      // If table doesn't exist yet, alert user or handle locally
-      console.error('Supabase insert error:', error.message);
-      // Fallback local state update
-      const updated = [ { id: Date.now().toString(), ...newEntry }, ...checkpoints ];
-      setCheckpoints(updated);
-      setSelectedCheckpoint(updated[0]);
-    } else if (data && data.length > 0) {
-      const updated = [data[0], ...checkpoints];
-      setCheckpoints(updated);
-      setSelectedCheckpoint(data[0]);
+      alert('Error registering checkpoint: ' + error.message);
+    } else {
+      setParentSite('');
+      setChildCheckpoint('');
+      fetchDirectory();
+      if (data && data[0]) {
+        setSelectedItem(data[0]);
+      }
     }
+  };
 
-    setParentName('');
-    setChildName('');
-    alert('Checkpoint successfully registered and saved!');
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete checkpoint "${name}"?`)) return;
+
+    const { error } = await supabase
+      .from('checkpoints')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('Error deleting item: ' + error.message);
+    } else {
+      fetchDirectory();
+      if (selectedItem?.id === id) {
+        setSelectedItem(null);
+      }
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 p-6 font-sans selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen bg-[#070b12] text-slate-100 p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#0f172a]/90 backdrop-blur border border-[#1e293b] p-6 rounded-3xl shadow-2xl gap-4">
-          <div className="space-y-1">
-            <h1 className="text-lg font-black text-white tracking-wider uppercase">QR Code Directory & Deployment Manager</h1>
-            <p className="text-xs text-slate-400">Create parent locations, assign child checkpoints, and manage persistent physical QR code labels.</p>
+        {/* Top Header */}
+        <div className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-2xl shadow-xl flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-bold text-white uppercase tracking-wider">QR Code Directory & Deployment Manager</h1>
+            <p className="text-xs text-slate-400 mt-1">Create parent locations, assign child checkpoints, and manage physical QR codes.</p>
           </div>
-          <a
+          <Link
             href="/admin"
-            className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow cursor-pointer border border-[#1e293b]"
+            className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-700 transition"
           >
             ← Back to Admin Dashboard
-          </a>
+          </Link>
         </div>
 
-        {/* Register Form */}
-        <div className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-3xl shadow-2xl">
-          <h2 className="text-xs font-black uppercase text-white tracking-wider mb-4">Register New Parent Site & Child Checkpoint</h2>
+        {/* Registration Section */}
+        <div className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-2xl shadow-xl">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Register New Parent Site & Child Checkpoint</h2>
           <form onSubmit={handleRegister} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Parent Site / Location Name</label>
+            <div>
+              <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1.5">Parent Site / Location Name</label>
               <input
                 type="text"
+                required
+                value={parentSite}
+                onChange={(e) => setParentSite(e.target.value)}
                 placeholder="e.g. CR REPUBLIC, GRAND TOWERS"
-                value={parentName}
-                onChange={(e) => setParentName(e.target.value)}
-                className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 transition font-medium"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-cyan-500"
               />
             </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Child Checkpoint Name</label>
+            <div>
+              <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1.5">Child Checkpoint Name</label>
               <input
                 type="text"
+                required
+                value={childCheckpoint}
+                onChange={(e) => setChildCheckpoint(e.target.value)}
                 placeholder="e.g. AWOLOWO RD, GATE 1, SERVER ROOM"
-                value={childName}
-                onChange={(e) => setChildName(e.target.value)}
-                className="w-full bg-[#070b14] border border-[#1e293b] rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 transition font-medium"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-cyan-500"
               />
             </div>
-
             <div className="flex items-end">
               <button
                 type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl text-xs font-black transition shadow-lg hover:shadow-emerald-500/25 cursor-pointer active:scale-95 flex items-center justify-center gap-2"
+                disabled={loading}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition shadow-lg shadow-emerald-950/50 cursor-pointer"
               >
-                <span>+</span> Register & Generate QR
+                {loading ? 'Generating...' : '+ Register & Generate QR'}
               </button>
             </div>
           </form>
         </div>
 
-        {/* Directory and Preview Grid */}
+        {/* Directory and Preview Split Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Directory Table */}
-          <div className="lg:col-span-2 bg-[#0f172a] border border-[#1e293b] rounded-3xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-[#1e293b]">
-              <h2 className="text-xs font-black uppercase text-white tracking-wider">Active Locations & Checkpoints Directory</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">Click any checkpoint to inspect and print its deployment QR code label.</p>
+          {/* Active Locations Table */}
+          <div className="lg:col-span-2 bg-[#0f172a] border border-[#1e293b] rounded-2xl shadow-xl overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-800">
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">Active Locations & Checkpoints Directory</h2>
+              <p className="text-[11px] text-slate-400">Click any checkpoint to inspect and print its deployment QR code label.</p>
             </div>
-
+            
             <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-[#070b14] border-b border-[#1e293b] text-slate-400 font-mono text-[10px] uppercase">
-                    <th className="p-4">Parent Location</th>
-                    <th className="p-4">Child Checkpoint</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-right">Actions</th>
+                  <tr className="bg-slate-900/60 text-slate-400 text-[10px] font-mono uppercase tracking-wider border-b border-slate-800">
+                    <th className="py-3 px-4">Parent Location</th>
+                    <th className="py-3 px-4">Child Checkpoint</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#1e293b]">
-                  {loading ? (
+                <tbody className="divide-y divide-slate-800 text-xs">
+                  {directory.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="p-12 text-center text-slate-500">Loading directory...</td>
-                    </tr>
-                  ) : checkpoints.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="p-12 text-center text-slate-500">No checkpoints registered yet.</td>
+                      <td colSpan={4} className="py-8 text-center text-slate-500">
+                        No checkpoints registered yet.
+                      </td>
                     </tr>
                   ) : (
-                    checkpoints.map((cp) => {
-                      const isSelected = selectedCheckpoint?.id === cp.id || (selectedCheckpoint?.parent_location === cp.parent_location && selectedCheckpoint?.child_checkpoint === cp.child_checkpoint);
-                      return (
-                        <tr
-                          key={cp.id || cp.child_checkpoint}
-                          onClick={() => setSelectedCheckpoint(cp)}
-                          className={`cursor-pointer transition hover:bg-[#131d35] ${isSelected ? 'bg-emerald-950/20 border-l-4 border-emerald-500' : ''}`}
-                        >
-                          <td className="p-4 font-bold text-emerald-400">{cp.parent_location}</td>
-                          <td className="p-4 font-bold text-cyan-400">{cp.child_checkpoint}</td>
-                          <td className="p-4">
-                            <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-bold">
-                              Active QR Ready
-                            </span>
-                          </td>
-                          <td className="p-4 text-right">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedCheckpoint(cp);
-                              }}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shadow cursor-pointer ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-                            >
-                              {isSelected ? 'Viewing QR ✓' : 'View QR Code'}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    directory.map((item) => (
+                      <tr 
+                        key={item.id} 
+                        onClick={() => setSelectedItem(item)}
+                        className={`cursor-pointer transition hover:bg-slate-800/50 ${selectedItem?.id === item.id ? 'bg-cyan-950/20 border-l-2 border-cyan-500' : ''}`}
+                      >
+                        <td className="py-3 px-4 font-bold text-white">{item.location || item.parent_site}</td>
+                        <td className="py-3 px-4 text-cyan-400 font-semibold">{item.name || item.checkpoint}</td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">
+                            {item.status || 'Active QR Ready'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right space-x-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedItem(item);
+                            }}
+                            className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-semibold transition border border-slate-700"
+                          >
+                            {selectedItem?.id === item.id ? 'Viewing QR ✓' : 'View QR Code'}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(item.id, item.name || item.checkpoint);
+                            }}
+                            className="bg-rose-950/80 hover:bg-rose-900 text-rose-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold transition border border-rose-800 cursor-pointer"
+                          >
+                            Delete ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Printable Label Preview */}
-          <div className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-3xl shadow-2xl flex flex-col items-center justify-between">
-            <div className="w-full mb-4">
-              <h2 className="text-xs font-black uppercase text-white tracking-wider">Printable Label Preview</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">Selected site deployment label.</p>
+          {/* Printable Label Preview Card */}
+          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl shadow-xl p-6 flex flex-col justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Printable Label Preview</h2>
+              <p className="text-[11px] text-slate-400 mb-6">Selected site deployment label.</p>
+
+              {selectedItem ? (
+                <div className="bg-white text-slate-900 p-6 rounded-2xl shadow-2xl flex flex-col items-center text-center space-y-4 border border-slate-200">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-600 uppercase tracking-wider">
+                    <span>🛡️</span> TOM SALEM SECURITY
+                  </div>
+                  
+                  {/* QR Code Graphic Representation */}
+                  <div className="w-40 h-40 bg-slate-900 p-2 rounded-xl flex items-center justify-center text-white shadow-inner">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
+                        JSON.stringify({ location: selectedItem.location, checkpoint: selectedItem.name || selectedItem.checkpoint })
+                      )}`}
+                      alt="Checkpoint QR"
+                      className="w-full h-full object-contain rounded-lg bg-white p-1"
+                    />
+                  </div>
+
+                  <div>
+                    <h3 className="text-xs font-black uppercase text-slate-900 tracking-wide">{selectedItem.location}</h3>
+                    <p className="text-[11px] font-bold text-rose-600 mt-0.5">📍 {selectedItem.name || selectedItem.checkpoint}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-64 bg-slate-900/50 border border-slate-800 rounded-xl flex items-center justify-center text-xs text-slate-500 text-center p-4">
+                  Select a location from the directory to preview its printable QR label.
+                </div>
+              )}
             </div>
 
-            {selectedCheckpoint ? (
-              <div className="bg-white text-slate-900 p-6 rounded-3xl shadow-2xl w-full max-w-xs flex flex-col items-center text-center space-y-4 border-4 border-slate-200">
-                <div className="flex items-center gap-1.5 text-[11px] font-black uppercase text-rose-700 tracking-wider">
-                  <span>🛡️</span> Tom Salem Security
-                </div>
-
-                <div className="bg-slate-100 p-3 rounded-2xl border border-slate-300">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(JSON.stringify({ location: selectedCheckpoint.parent_location, checkpoint: selectedCheckpoint.child_checkpoint }))}`}
-                    alt="Checkpoint QR Code"
-                    className="w-40 h-40 object-contain mx-auto"
-                  />
-                </div>
-
-                <div>
-                  <h4 className="text-xs font-black uppercase text-slate-900">{selectedCheckpoint.parent_location}</h4>
-                  <p className="text-[11px] font-bold text-emerald-700 uppercase mt-0.5 flex items-center justify-center gap-1">
-                    <span>📍</span> {selectedCheckpoint.child_checkpoint}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center text-slate-500 py-12 text-xs">Select a checkpoint to preview its label.</div>
-            )}
-
-            <div className="w-full mt-6">
+            <div className="mt-6">
               <button
                 onClick={() => window.print()}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-xs font-black transition shadow-lg hover:shadow-emerald-500/25 cursor-pointer active:scale-95 flex items-center justify-center gap-2"
+                disabled={!selectedItem}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition shadow-lg shadow-emerald-950/50 cursor-pointer"
               >
-                <span>🖨️</span> Print QR Code Label
+                🖨️ Print QR Code Label
               </button>
             </div>
           </div>
